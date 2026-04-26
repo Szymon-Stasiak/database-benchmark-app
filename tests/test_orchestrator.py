@@ -3,8 +3,26 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from orchestrator import AgentOrchestrator
-from models import ValidationStatus
-from helpers import make_pass_result, make_fail_result
+from models import ValidationResult, ValidationStatus
+
+
+def make_pass_result(agent_name: str) -> ValidationResult:
+    return ValidationResult(
+        agent_name=agent_name,
+        status=ValidationStatus.PASS,
+        feedback="OK",
+        details="None",
+    )
+
+
+def make_fail_result(agent_name: str, feedback: str = "Issues found") -> ValidationResult:
+    return ValidationResult(
+        agent_name=agent_name,
+        status=ValidationStatus.FAIL,
+        feedback=feedback,
+        details="Some details",
+    )
+
 
 
 class TestAgentOrchestrator:

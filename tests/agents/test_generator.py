@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from agents.generator import GeneratorAgent
 from models import ValidationResult, ValidationStatus
-from helpers import make_llm_response
+
+
+def make_llm_response(text: str, input_tokens: int = 100, output_tokens: int = 50):
+    message = MagicMock()
+    content_block = MagicMock()
+    content_block.text = text
+    message.content = [content_block]
+    message.usage.input_tokens = input_tokens
+    message.usage.output_tokens = output_tokens
+    return message
 
 
 class TestGeneratorAgent:
