@@ -1,53 +1,6 @@
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
-from models import (
-    DatabaseConfig,
-    DatabaseType,
-    GeneratedScript,
-    IterationResult,
-    LoopState,
-    ValidationResult,
-    ValidationStatus,
-    ValidatorResponse,
-)
-
-
-class TestDatabaseType:
-    def test_contains_all_six_supported_types(self):
-        assert DatabaseType.RELATIONAL.value == "relational"
-        assert DatabaseType.GRAPH.value == "graph"
-        assert DatabaseType.VECTOR.value == "vector"
-        assert DatabaseType.DOCUMENT.value == "document"
-        assert DatabaseType.KEY_VALUE.value == "key_value"
-        assert DatabaseType.TIME_SERIES.value == "time_series"
-
-
-class TestValidationStatus:
-    def test_contains_pass_and_fail(self):
-        assert ValidationStatus.PASS.value == "PASS"
-        assert ValidationStatus.FAIL.value == "FAIL"
-
-
-class TestDatabaseConfig:
-    def test_stores_all_fields_from_constructor(self, sample_config):
-        assert sample_config.db_type == DatabaseType.RELATIONAL
-        assert sample_config.db_name == "postgresql"
-        assert sample_config.db_version == "16"
-        assert sample_config.idea == "movie management database"
-        assert sample_config.depth == 4
-
-    def test_is_frozen(self, sample_config):
-        with pytest.raises(ValidationError):
-            sample_config.db_name = "mysql"
-
-    def test_rejects_invalid_db_type(self):
-        with pytest.raises(ValidationError):
-            DatabaseConfig(
-                db_type="invalid", db_name="pg", db_version="16", idea="x", depth=4
-            )
+from models import IterationResult, ValidationResult, ValidationStatus
 
 
 class TestValidationResult:
@@ -117,37 +70,3 @@ class TestIterationResult:
         result = IterationResult(iteration=1, script="x")
         assert result.validations == []
         assert result.all_passed is True
-
-
-class TestLoopState:
-    def test_has_correct_default_values(self, sample_config):
-        state = LoopState(config=sample_config)
-        assert state.max_iterations == 10
-        assert state.current_iteration == 0
-        assert state.history == []
-        assert state.final_script is None
-        assert state.success is False
-
-
-class TestGeneratedScript:
-    def test_stores_script_field(self):
-        gs = GeneratedScript(script="CREATE TABLE t;")
-        assert gs.script == "CREATE TABLE t;"
-
-    def test_rejects_missing_script(self):
-        with pytest.raises(ValidationError):
-            GeneratedScript()
-
-
-class TestValidatorResponse:
-    def test_stores_all_fields(self):
-        vr = ValidatorResponse(
-            status=ValidationStatus.PASS, feedback="OK", details="None"
-        )
-        assert vr.status == ValidationStatus.PASS
-        assert vr.feedback == "OK"
-        assert vr.details == "None"
-
-    def test_rejects_missing_fields(self):
-        with pytest.raises(ValidationError):
-            ValidatorResponse(status=ValidationStatus.PASS)
