@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from agents.base import BaseAgent
-from models import DatabaseConfig, ValidationResult, ValidationStatus
+from models import DatabaseConfig, ValidationResult
 
 logger = logging.getLogger("dbagnets")
 
@@ -42,46 +42,13 @@ Your task is to:
 3. Find the longest path
 4. Check whether the longest path has exactly {config.depth} levels of relationships
 
-RESPOND in this exact format:
-STATUS: PASS or FAIL
-FEEDBACK: Short description (1-3 sentences) — current depth vs required depth
-DETAILS: List of tables and the longest relationship path"""
+Use the validate tool to return your assessment."""
 
         user_prompt = (
             f"Required relationship depth: {config.depth}\n\n"
             f"Script to analyze:\n\n{script}"
         )
 
-        raw = self._call_llm(system_prompt, user_prompt)
-        result = self._parse_result(raw)
+        result = self._validate_with_tool_use(system_prompt, user_prompt)
         logger.info("[%s] Result: %s — %s", self.name, result.status.value, result.feedback)
         return result
-
-    def _parse_result(self, raw: str) -> ValidationResult:
-        status = ValidationStatus.FAIL
-        feedback = ""
-        details = ""
-
-        for line in raw.split("\n"):
-            line_stripped = line.strip()
-            if line_stripped.startswith("STATUS:"):
-                val = line_stripped.split(":", 1)[1].strip().upper()
-                if "PASS" in val:
-                    status = ValidationStatus.PASS
-            elif line_stripped.startswith("FEEDBACK:"):
-                feedback = line_stripped.split(":", 1)[1].strip()
-            elif line_stripped.startswith("DETAILS:"):
-                details = line_stripped.split(":", 1)[1].strip()
-
-        if not details:
-            details = raw
-
-        if not feedback:
-            feedback = "Failed to parse validator response." if status == ValidationStatus.FAIL else "OK"
-
-        return ValidationResult(
-            agent_name=self.name,
-            status=status,
-            feedback=feedback,
-            details=details,
-        )

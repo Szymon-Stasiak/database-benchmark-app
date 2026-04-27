@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from agents.base import BaseAgent
-from models import DatabaseConfig, ValidationResult
+from models import DatabaseConfig, GeneratedScript, ValidationResult
 
 logger = logging.getLogger("dbagnets")
 
@@ -33,9 +33,11 @@ class GeneratorAgent(BaseAgent):
         else:
             logger.info("[Generator] Generating initial script")
 
-        raw = self._call_llm(system_prompt, user_prompt)
-        script = self._extract_script(raw)
-        logger.info("[Generator] Extracted script: %d chars, %d lines", len(script), script.count("\n") + 1)
+        result = self._call_llm_structured(
+            system_prompt, user_prompt, GeneratedScript, "generate_script"
+        )
+        script = result.script
+        logger.info("[Generator] Generated script: %d chars, %d lines", len(script), script.count("\n") + 1)
         return script
 
     def _build_system_prompt(self, config: DatabaseConfig) -> str:
@@ -59,7 +61,7 @@ RULES:
 7. Use snake_case naming in English.
 8. Do NOT include any INSERT statements or sample data. Generate schema only (DDL).
 
-RESPONSE: Return ONLY the database script, nothing else. Wrap it in <script> and </script> tags."""
+Use the generate_script tool to return the complete database script in the "script" field."""
 
     def _build_user_prompt(
         self,
@@ -81,18 +83,3 @@ RESPONSE: Return ONLY the database script, nothing else. Wrap it in <script> and
             )
 
         return f"Requirements:\n{context}\n\nGenerate a complete database initialization script."
-
-    def _extract_script(self, raw: str) -> str:
-        if "<script>" in raw and "</script>" in raw:
-            start = raw.index("<script>") + len("<script>")
-            end = raw.index("</script>")
-            return raw[start:end].strip()
-        if "```" in raw:
-            parts = raw.split("```")
-            if len(parts) >= 3:
-                code = parts[1]
-                lines = code.split("\n")
-                if lines and lines[0].strip().lower() in ("sql", "cypher", "gremlin", "cql", "python"):
-                    code = "\n".join(lines[1:])
-                return code.strip()
-        return raw.strip()

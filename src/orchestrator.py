@@ -5,8 +5,16 @@ import logging
 import time
 
 from anthropic import AnthropicVertex
+from langgraph.graph import END, StateGraph
 
-from models import DatabaseConfig, IterationResult, LoopState, ValidationResult, ValidationStatus
+from models import (
+    DatabaseConfig,
+    GraphState,
+    IterationResult,
+    LoopState,
+    ValidationResult,
+    ValidationStatus,
+)
 from agents.generator import GeneratorAgent
 from agents.syntax_checker import SyntaxCheckerAgent
 from agents.topic_checker import TopicCheckerAgent
@@ -40,8 +48,123 @@ class AgentOrchestrator:
             BestPracticesCheckerAgent(client, model),
         ]
 
+        self._graph = self._build_graph()
+
+    def _build_graph(self) -> StateGraph:
+        graph = StateGraph(GraphState)
+        graph.add_node("generate", self._generate_node)
+        graph.add_node("validate", self._validate_node)
+
+        graph.set_entry_point("generate")
+        graph.add_edge("generate", "validate")
+        graph.add_conditional_edges("validate", self._should_continue)
+
+        return graph.compile()
+
+    def _generate_node(self, state: GraphState) -> dict:
+        iteration = state["current_iteration"] + 1
+
+        logger.info("")
+        logger.info("-" * 60)
+        logger.info("  ITERATION %d/%d", iteration, state["max_iterations"])
+        logger.info("-" * 60)
+
+        feedback = state["feedback"] if state["feedback"] else None
+        previous_script = state["script"]
+
+        logger.info("")
+        logger.info("[Generator] Generating script...")
+        gen_start = time.time()
+        script = self.generator.generate(state["config"], feedback, previous_script)
+        gen_elapsed = time.time() - gen_start
+        logger.info(
+            "[Generator] Script generated in %.1fs (%d chars, %d lines)",
+            gen_elapsed, len(script), script.count("\n") + 1,
+        )
+
+        return {
+            "script": script,
+            "current_iteration": iteration,
+        }
+
+    def _validate_node(self, state: GraphState) -> dict:
+        config = state["config"]
+        script = state["script"]
+        iteration = state["current_iteration"]
+
+        logger.info("")
+        logger.info(
+            "[Validation] Running %d validators (%s)...",
+            len(self.validators),
+            "parallel" if self.parallel_validation else "sequential",
+        )
+        val_start = time.time()
+        validations = self._run_validators(config, script)
+        val_elapsed = time.time() - val_start
+        logger.info("[Validation] All validators finished in %.1fs", val_elapsed)
+
+        iteration_result = IterationResult(
+            iteration=iteration,
+            script=script,
+            validations=validations,
+        )
+
+        passed = sum(1 for v in validations if v.passed)
+        total = len(validations)
+
+        logger.info("")
+        logger.info(iteration_result.summary())
+        logger.info("")
+        logger.info(
+            "[Iteration %d] Score: %d/%d passed",
+            iteration, passed, total,
+        )
+
+        if iteration_result.all_passed:
+            return {
+                "history": [iteration_result],
+                "feedback": [],
+                "final_script": script,
+                "success": True,
+            }
+
+        failed = iteration_result.failed_validations
+        failed_names = [v.agent_name for v in failed]
+        logger.info(
+            "[Loop] %d/%d validations failed: %s",
+            len(failed), total, ", ".join(failed_names),
+        )
+
+        if iteration < state["max_iterations"]:
+            logger.info("[Loop] Feeding back errors to Generator for next iteration...")
+
+        return {
+            "history": [iteration_result],
+            "feedback": failed,
+        }
+
+    def _should_continue(self, state: GraphState) -> str:
+        if state["success"]:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info("  SUCCESS! All validations passed.")
+            logger.info(
+                "  Completed in %d iteration(s)",
+                state["current_iteration"],
+            )
+            logger.info("=" * 60)
+            return END
+
+        if state["current_iteration"] >= state["max_iterations"]:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info("  FAILED: Exhausted %d iterations", state["max_iterations"])
+            logger.info("=" * 60)
+            return END
+
+        return "generate"
+
     def run(self, config: DatabaseConfig) -> LoopState:
-        state = LoopState(config=config, max_iterations=self.max_iterations)
         total_start = time.time()
 
         logger.info("=" * 60)
@@ -55,92 +178,41 @@ class AgentOrchestrator:
         logger.info("  Model: %s", self.model)
         logger.info("=" * 60)
 
-        feedback: list[ValidationResult] | None = None
-        previous_script: str | None = None
+        if self.max_iterations == 0:
+            return LoopState(config=config, max_iterations=0)
 
-        for iteration in range(1, self.max_iterations + 1):
-            state.current_iteration = iteration
-            iter_start = time.time()
+        initial_state: GraphState = {
+            "config": config,
+            "max_iterations": self.max_iterations,
+            "current_iteration": 0,
+            "script": None,
+            "feedback": [],
+            "history": [],
+            "final_script": None,
+            "success": False,
+        }
 
-            logger.info("")
-            logger.info("-" * 60)
-            logger.info("  ITERATION %d/%d", iteration, self.max_iterations)
-            logger.info("-" * 60)
+        final_state = self._graph.invoke(initial_state)
 
-            # Step 1: Generate script
-            logger.info("")
-            logger.info("[Generator] Generating script...")
-            gen_start = time.time()
-            script = self.generator.generate(config, feedback, previous_script)
-            gen_elapsed = time.time() - gen_start
-            logger.info("[Generator] Script generated in %.1fs (%d chars, %d lines)",
-                        gen_elapsed, len(script), script.count("\n") + 1)
-
-            # Step 2: Validate
-            logger.info("")
-            logger.info("[Validation] Running %d validators (%s)...",
-                        len(self.validators),
-                        "parallel" if self.parallel_validation else "sequential")
-            val_start = time.time()
-            validations = self._run_validators(config, script)
-            val_elapsed = time.time() - val_start
-            logger.info("[Validation] All validators finished in %.1fs", val_elapsed)
-
-            # Step 3: Summarize iteration
-            result = IterationResult(
-                iteration=iteration,
-                script=script,
-                validations=validations,
-            )
-            state.history.append(result)
-
-            passed = sum(1 for v in validations if v.passed)
-            total = len(validations)
-            iter_elapsed = time.time() - iter_start
-
-            logger.info("")
-            logger.info(result.summary())
-            logger.info("")
-            logger.info("[Iteration %d] Score: %d/%d passed | Time: %.1fs",
-                        iteration, passed, total, iter_elapsed)
-
-            # Step 4: Check if all passed
-            if result.all_passed:
-                total_elapsed = time.time() - total_start
-                logger.info("")
-                logger.info("=" * 60)
-                logger.info("  SUCCESS! All validations passed.")
-                logger.info("  Completed in %d iteration(s), %.1fs total", iteration, total_elapsed)
-                logger.info("=" * 60)
-                state.final_script = script
-                state.success = True
-                return state
-
-            # Step 5: Prepare feedback for next iteration
-            failed = result.failed_validations
-            failed_names = [v.agent_name for v in failed]
-            logger.info("[Loop] %d/%d validations failed: %s",
-                        len(failed), total, ", ".join(failed_names))
-
-            if iteration < self.max_iterations:
-                logger.info("[Loop] Feeding back errors to Generator for next iteration...")
-            feedback = failed
-            previous_script = script
-
-        # Exhausted iterations
         total_elapsed = time.time() - total_start
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("  FAILED: Exhausted %d iterations in %.1fs", self.max_iterations, total_elapsed)
-        logger.info("=" * 60)
+        logger.info("  Total time: %.1fs", total_elapsed)
 
-        if state.history:
-            last = state.history[-1]
-            state.final_script = last.script
+        loop_state = LoopState(
+            config=config,
+            max_iterations=self.max_iterations,
+            current_iteration=final_state["current_iteration"],
+            history=final_state["history"],
+            final_script=final_state["final_script"],
+            success=final_state["success"],
+        )
+
+        if not loop_state.success and loop_state.history:
+            last = loop_state.history[-1]
+            loop_state.final_script = last.script
             passed_count = sum(1 for v in last.validations if v.passed)
             logger.info("  Best result: %d/%d validations passed", passed_count, len(last.validations))
 
-        return state
+        return loop_state
 
     def _run_validators(
         self, config: DatabaseConfig, script: str

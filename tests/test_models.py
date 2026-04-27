@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from models import (
     DatabaseConfig,
     DatabaseType,
+    GeneratedScript,
     IterationResult,
     LoopState,
     ValidationResult,
     ValidationStatus,
+    ValidatorResponse,
 )
 
 
@@ -34,6 +39,16 @@ class TestDatabaseConfig:
         assert sample_config.idea == "movie management database"
         assert sample_config.depth == 4
 
+    def test_is_frozen(self, sample_config):
+        with pytest.raises(ValidationError):
+            sample_config.db_name = "mysql"
+
+    def test_rejects_invalid_db_type(self):
+        with pytest.raises(ValidationError):
+            DatabaseConfig(
+                db_type="invalid", db_name="pg", db_version="16", idea="x", depth=4
+            )
+
 
 class TestValidationResult:
     def test_passed_returns_true_when_status_is_pass(self):
@@ -55,8 +70,8 @@ class TestIterationResult:
             iteration=1,
             script="SELECT 1;",
             validations=[
-                ValidationResult("A", ValidationStatus.PASS, "OK"),
-                ValidationResult("B", ValidationStatus.PASS, "OK"),
+                ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
+                ValidationResult(agent_name="B", status=ValidationStatus.PASS, feedback="OK"),
             ],
         )
         assert result.all_passed is True
@@ -66,19 +81,19 @@ class TestIterationResult:
             iteration=1,
             script="SELECT 1;",
             validations=[
-                ValidationResult("A", ValidationStatus.PASS, "OK"),
-                ValidationResult("B", ValidationStatus.FAIL, "Bad"),
+                ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
+                ValidationResult(agent_name="B", status=ValidationStatus.FAIL, feedback="Bad"),
             ],
         )
         assert result.all_passed is False
 
     def test_failed_validations_returns_only_failed_results(self):
-        fail = ValidationResult("B", ValidationStatus.FAIL, "Bad")
+        fail = ValidationResult(agent_name="B", status=ValidationStatus.FAIL, feedback="Bad")
         result = IterationResult(
             iteration=1,
             script="SELECT 1;",
             validations=[
-                ValidationResult("A", ValidationStatus.PASS, "OK"),
+                ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
                 fail,
             ],
         )
@@ -89,8 +104,8 @@ class TestIterationResult:
             iteration=2,
             script="SELECT 1;",
             validations=[
-                ValidationResult("A", ValidationStatus.PASS, "OK"),
-                ValidationResult("B", ValidationStatus.FAIL, "Bad"),
+                ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
+                ValidationResult(agent_name="B", status=ValidationStatus.FAIL, feedback="Bad"),
             ],
         )
         text = result.summary()
@@ -112,3 +127,27 @@ class TestLoopState:
         assert state.history == []
         assert state.final_script is None
         assert state.success is False
+
+
+class TestGeneratedScript:
+    def test_stores_script_field(self):
+        gs = GeneratedScript(script="CREATE TABLE t;")
+        assert gs.script == "CREATE TABLE t;"
+
+    def test_rejects_missing_script(self):
+        with pytest.raises(ValidationError):
+            GeneratedScript()
+
+
+class TestValidatorResponse:
+    def test_stores_all_fields(self):
+        vr = ValidatorResponse(
+            status=ValidationStatus.PASS, feedback="OK", details="None"
+        )
+        assert vr.status == ValidationStatus.PASS
+        assert vr.feedback == "OK"
+        assert vr.details == "None"
+
+    def test_rejects_missing_fields(self):
+        with pytest.raises(ValidationError):
+            ValidatorResponse(status=ValidationStatus.PASS)

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import operator
 from enum import Enum
+from typing import Annotated, TypedDict
+
+from pydantic import BaseModel, ConfigDict
 
 
 class DatabaseType(Enum):
@@ -18,8 +21,9 @@ class ValidationStatus(Enum):
     FAIL = "FAIL"
 
 
-@dataclass
-class DatabaseConfig:
+class DatabaseConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     db_type: DatabaseType
     db_name: str          # e.g. "postgresql", "neo4j", "milvus"
     db_version: str       # e.g. "13", "5.0", "2.3"
@@ -27,8 +31,7 @@ class DatabaseConfig:
     depth: int            # relationship depth, e.g. 4
 
 
-@dataclass
-class ValidationResult:
+class ValidationResult(BaseModel):
     agent_name: str
     status: ValidationStatus
     feedback: str
@@ -39,11 +42,10 @@ class ValidationResult:
         return self.status == ValidationStatus.PASS
 
 
-@dataclass
-class IterationResult:
+class IterationResult(BaseModel):
     iteration: int
     script: str
-    validations: list[ValidationResult] = field(default_factory=list)
+    validations: list[ValidationResult] = []
 
     @property
     def all_passed(self) -> bool:
@@ -61,11 +63,31 @@ class IterationResult:
         return "\n".join(lines)
 
 
-@dataclass
-class LoopState:
+class LoopState(BaseModel):
     config: DatabaseConfig
     max_iterations: int = 10
     current_iteration: int = 0
-    history: list[IterationResult] = field(default_factory=list)
+    history: list[IterationResult] = []
     final_script: str | None = None
     success: bool = False
+
+
+class GeneratedScript(BaseModel):
+    script: str
+
+
+class ValidatorResponse(BaseModel):
+    status: ValidationStatus
+    feedback: str
+    details: str
+
+
+class GraphState(TypedDict):
+    config: DatabaseConfig
+    max_iterations: int
+    current_iteration: int
+    script: str | None
+    feedback: list[ValidationResult]
+    history: Annotated[list[IterationResult], operator.add]
+    final_script: str | None
+    success: bool
