@@ -8,19 +8,19 @@ from models import ValidationResult, ValidationStatus
 
 
 class TestBestPracticesCheckerAgent:
-    def test_name_returns_best_practices_checker(self, mock_client):
-        agent = BestPracticesCheckerAgent(mock_client, "test-model")
+    def test_name_returns_best_practices_checker(self):
+        agent = BestPracticesCheckerAgent("test-model")
         assert agent.name == "BestPracticesChecker"
 
-    def test_role_description_is_not_empty(self, mock_client):
-        agent = BestPracticesCheckerAgent(mock_client, "test-model")
+    def test_role_description_is_not_empty(self):
+        agent = BestPracticesCheckerAgent("test-model")
         assert len(agent.role_description) > 0
 
 
 class TestValidate:
     @pytest.fixture
-    def agent(self, mock_client):
-        return BestPracticesCheckerAgent(mock_client, "test-model")
+    def agent(self):
+        return BestPracticesCheckerAgent("test-model")
 
     def test_returns_pass_when_script_follows_best_practices(self, agent, sample_config):
         with patch.object(

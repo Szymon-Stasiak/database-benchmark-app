@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -8,27 +9,30 @@ from agents.base import BaseAgent, flatten_json_schema
 from models import ValidationResult, ValidationStatus, ValidatorResponse
 
 
-def make_llm_response(text: str, input_tokens: int = 100, output_tokens: int = 50):
-    message = MagicMock()
-    content_block = MagicMock()
-    content_block.text = text
-    message.content = [content_block]
-    message.usage.input_tokens = input_tokens
-    message.usage.output_tokens = output_tokens
-    return message
+def make_text_response(text: str, prompt_tokens: int = 100, completion_tokens: int = 50):
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = text
+    choice.message.tool_calls = None
+    response.choices = [choice]
+    response.usage.prompt_tokens = prompt_tokens
+    response.usage.completion_tokens = completion_tokens
+    return response
 
 
-def make_tool_use_response(tool_input: dict, tool_name: str = "validate",
-                           input_tokens: int = 100, output_tokens: int = 50):
-    message = MagicMock()
-    tool_block = MagicMock()
-    tool_block.type = "tool_use"
-    tool_block.name = tool_name
-    tool_block.input = tool_input
-    message.content = [tool_block]
-    message.usage.input_tokens = input_tokens
-    message.usage.output_tokens = output_tokens
-    return message
+def make_tool_call_response(tool_input: dict, tool_name: str = "validate",
+                            prompt_tokens: int = 100, completion_tokens: int = 50):
+    response = MagicMock()
+    choice = MagicMock()
+    tool_call = MagicMock()
+    tool_call.function.name = tool_name
+    tool_call.function.arguments = json.dumps(tool_input)
+    choice.message.content = None
+    choice.message.tool_calls = [tool_call]
+    response.choices = [choice]
+    response.usage.prompt_tokens = prompt_tokens
+    response.usage.completion_tokens = completion_tokens
+    return response
 
 
 class _ConcreteAgent(BaseAgent):
@@ -42,112 +46,116 @@ class _ConcreteAgent(BaseAgent):
 
 
 class TestBaseAgent:
-    def test_init_stores_client_and_default_model(self, mock_client):
-        agent = _ConcreteAgent(mock_client)
-        assert agent.client is mock_client
-        assert agent.model == "claude-sonnet-4-6"
+    def test_init_stores_default_model(self):
+        agent = _ConcreteAgent()
+        assert agent.model == "vertex_ai/claude-sonnet-4-6"
 
-    def test_init_accepts_custom_model(self, mock_client):
-        agent = _ConcreteAgent(mock_client, model="claude-haiku-4-5-20251001")
-        assert agent.model == "claude-haiku-4-5-20251001"
+    def test_init_accepts_custom_model(self):
+        agent = _ConcreteAgent(model="openai/gpt-4o")
+        assert agent.model == "openai/gpt-4o"
 
-    def test_abstract_name_body_returns_none(self, mock_client):
-        agent = _ConcreteAgent(mock_client)
+    def test_abstract_name_body_returns_none(self):
+        agent = _ConcreteAgent()
         assert BaseAgent.name.fget(agent) is None
 
-    def test_abstract_role_description_body_returns_none(self, mock_client):
-        agent = _ConcreteAgent(mock_client)
+    def test_abstract_role_description_body_returns_none(self):
+        agent = _ConcreteAgent()
         assert BaseAgent.role_description.fget(agent) is None
 
 
 class TestCallLlm:
-    def test_sends_correct_params_to_vertex_api(self, mock_client):
-        mock_client.messages.create.return_value = make_llm_response("response")
-        agent = _ConcreteAgent(mock_client)
+    def test_sends_correct_params_to_litellm(self):
+        agent = _ConcreteAgent("test-model")
+        with patch("agents.base.completion", return_value=make_text_response("response")) as mock_comp:
+            agent._call_llm("system prompt", "user prompt")
 
-        agent._call_llm("system prompt", "user prompt")
-
-        mock_client.messages.create.assert_called_once_with(
-            model="claude-sonnet-4-6",
+        mock_comp.assert_called_once_with(
+            model="test-model",
             max_tokens=8192,
-            system="system prompt",
-            messages=[{"role": "user", "content": "user prompt"}],
+            messages=[
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "user prompt"},
+            ],
         )
 
-    def test_returns_text_from_llm_response(self, mock_client):
-        mock_client.messages.create.return_value = make_llm_response("hello world")
-        agent = _ConcreteAgent(mock_client)
-
-        result = agent._call_llm("s", "u")
+    def test_returns_text_from_response(self):
+        agent = _ConcreteAgent("test-model")
+        with patch("agents.base.completion", return_value=make_text_response("hello world")):
+            result = agent._call_llm("s", "u")
 
         assert result == "hello world"
 
-    def test_passes_custom_max_tokens_to_api(self, mock_client):
-        mock_client.messages.create.return_value = make_llm_response("ok")
-        agent = _ConcreteAgent(mock_client)
+    def test_passes_custom_max_tokens(self):
+        agent = _ConcreteAgent("test-model")
+        with patch("agents.base.completion", return_value=make_text_response("ok")) as mock_comp:
+            agent._call_llm("s", "u", max_tokens=1024)
 
-        agent._call_llm("s", "u", max_tokens=1024)
-
-        assert mock_client.messages.create.call_args.kwargs["max_tokens"] == 1024
+        assert mock_comp.call_args.kwargs["max_tokens"] == 1024
 
 
 class TestCallLlmStructured:
-    def test_passes_tools_and_tool_choice_to_api(self, mock_client):
-        mock_client.messages.create.return_value = make_tool_use_response(
-            {"status": "PASS", "feedback": "OK", "details": "None"}
-        )
-        agent = _ConcreteAgent(mock_client)
+    def test_passes_tools_and_tool_choice(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_tool_call_response(
+                {"status": "PASS", "feedback": "OK", "details": "None"}
+            ),
+        ) as mock_comp:
+            agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
 
-        agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
-
-        call_kwargs = mock_client.messages.create.call_args.kwargs
+        call_kwargs = mock_comp.call_args.kwargs
         assert "tools" in call_kwargs
-        assert call_kwargs["tool_choice"] == {"type": "tool", "name": "validate"}
+        assert call_kwargs["tools"][0]["type"] == "function"
+        assert call_kwargs["tools"][0]["function"]["name"] == "validate"
+        assert call_kwargs["tool_choice"] == {"type": "function", "function": {"name": "validate"}}
 
-    def test_returns_validated_pydantic_model(self, mock_client):
-        mock_client.messages.create.return_value = make_tool_use_response(
-            {"status": "PASS", "feedback": "OK", "details": "None"}
-        )
-        agent = _ConcreteAgent(mock_client)
-
-        result = agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
+    def test_returns_validated_pydantic_model(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_tool_call_response(
+                {"status": "PASS", "feedback": "OK", "details": "None"}
+            ),
+        ):
+            result = agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
 
         assert isinstance(result, ValidatorResponse)
         assert result.status == ValidationStatus.PASS
         assert result.feedback == "OK"
 
-    def test_raises_when_no_tool_use_block(self, mock_client):
-        message = MagicMock()
-        text_block = MagicMock()
-        text_block.type = "text"
-        message.content = [text_block]
-        message.usage.input_tokens = 100
-        message.usage.output_tokens = 50
-        mock_client.messages.create.return_value = message
-        agent = _ConcreteAgent(mock_client)
+    def test_raises_when_no_tool_calls(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_text_response("no tool call"),
+        ):
+            with pytest.raises(ValueError, match="No tool call"):
+                agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
 
-        with pytest.raises(ValueError, match="No tool_use block"):
-            agent._call_llm_structured("sys", "user", ValidatorResponse, "validate")
+    def test_passes_custom_max_tokens(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_tool_call_response(
+                {"status": "PASS", "feedback": "OK", "details": "None"}
+            ),
+        ) as mock_comp:
+            agent._call_llm_structured("sys", "user", ValidatorResponse, "validate", max_tokens=1024)
 
-    def test_passes_custom_max_tokens(self, mock_client):
-        mock_client.messages.create.return_value = make_tool_use_response(
-            {"status": "PASS", "feedback": "OK", "details": "None"}
-        )
-        agent = _ConcreteAgent(mock_client)
-
-        agent._call_llm_structured("sys", "user", ValidatorResponse, "validate", max_tokens=1024)
-
-        assert mock_client.messages.create.call_args.kwargs["max_tokens"] == 1024
+        assert mock_comp.call_args.kwargs["max_tokens"] == 1024
 
 
 class TestValidateWithToolUse:
-    def test_returns_validation_result_with_agent_name(self, mock_client):
-        mock_client.messages.create.return_value = make_tool_use_response(
-            {"status": "PASS", "feedback": "All good", "details": "None"}
-        )
-        agent = _ConcreteAgent(mock_client)
-
-        result = agent._validate_with_tool_use("sys prompt", "user prompt")
+    def test_returns_validation_result_with_agent_name(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_tool_call_response(
+                {"status": "PASS", "feedback": "All good", "details": "None"}
+            ),
+        ):
+            result = agent._validate_with_tool_use("sys prompt", "user prompt")
 
         assert isinstance(result, ValidationResult)
         assert result.agent_name == "ConcreteTestAgent"
@@ -155,13 +163,15 @@ class TestValidateWithToolUse:
         assert result.feedback == "All good"
         assert result.details == "None"
 
-    def test_returns_fail_result(self, mock_client):
-        mock_client.messages.create.return_value = make_tool_use_response(
-            {"status": "FAIL", "feedback": "Errors found", "details": "Line 5"}
-        )
-        agent = _ConcreteAgent(mock_client)
-
-        result = agent._validate_with_tool_use("sys", "user")
+    def test_returns_fail_result(self):
+        agent = _ConcreteAgent("test-model")
+        with patch(
+            "agents.base.completion",
+            return_value=make_tool_call_response(
+                {"status": "FAIL", "feedback": "Errors found", "details": "Line 5"}
+            ),
+        ):
+            result = agent._validate_with_tool_use("sys", "user")
 
         assert result.status == ValidationStatus.FAIL
         assert result.feedback == "Errors found"
@@ -221,8 +231,8 @@ class TestFlattenJsonSchema:
 
 
 class TestBuildDbContext:
-    def test_includes_all_config_fields_in_output(self, mock_client, sample_config):
-        agent = _ConcreteAgent(mock_client)
+    def test_includes_all_config_fields_in_output(self, sample_config):
+        agent = _ConcreteAgent("test-model")
         ctx = agent._build_db_context(sample_config)
 
         assert "relational" in ctx

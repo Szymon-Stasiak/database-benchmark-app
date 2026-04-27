@@ -62,7 +62,7 @@ class TestParseArgs:
         assert args.idea == "test database"
         assert args.depth == 4
         assert args.max_iterations == 10
-        assert args.model == "claude-sonnet-4-6"
+        assert args.model == "vertex_ai/claude-sonnet-4-6"
         assert args.output is None
         assert args.sequential is False
         assert args.verbose is False
@@ -76,10 +76,8 @@ class TestParseArgs:
             "--idea", "social network",
             "--depth", "3",
             "--max-iterations", "5",
-            "--model", "claude-haiku-4-5-20251001",
+            "--model", "openai/gpt-4o",
             "--output", "out.sql",
-            "--project-id", "my-project",
-            "--region", "us-central1",
             "--sequential",
             "-v",
         ]):
@@ -87,10 +85,8 @@ class TestParseArgs:
 
         assert args.db_type == "graph"
         assert args.max_iterations == 5
-        assert args.model == "claude-haiku-4-5-20251001"
+        assert args.model == "openai/gpt-4o"
         assert args.output == "out.sql"
-        assert args.project_id == "my-project"
-        assert args.region == "us-central1"
         assert args.sequential is True
         assert args.verbose is True
 
@@ -103,17 +99,15 @@ class TestMain:
         "--db-version", "16",
         "--idea", "test",
         "--depth", "4",
-        "--project-id", "test-project",
     ]
 
     def _make_state(self, sample_config, success=True, final_script="CREATE TABLE t;"):
         return LoopState(config=sample_config, success=success, final_script=final_script)
 
     @patch("main.load_dotenv")
-    @patch("main.AnthropicVertex")
     @patch("main.AgentOrchestrator")
     def test_prints_script_to_stdout_on_success(
-        self, mock_orch_cls, mock_vertex_cls, mock_dotenv, sample_config, capsys
+        self, mock_orch_cls, mock_dotenv, sample_config, capsys
     ):
         mock_orch_cls.return_value.run.return_value = self._make_state(sample_config)
 
@@ -125,10 +119,9 @@ class TestMain:
         assert "CREATE TABLE t;" in captured.out
 
     @patch("main.load_dotenv")
-    @patch("main.AnthropicVertex")
     @patch("main.AgentOrchestrator")
     def test_writes_script_to_file_when_output_flag_given(
-        self, mock_orch_cls, mock_vertex_cls, mock_dotenv, sample_config, tmp_path
+        self, mock_orch_cls, mock_dotenv, sample_config, tmp_path
     ):
         output_file = tmp_path / "output.sql"
         mock_orch_cls.return_value.run.return_value = self._make_state(sample_config)
@@ -141,25 +134,9 @@ class TestMain:
         assert output_file.read_text() == "CREATE TABLE t;"
 
     @patch("main.load_dotenv")
-    def test_returns_1_when_project_id_is_missing(self, mock_dotenv):
-        argv = [
-            "main.py",
-            "--db-type", "relational",
-            "--db-name", "postgresql",
-            "--db-version", "16",
-            "--idea", "test",
-            "--depth", "4",
-        ]
-        with patch("sys.argv", argv), patch.dict("os.environ", {}, clear=True):
-            result = main()
-
-        assert result == 1
-
-    @patch("main.load_dotenv")
-    @patch("main.AnthropicVertex")
     @patch("main.AgentOrchestrator")
     def test_returns_1_when_orchestrator_loop_fails(
-        self, mock_orch_cls, mock_vertex_cls, mock_dotenv, sample_config
+        self, mock_orch_cls, mock_dotenv, sample_config
     ):
         mock_orch_cls.return_value.run.return_value = self._make_state(
             sample_config, success=False, final_script="partial"
@@ -171,10 +148,9 @@ class TestMain:
         assert result == 1
 
     @patch("main.load_dotenv")
-    @patch("main.AnthropicVertex")
     @patch("main.AgentOrchestrator")
     def test_skips_output_when_final_script_is_none(
-        self, mock_orch_cls, mock_vertex_cls, mock_dotenv, sample_config, capsys
+        self, mock_orch_cls, mock_dotenv, sample_config, capsys
     ):
         mock_orch_cls.return_value.run.return_value = self._make_state(
             sample_config, success=False, final_script=None

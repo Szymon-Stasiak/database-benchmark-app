@@ -8,19 +8,19 @@ from models import ValidationResult, ValidationStatus
 
 
 class TestVersionCheckerAgent:
-    def test_name_returns_version_checker(self, mock_client):
-        agent = VersionCheckerAgent(mock_client, "test-model")
+    def test_name_returns_version_checker(self):
+        agent = VersionCheckerAgent("test-model")
         assert agent.name == "VersionChecker"
 
-    def test_role_description_is_not_empty(self, mock_client):
-        agent = VersionCheckerAgent(mock_client, "test-model")
+    def test_role_description_is_not_empty(self):
+        agent = VersionCheckerAgent("test-model")
         assert len(agent.role_description) > 0
 
 
 class TestValidate:
     @pytest.fixture
-    def agent(self, mock_client):
-        return VersionCheckerAgent(mock_client, "test-model")
+    def agent(self):
+        return VersionCheckerAgent("test-model")
 
     def test_returns_pass_when_script_is_version_compatible(self, agent, sample_config):
         with patch.object(

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-from unittest.mock import MagicMock
 
 from models import DatabaseConfig, DatabaseType
 
@@ -13,11 +12,6 @@ def _clean_logger():
     yield
     logger = logging.getLogger("dbagnets")
     logger.handlers.clear()
-
-
-@pytest.fixture
-def mock_client():
-    return MagicMock()
 
 
 @pytest.fixture

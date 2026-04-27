@@ -4,7 +4,6 @@ import concurrent.futures
 import logging
 import time
 
-from anthropic import AnthropicVertex
 from langgraph.graph import END, StateGraph
 
 from models import (
@@ -29,23 +28,21 @@ class AgentOrchestrator:
 
     def __init__(
         self,
-        client: AnthropicVertex,
-        model: str = "claude-sonnet-4-6",
+        model: str = "vertex_ai/claude-sonnet-4-6",
         max_iterations: int = 10,
         parallel_validation: bool = True,
     ):
-        self.client = client
         self.model = model
         self.max_iterations = max_iterations
         self.parallel_validation = parallel_validation
 
-        self.generator = GeneratorAgent(client, model)
+        self.generator = GeneratorAgent(model)
         self.validators = [
-            SyntaxCheckerAgent(client, model),
-            TopicCheckerAgent(client, model),
-            VersionCheckerAgent(client, model),
-            DepthCheckerAgent(client, model),
-            BestPracticesCheckerAgent(client, model),
+            SyntaxCheckerAgent(model),
+            TopicCheckerAgent(model),
+            VersionCheckerAgent(model),
+            DepthCheckerAgent(model),
+            BestPracticesCheckerAgent(model),
         ]
 
         self._graph = self._build_graph()

@@ -8,19 +8,19 @@ from models import ValidationResult, ValidationStatus
 
 
 class TestSyntaxCheckerAgent:
-    def test_name_returns_syntax_checker(self, mock_client):
-        agent = SyntaxCheckerAgent(mock_client, "test-model")
+    def test_name_returns_syntax_checker(self):
+        agent = SyntaxCheckerAgent("test-model")
         assert agent.name == "SyntaxChecker"
 
-    def test_role_description_is_not_empty(self, mock_client):
-        agent = SyntaxCheckerAgent(mock_client, "test-model")
+    def test_role_description_is_not_empty(self):
+        agent = SyntaxCheckerAgent("test-model")
         assert len(agent.role_description) > 0
 
 
 class TestValidate:
     @pytest.fixture
-    def agent(self, mock_client):
-        return SyntaxCheckerAgent(mock_client, "test-model")
+    def agent(self):
+        return SyntaxCheckerAgent("test-model")
 
     def test_returns_pass_when_llm_reports_valid_syntax(self, agent, sample_config):
         with patch.object(

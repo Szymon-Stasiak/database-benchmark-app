@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-from anthropic import AnthropicVertex
 
 from models import DatabaseConfig, DatabaseType
 from orchestrator import AgentOrchestrator
@@ -77,24 +75,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-6",
-        help="Claude model to use (default: claude-sonnet-4-6)",
+        default="vertex_ai/claude-sonnet-4-6",
+        help="LiteLLM model string (default: vertex_ai/claude-sonnet-4-6)",
     )
     parser.add_argument(
         "--output",
         type=str,
         default=None,
         help="Output file path for the script (default: stdout)",
-    )
-    parser.add_argument(
-        "--region",
-        default=os.getenv("GCP_REGION", "global"),
-        help="Vertex AI region (default: from .env or 'global')",
-    )
-    parser.add_argument(
-        "--project-id",
-        default=os.getenv("GCP_PROJECT_ID"),
-        help="GCP project ID (default: from .env)",
     )
     parser.add_argument(
         "--sequential",
@@ -116,10 +104,6 @@ def main() -> int:
 
     logger = logging.getLogger("dbagnets")
 
-    if not args.project_id:
-        logger.error("GCP project ID is required. Set GCP_PROJECT_ID in .env or pass --project-id")
-        return 1
-
     config = DatabaseConfig(
         db_type=DB_TYPE_MAP[args.db_type],
         db_name=args.db_name,
@@ -128,10 +112,7 @@ def main() -> int:
         depth=args.depth,
     )
 
-    client = AnthropicVertex(region=args.region, project_id=args.project_id)
-
     orchestrator = AgentOrchestrator(
-        client=client,
         model=args.model,
         max_iterations=args.max_iterations,
         parallel_validation=not args.sequential,

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
 from typing import TypeVar
 
-from anthropic import AnthropicVertex
+from litellm import completion
 from pydantic import BaseModel
 
 from models import DatabaseConfig, ValidationResult, ValidatorResponse
@@ -17,7 +18,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 def flatten_json_schema(schema: dict) -> dict:
-    """Inline $defs references for Anthropic API compatibility."""
+    """Inline $defs references for API compatibility."""
     defs = schema.pop("$defs", {})
     schema.pop("title", None)
 
@@ -38,8 +39,7 @@ def flatten_json_schema(schema: dict) -> dict:
 
 class BaseAgent(ABC):
 
-    def __init__(self, client: AnthropicVertex, model: str = "claude-sonnet-4-6"):
-        self.client = client
+    def __init__(self, model: str = "vertex_ai/claude-sonnet-4-6"):
         self.model = model
 
     @property
@@ -58,21 +58,23 @@ class BaseAgent(ABC):
         logger.debug("[%s] User prompt length: %d chars", self.name, len(user_prompt))
 
         start = time.time()
-        message = self.client.messages.create(
+        response = completion(
             model=self.model,
             max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         )
         elapsed = time.time() - start
 
-        response_text = message.content[0].text
-        input_tokens = message.usage.input_tokens
-        output_tokens = message.usage.output_tokens
+        response_text = response.choices[0].message.content
+        prompt_tokens = response.usage.prompt_tokens
+        completion_tokens = response.usage.completion_tokens
 
         logger.info(
             "[%s] LLM response in %.1fs | tokens: %d in / %d out | response: %d chars",
-            self.name, elapsed, input_tokens, output_tokens, len(response_text),
+            self.name, elapsed, prompt_tokens, completion_tokens, len(response_text),
         )
 
         return response_text
@@ -91,34 +93,40 @@ class BaseAgent(ABC):
         logger.debug("[%s] Response model: %s, tool: %s", self.name, response_model.__name__, tool_name)
 
         tool_def = {
-            "name": tool_name,
-            "description": f"Return the result as structured JSON matching the {response_model.__name__} schema.",
-            "input_schema": flatten_json_schema(response_model.model_json_schema()),
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "description": f"Return the result as structured JSON matching the {response_model.__name__} schema.",
+                "parameters": flatten_json_schema(response_model.model_json_schema()),
+            },
         }
 
         start = time.time()
-        message = self.client.messages.create(
+        response = completion(
             model=self.model,
             max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
             tools=[tool_def],
-            tool_choice={"type": "tool", "name": tool_name},
+            tool_choice={"type": "function", "function": {"name": tool_name}},
         )
         elapsed = time.time() - start
 
-        input_tokens = message.usage.input_tokens
-        output_tokens = message.usage.output_tokens
+        prompt_tokens = response.usage.prompt_tokens
+        completion_tokens = response.usage.completion_tokens
 
-        for block in message.content:
-            if block.type == "tool_use":
-                logger.info(
-                    "[%s] LLM structured response in %.1fs | tokens: %d in / %d out",
-                    self.name, elapsed, input_tokens, output_tokens,
-                )
-                return response_model.model_validate(block.input)
+        tool_calls = response.choices[0].message.tool_calls
+        if tool_calls:
+            args = json.loads(tool_calls[0].function.arguments)
+            logger.info(
+                "[%s] LLM structured response in %.1fs | tokens: %d in / %d out",
+                self.name, elapsed, prompt_tokens, completion_tokens,
+            )
+            return response_model.model_validate(args)
 
-        raise ValueError(f"[{self.name}] No tool_use block found in LLM response")
+        raise ValueError(f"[{self.name}] No tool call found in LLM response")
 
     def _validate_with_tool_use(
         self,

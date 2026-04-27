@@ -8,19 +8,19 @@ from models import ValidationResult, ValidationStatus
 
 
 class TestDepthCheckerAgent:
-    def test_name_returns_depth_checker(self, mock_client):
-        agent = DepthCheckerAgent(mock_client, "test-model")
+    def test_name_returns_depth_checker(self):
+        agent = DepthCheckerAgent("test-model")
         assert agent.name == "DepthChecker"
 
-    def test_role_description_is_not_empty(self, mock_client):
-        agent = DepthCheckerAgent(mock_client, "test-model")
+    def test_role_description_is_not_empty(self):
+        agent = DepthCheckerAgent("test-model")
         assert len(agent.role_description) > 0
 
 
 class TestValidate:
     @pytest.fixture
-    def agent(self, mock_client):
-        return DepthCheckerAgent(mock_client, "test-model")
+    def agent(self):
+        return DepthCheckerAgent("test-model")
 
     def test_returns_pass_when_depth_matches_requirement(self, agent, sample_config):
         with patch.object(

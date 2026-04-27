@@ -26,33 +26,33 @@ def make_fail_result(agent_name: str, feedback: str = "Issues found") -> Validat
 
 
 class TestAgentOrchestrator:
-    def test_init_uses_default_model_and_iterations(self, mock_client):
-        orch = AgentOrchestrator(mock_client)
-        assert orch.model == "claude-sonnet-4-6"
+    def test_init_uses_default_model_and_iterations(self):
+        orch = AgentOrchestrator()
+        assert orch.model == "vertex_ai/claude-sonnet-4-6"
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
         assert len(orch.validators) == 5
 
-    def test_init_accepts_custom_model_iterations_and_mode(self, mock_client):
+    def test_init_accepts_custom_model_iterations_and_mode(self):
         orch = AgentOrchestrator(
-            mock_client, model="claude-haiku-4-5-20251001", max_iterations=5, parallel_validation=False
+            model="openai/gpt-4o", max_iterations=5, parallel_validation=False
         )
-        assert orch.model == "claude-haiku-4-5-20251001"
+        assert orch.model == "openai/gpt-4o"
         assert orch.max_iterations == 5
         assert orch.parallel_validation is False
 
 
 class TestRun:
-    def _setup_orchestrator(self, mock_client, max_iterations=3, parallel=True):
-        orch = AgentOrchestrator(mock_client, max_iterations=max_iterations, parallel_validation=parallel)
+    def _setup_orchestrator(self, max_iterations=3, parallel=True):
+        orch = AgentOrchestrator(max_iterations=max_iterations, parallel_validation=parallel)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = "CREATE TABLE t (id INT);"
         return orch
 
     def test_returns_success_when_all_validators_pass_on_first_iteration(
-        self, mock_client, sample_config
+        self, sample_config
     ):
-        orch = self._setup_orchestrator(mock_client)
+        orch = self._setup_orchestrator()
         for v in orch.validators:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
 
@@ -65,9 +65,9 @@ class TestRun:
         orch.generator.generate.assert_called_once()
 
     def test_retries_with_feedback_and_succeeds_on_second_iteration(
-        self, mock_client, sample_config
+        self, sample_config
     ):
-        orch = self._setup_orchestrator(mock_client)
+        orch = self._setup_orchestrator()
         for v in orch.validators:
             v.validate = MagicMock(
                 side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
@@ -80,9 +80,9 @@ class TestRun:
         assert orch.generator.generate.call_count == 2
 
     def test_returns_failure_when_all_iterations_exhausted(
-        self, mock_client, sample_config
+        self, sample_config
     ):
-        orch = self._setup_orchestrator(mock_client, max_iterations=2)
+        orch = self._setup_orchestrator(max_iterations=2)
         for v in orch.validators:
             v.validate = MagicMock(return_value=make_fail_result(v.name))
 
@@ -93,9 +93,9 @@ class TestRun:
         assert state.final_script == "CREATE TABLE t (id INT);"
 
     def test_returns_failure_with_no_history_when_max_iterations_is_zero(
-        self, mock_client, sample_config
+        self, sample_config
     ):
-        orch = AgentOrchestrator(mock_client, max_iterations=0)
+        orch = AgentOrchestrator(max_iterations=0)
 
         state = orch.run(sample_config)
 
@@ -105,8 +105,8 @@ class TestRun:
 
 
 class TestRunValidatorsSequential:
-    def test_calls_each_validator_once_in_sequential_mode(self, mock_client, sample_config):
-        orch = AgentOrchestrator(mock_client, max_iterations=1, parallel_validation=False)
+    def test_calls_each_validator_once_in_sequential_mode(self, sample_config):
+        orch = AgentOrchestrator(max_iterations=1, parallel_validation=False)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = "SELECT 1;"
         for v in orch.validators:
@@ -120,8 +120,8 @@ class TestRunValidatorsSequential:
 
 
 class TestRunValidatorsParallel:
-    def test_converts_validator_exception_to_fail_result(self, mock_client, sample_config):
-        orch = AgentOrchestrator(mock_client, max_iterations=1)
+    def test_converts_validator_exception_to_fail_result(self, sample_config):
+        orch = AgentOrchestrator(max_iterations=1)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = "SELECT 1;"
 
