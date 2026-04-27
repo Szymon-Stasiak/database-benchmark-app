@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from dbagnets.agents.base import BaseAgent
-from dbagnets.models import DatabaseConfig, GeneratedScript, ValidationResult
+from dbagnets.models import DatabaseConfig, DatabaseType, GeneratedScript, ValidationResult
 
 logger = logging.getLogger("dbagnets")
 
@@ -40,26 +40,76 @@ class GeneratorAgent(BaseAgent):
         logger.info("[Generator] Generated script: %d chars, %d lines", len(script), script.count("\n") + 1)
         return script
 
+    _STRUCTURE_RULES: dict[DatabaseType, str] = {
+        DatabaseType.RELATIONAL: """4. The script must include:
+   - CREATE TABLE statements with columns and data types
+   - Primary keys and foreign keys (relationships)
+   - Indexes where appropriate
+   - Constraints (NOT NULL, UNIQUE, CHECK where applicable)
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of FOREIGN KEY relationships.
+   E.g. depth=3: Table_A -> Table_B -> Table_C -> Table_D (3 FK hops, 4 tables).""",
+
+        DatabaseType.GRAPH: """4. The script must include:
+   - Node label definitions with property constraints
+   - Relationship type definitions with property constraints
+   - Indexes on frequently queried properties
+   - Uniqueness constraints where applicable
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of relationship types between node labels.
+   E.g. depth=3: (:A)-[:R1]->(:B)-[:R2]->(:C)-[:R3]->(:D) (3 relationship types, 4 node labels).""",
+
+        DatabaseType.VECTOR: """4. The script must include:
+   - Collection definitions with scalar and vector fields
+   - Vector index configuration (index type, metric type, dimensions)
+   - Primary key / ID field for each collection
+   - Partition key definitions where appropriate
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of references between collections.
+   E.g. depth=3: Collection_A refs Collection_B refs Collection_C refs Collection_D.""",
+
+        DatabaseType.DOCUMENT: """4. The script must include:
+   - Collection/bucket definitions
+   - JSON Schema validation rules for document structure
+   - Index definitions on frequently queried fields
+   - Reference fields (DBRef or manual references) between collections
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of document references between collections.
+   E.g. depth=3: Collection_A -> Collection_B -> Collection_C -> Collection_D (3 reference hops).""",
+
+        DatabaseType.KEY_VALUE: """4. The script must include:
+   - Key namespace/keyspace definitions
+   - Data structure definitions (hashes, lists, sets, sorted sets)
+   - TTL/expiration policies where appropriate
+   - Secondary index definitions if supported
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of key references between data structures.
+   E.g. depth=3: structure_A refs structure_B refs structure_C refs structure_D.""",
+
+        DatabaseType.TIME_SERIES: """4. The script must include:
+   - Measurement/hypertable definitions with tags and fields
+   - Time-based partitioning configuration
+   - Retention policies where appropriate
+   - Continuous queries/aggregations if supported
+5. Relationship depth must be exactly {depth} levels.
+   Depth = the longest chain of relationships between measurements/tables.
+   E.g. depth=3: Measurement_A -> Measurement_B -> Measurement_C -> Measurement_D.""",
+    }
+
     def _build_system_prompt(self, config: DatabaseConfig) -> str:
-        return f"""You are a database expert. Your task is to generate complete, correct database
-initialization scripts.
+        structure_rules = self._STRUCTURE_RULES[config.db_type].format(depth=config.depth)
+
+        return f"""You are a database expert specializing in {config.db_name} ({config.db_type.value} database).
+Your task is to generate a complete, correct initialization script.
 
 RULES:
 1. Generate ONLY a clean database script — no explanatory comments, no markdown.
 2. The script must be 100% compatible with {config.db_name} version {config.db_version}.
 3. Use ONLY syntax and features available in this specific version.
-4. The script must include:
-   - Creation of tables/collections/nodes (depending on database type)
-   - Primary and foreign keys (relationships)
-   - Indexes where appropriate
-   - Constraints (NOT NULL, UNIQUE, CHECK where applicable)
-   - Sensible data types
-5. Relationship depth must be exactly {config.depth} levels.
-   Depth = the longest path of relationships from a root table to a leaf table.
-   E.g. depth=3 means: Table_A -> Table_B -> Table_C -> Table_D (3 FK relationships, 4 tables).
-6. Tables, columns, and relationships must be semantically relevant to the topic: "{config.idea}".
+{structure_rules}
+6. All entities and relationships must be semantically relevant to the topic: "{config.idea}".
 7. Use snake_case naming in English.
-8. Do NOT include any INSERT statements or sample data. Generate schema only (DDL).
+8. Do NOT include any sample data. Generate schema/structure definitions only.
 
 Use the generate_script tool to return the complete database script in the "script" field."""
 
