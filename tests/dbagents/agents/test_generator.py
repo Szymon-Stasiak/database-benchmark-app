@@ -93,6 +93,35 @@ class TestBuildUserPrompt:
         assert "Missing index" in prompt
         assert "Checker" in prompt
 
+    def test_refinement_prompt_includes_details_when_present(self, sample_config):
+        agent = GeneratorAgent("test-model")
+        feedback = [
+            ValidationResult(
+                agent_name="DepthChecker", status=ValidationStatus.FAIL,
+                feedback="Depth is 3, expected 4",
+                details="Longest path: users -> orders -> items (depth=2)",
+            ),
+        ]
+
+        prompt = agent._build_user_prompt(sample_config, feedback, "CREATE TABLE t (id INT);")
+
+        assert "Depth is 3, expected 4" in prompt
+        assert "Longest path: users -> orders -> items (depth=2)" in prompt
+
+    def test_refinement_prompt_omits_details_when_empty(self, sample_config):
+        agent = GeneratorAgent("test-model")
+        feedback = [
+            ValidationResult(
+                agent_name="Checker", status=ValidationStatus.FAIL,
+                feedback="Bad",
+            ),
+        ]
+
+        prompt = agent._build_user_prompt(sample_config, feedback, "CREATE TABLE t (id INT);")
+
+        assert "Bad" in prompt
+        assert "Details:" not in prompt
+
     def test_returns_initial_prompt_when_feedback_given_without_previous_script(self, sample_config):
         agent = GeneratorAgent("test-model")
         feedback = [ValidationResult(agent_name="Checker", status=ValidationStatus.FAIL, feedback="Bad")]

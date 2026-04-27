@@ -22,13 +22,13 @@ class TopicCheckerAgent(BaseAgent):
         system_prompt = f"""You are a domain expert. Your task is to evaluate whether a database
 script is aligned with the topic/idea: "{config.idea}".
 
+This is a schema-only script (DDL). There should be NO INSERT statements or sample data.
+
 Check:
 1. Whether table/collection names are relevant to the topic
 2. Whether columns/attributes make sense in the context of the topic
 3. Whether relationships between entities are logical for this topic
-4. Whether the script covers all key entities that should exist for this topic
-5. Whether there are tables/columns that don't belong in this context
-6. Whether sample data (INSERTs) is realistic and relevant to the topic
+4. Whether there are tables/columns that don't belong in this context
 
 Use the validate tool to return your assessment."""
 

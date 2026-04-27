@@ -73,7 +73,9 @@ Use the generate_script tool to return the complete database script in the "scri
 
         if feedback and previous_script:
             feedback_text = "\n".join(
-                f"- [{v.agent_name}] {v.feedback}" for v in feedback if not v.passed
+                f"- [{v.agent_name}] {v.feedback}"
+                + (f"\n  Details: {v.details}" if v.details else "")
+                for v in feedback if not v.passed
             )
             return (
                 f"Requirements:\n{context}\n\n"

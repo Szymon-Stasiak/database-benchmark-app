@@ -5,6 +5,7 @@ from dbagnets.agents.topic_checker import TopicCheckerAgent
 from dbagnets.agents.version_checker import VersionCheckerAgent
 from dbagnets.agents.depth_checker import DepthCheckerAgent
 from dbagnets.agents.best_practices_checker import BestPracticesCheckerAgent
+from dbagnets.agents.completeness_checker import CompletenessCheckerAgent
 
 __all__ = [
     "BaseAgent",
@@ -14,4 +15,5 @@ __all__ = [
     "VersionCheckerAgent",
     "DepthCheckerAgent",
     "BestPracticesCheckerAgent",
+    "CompletenessCheckerAgent",
 ]

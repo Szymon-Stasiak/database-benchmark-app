@@ -31,7 +31,7 @@ class TestAgentOrchestrator:
         assert orch.model == "vertex_ai/claude-sonnet-4-6"
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
-        assert len(orch.validators) == 5
+        assert len(orch.validators) == 6
 
     def test_init_accepts_custom_model_iterations_and_mode(self):
         orch = AgentOrchestrator(

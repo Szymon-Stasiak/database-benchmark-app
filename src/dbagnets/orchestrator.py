@@ -20,6 +20,7 @@ from dbagnets.agents.topic_checker import TopicCheckerAgent
 from dbagnets.agents.version_checker import VersionCheckerAgent
 from dbagnets.agents.depth_checker import DepthCheckerAgent
 from dbagnets.agents.best_practices_checker import BestPracticesCheckerAgent
+from dbagnets.agents.completeness_checker import CompletenessCheckerAgent
 
 logger = logging.getLogger("dbagnets")
 
@@ -43,6 +44,7 @@ class AgentOrchestrator:
             VersionCheckerAgent(model),
             DepthCheckerAgent(model),
             BestPracticesCheckerAgent(model),
+            CompletenessCheckerAgent(model),
         ]
 
         self._graph = self._build_graph()
