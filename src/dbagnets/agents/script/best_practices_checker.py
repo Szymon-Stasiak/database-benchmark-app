@@ -52,12 +52,19 @@ class BestPracticesCheckerAgent(BaseAgent):
    - ENUM types for fixed-set columns
    - UUID type for unique identifiers
 
-6. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+6. PRODUCTION SCALE (FAIL if missing for high-volume entities):
+   - Table partitioning for entities with high data_size_hints (>100K rows)
+   - Covering indexes (INCLUDE) for the most common query patterns
+   - Appropriate index types: B-tree for equality/range, GIN for arrays/JSONB/full-text
+   - FILLFACTOR tuning on tables with frequent updates
+
+7. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 2+ are present, PASS. If none are present,
+   include them as suggestions in feedback but still PASS:
    - GENERATED/computed columns for derived values (e.g. full_name from first+last)
-   - Views for common read patterns joining related tables
+   - Materialized views or views for common multi-table read patterns
    - Triggers for automatic audit fields (created_at, updated_at)
    - Sequences for controlled ID generation
-   - Table partitioning for large tables (if data_size_hints suggest high volume)
    - Domain types for reusable type+constraint bundles""",
 
         DatabaseType.GRAPH: """Check:
@@ -74,8 +81,6 @@ class BestPracticesCheckerAgent(BaseAgent):
      is the source of truth and cannot be changed. This is non-negotiable.
    - Properties are on the correct entity (node vs relationship)
    - Rich relationship properties where applicable (role, weight, timestamp on edges)
-   - Additional traversal relationships beyond the LogicalSchema are welcome
-     and encouraged — graphs shine when they expose multiple navigation paths.
    - FOREIGN KEY vs PRIMARY KEY distinction (CRITICAL):
      A PRIMARY KEY is an entity's OWN identifier on its OWN node
      (e.g. director_id on Director, movie_id on Movie). PKs MUST be kept.
@@ -97,11 +102,20 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Temporal properties use proper types (datetime, date)
    - Point/spatial types for geographic data
 
-5. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+5. PRODUCTION SCALE (FAIL if missing for high-volume entities):
+   - Composite indexes on properties frequently queried together
+   - Range indexes on all properties used in WHERE clauses and ORDER BY
+   - Text indexes on all string properties used in CONTAINS / STARTS WITH queries
+   - Existence constraints (IS NOT NULL) on all required properties for data integrity at scale
+   - Node key constraints for composite uniqueness on high-volume node labels
+
+6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 2+ are present, PASS. If none are present,
+   include them as suggestions in feedback but still PASS:
    - Full-text indexes on text/string properties that users would search
-   - Reverse lookup relationships for common graph traversal patterns
-   - Shortcut relationships that skip intermediate nodes for frequent queries
-   - Relationship properties with constraints (existence, type)""",
+   - Relationship properties with constraints (existence, type)
+   - Rich relationship properties (role, weight, timestamp on edges)
+   - Point/spatial types for geographic data if applicable""",
 
         DatabaseType.VECTOR: """Check:
 1. NAMING:
@@ -123,12 +137,22 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Vector indexes configured with appropriate parameters (nlist, M, efConstruction)
    - Scalar indexes on ALL filter fields for efficient hybrid search
 
-5. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+5. PRODUCTION SCALE (FAIL if missing for high-volume collections):
+   - Index type matched to data volume: IVF_FLAT (<100K), HNSW (<10M, latency-critical),
+     IVF_SQ8/IVF_PQ (>10M, memory-constrained)
+   - Index parameters tuned for scale: HNSW (M=16-64, efConstruction=200-500),
+     IVF (nlist=sqrt(N))
+   - Partition keys for data distribution on collections with >1M rows
+   - Scalar indexes on ALL filter fields for efficient hybrid search
+
+6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 2+ are present, PASS. If none are present,
+   include them as suggestions in feedback but still PASS:
    - Multiple vector fields when entity has different embedding types
-   - Partition keys for data distribution on large collections
+   - Correct metric type per use case (COSINE for text, L2 for images, IP for recs)
    - Dynamic schema fields for variable metadata
    - Hybrid search configuration (vector + scalar filtering)
-   - Index parameter tuning based on expected data volume""",
+   - Consistency level configuration for read/write tradeoffs""",
 
         DatabaseType.DOCUMENT: """Check:
 1. NAMING:
@@ -161,10 +185,18 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Pattern validation on formatted strings (email, URL, etc.)
    - Min/max constraints on numeric fields where applicable
 
-5. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+5. PRODUCTION SCALE (FAIL if missing for high-volume collections):
+   - Compound indexes following ESR rule (Equality, Sort, Range) for query optimization
+   - Covered queries: include all projected fields in indexes where possible
+   - Partial/sparse indexes for optional fields to save space at scale
+   - Shard key design: high-cardinality fields for even data distribution
+   - Read concern / write concern configuration for consistency vs performance
+
+6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 3+ are present, PASS. If fewer are present,
+   include them as suggestions in feedback but still PASS:
    - Text indexes for full-text search on string/text fields
    - TTL indexes on timestamp fields for data with natural expiration
-   - Partial/sparse indexes for optional fields
    - Wildcard indexes on polymorphic or flexible sub-documents
    - Collation-aware indexes for locale-specific sorting
    - Aggregation pipeline views for common read patterns
@@ -193,15 +225,23 @@ class BestPracticesCheckerAgent(BaseAgent):
    - No overly large keys or values
    - Appropriate granularity (not too fine, not too coarse)
 
-5. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+5. PRODUCTION SCALE (FAIL if missing for high-volume keyspaces):
+   - Memory-efficient encoding: hashes with ziplist for small objects
+   - Key expiration strategies: volatile-lru, allkeys-lfu depending on use case
+   - Pipeline-friendly key design: namespace:entity_id pattern for batch operations
+   - Secondary indexes via sorted sets for non-primary lookups at scale
+   - Key partitioning strategy for cluster-mode distribution
+
+6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 3+ are present, PASS. If fewer are present,
+   include them as suggestions in feedback but still PASS:
    - Sorted sets for ranked/scored data (leaderboards, ratings, time-ordered feeds)
-   - Streams for event/activity log entities instead of plain lists
+   - Streams with consumer groups for event/activity log entities
    - HyperLogLog for approximate cardinality counting (unique visitors, etc.)
    - Sets for unique membership collections (tags, M:N members)
    - Geospatial commands (GEOADD/GEOSEARCH) for location-based entities
    - Bitmaps for boolean flag matrices (feature flags, permissions)
    - TTL (EXPIRE) on session-like or ephemeral data
-   - Secondary indexes via sorted sets for non-primary lookups
    - Lua scripts for atomic multi-key operations
    - Pub/Sub channels for entity change notifications""",
 
@@ -226,21 +266,29 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Continuous aggregates for common query patterns
    - Appropriate downsampling strategy
 
-5. NATIVE FEATURE UTILIZATION (FAIL if the script ignores these):
+5. PRODUCTION SCALE (FAIL if missing for high-volume hypertables):
+   - Chunk interval tuned to data volume: 1 day for high-frequency, 1 week for low-frequency
+   - Compression policies with segmentby (tags) and orderby (time) for 90%+ compression
+   - Retention policies to automatically drop data older than business requirements
+   - Composite indexes on (time, tag columns) for the primary query pattern
+   - Space-partitioning with add_dimension for multi-tenant or multi-device data
+
+6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
+   These are nice-to-have features. If 2+ are present, PASS. If fewer are present,
+   include them as suggestions in feedback but still PASS:
    - Continuous aggregates for pre-computed rollups (hourly, daily summaries)
-   - Compression policies on hypertables for storage efficiency
-   - Retention policies with automatic data expiration
+   - Hierarchical continuous aggregates (minute → hour → day)
    - Real-time aggregation functions (time_bucket, first, last, interpolate)
    - Data tiering policies for moving old data to cheaper storage
-   - Composite indexes on (time, tag) for time-range + filter queries
    - Downsampling continuous aggregates for long-term trend storage""",
     }
 
     def validate(self, config: DatabaseConfig, script: str) -> ValidationResult:
         practices = self._PRACTICES[config.db_type]
 
-        system_prompt = f"""You are a {config.db_name} ({config.db_type.value} database) best practices expert.
-Your task is to evaluate the script quality against best practices.
+        system_prompt = f"""You are a senior {config.db_name} ({config.db_type.value} database) production architect.
+Your task is to evaluate whether this script is PRODUCTION-READY for a database
+that will hold millions of rows and serve as a benchmark to showcase {config.db_name}'s strengths.
 
 {practices}
 
@@ -249,6 +297,15 @@ IMPORTANT CONSTRAINTS:
   Do NOT suggest merging, combining, or removing entities — even if they
   share similar attributes. The LogicalSchema is the source of truth.
 - This is a schema-only script. Do NOT penalize for missing sample data.
+- FAIL only for sections 1-5 (naming, modeling, indexes, constraints/schema,
+  data types/design, production scale). These are hard requirements.
+- Section 6 (NATIVE FEATURE UTILIZATION) is advisory — NEVER FAIL for it.
+  If native features are missing, include suggestions in feedback but PASS.
+- Do NOT demand features that go beyond the LogicalSchema (no extra entities,
+  no shortcut relationships, no reverse lookups beyond what the schema defines).
+- CONVERGENCE RULE: If the script has proper indexes, constraints, and correct
+  modeling for sections 1-5, it PASSES. Do not keep raising the bar with new
+  demands each iteration — this causes infinite retry loops.
 
 Use the validate tool to return your assessment."""
 

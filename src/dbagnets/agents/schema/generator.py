@@ -136,7 +136,7 @@ class SchemaGeneratorAgent(BaseAgent):
             f"Entity_{chr(65 + i)}" for i in range(depth + 1)
         )
 
-        return f"""You are a database architecture expert.
+        return f"""You are a database architecture expert designing schemas for PRODUCTION systems.
 Your task is to design a technology-independent logical schema for the given idea.
 
 STEP-BY-STEP APPROACH:
@@ -168,6 +168,18 @@ RULES:
 5. Use snake_case naming in English.
 6. For M:N relationships, do NOT create junction entities.
 7. The schema must be rich but not overly complex.
+
+PRODUCTION-SCALE DESIGN:
+- data_size_hints MUST reflect realistic production volumes (thousands to millions).
+  These drive partitioning, indexing, and storage decisions in script generation.
+- Each entity should have 5-15 attributes to make benchmarks meaningful.
+- Include a mix of data types per entity: strings, numerics, timestamps, booleans, enums.
+- Include at least one entity with an array/list-like attribute (tags, categories).
+- Include at least one text/description field suitable for full-text search.
+- Ensure at least one timestamp attribute exists for time-based query benchmarks.
+- Avoid extreme attribute counts (>30 per entity) — some databases have field limits.
+- Avoid designs that would create supernodes (single nodes with millions of edges)
+  in graph databases — spread connectivity across entities.
 
 Use the generate_schema tool to return the schema."""
 

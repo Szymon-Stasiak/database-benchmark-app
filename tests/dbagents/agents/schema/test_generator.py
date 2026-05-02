@@ -118,7 +118,7 @@ class TestGenerate:
                 ),
             ]
             result = agent.generate(
-                "movie management database", 4, feedback, '{"entities": []}'
+                "movie management database", 4, feedback=feedback, previous_schema_json='{"entities": []}'
             )
 
         assert len(result.entities) == 2

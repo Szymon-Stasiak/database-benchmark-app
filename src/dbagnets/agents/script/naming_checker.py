@@ -28,11 +28,21 @@ class NamingConsistencyCheckerAgent(BaseAgent):
         DatabaseType.GRAPH: """DATABASE-SPECIFIC NAMING RULES (graph):
 - Each entity name in the LogicalSchema MUST appear as a node label.
   PascalCase conversion is ALLOWED (e.g. "movie_review" -> "MovieReview").
-- Each non-FK attribute MUST appear as a property name on its node (exact match, snake_case).
-  FK attributes (another entity's ID stored on this node) are EXCLUDED — their absence is correct.
+- GRAPH DATABASES ARE SCHEMA-LESS: properties are NOT declared in DDL.
+  Properties only appear in the script when they are referenced by a constraint
+  or an index. If a property has no constraint/index, it will NOT appear in the
+  script at all — this is NORMAL and CORRECT. Do NOT flag missing properties
+  that have no constraint or index.
+- To verify attribute coverage, check ONLY:
+  (a) Primary key attributes MUST appear in a uniqueness constraint on their node label.
+  (b) Attributes marked as indexed or unique MUST appear in an index or constraint.
+  (c) All other attributes (non-PK, non-indexed, non-unique) are NOT expected to
+      appear in the DDL. Their absence is correct — they exist at data insertion time.
+- FK attributes (another entity's ID stored on this node) MUST be ABSENT —
+  the graph relationship encodes the link.
 - Relationship type names MAY differ from LogicalSchema relationship names
   (UPPER_SNAKE_CASE is standard for graph DBs).
-- Extra properties beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
+- Extra properties or constraints beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
 
         DatabaseType.DOCUMENT: """DATABASE-SPECIFIC NAMING RULES (document):
 - Each entity name MUST appear either as a collection name OR as an embedded

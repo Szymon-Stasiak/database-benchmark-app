@@ -42,7 +42,8 @@ class ScriptGeneratorAgent(BaseAgent):
             logger.info("[ScriptGenerator:%s] Generating initial script", target.db_name)
 
         result = self._call_llm_structured(
-            system_prompt, user_prompt, GeneratedScript, "generate_script"
+            system_prompt, user_prompt, GeneratedScript, "generate_script",
+            max_tokens=16384,
         )
         script = result.script
         logger.info("[ScriptGenerator:%s] Generated script: %d chars, %d lines", target.db_name, len(script), script.count("\n") + 1)
@@ -54,18 +55,22 @@ class ScriptGeneratorAgent(BaseAgent):
    - Indexes on all attributes marked as indexed in the schema
    - Constraints (NOT NULL, UNIQUE, CHECK) as defined in the schema
    - Junction tables for M:N relationships
+   PRODUCTION-SCALE DESIGN:
+   - Table partitioning (RANGE by date, LIST by category) for entities with high data_size_hints
+   - Covering indexes (INCLUDE columns) for frequently queried combinations
+   - Partial indexes on commonly filtered subsets (e.g. WHERE status = 'active')
+   - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups
+   - B-tree for equality/range, GIN for arrays/JSONB/full-text, GiST for spatial/ranges
    MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
    - CHECK constraints with meaningful domain validation (ranges, patterns, enums)
-   - Partial indexes on commonly filtered subsets
-   - Functional/expression indexes where queries benefit
    - ENUM types for fixed-set columns instead of plain VARCHAR
    - GENERATED/computed columns for derived values
-   - Views for common read patterns (e.g. entity with joined relations)
+   - Materialized views or regular views for common multi-table read patterns
    - Triggers for audit timestamps (created_at, updated_at auto-population)
-   - Table partitioning by range/list for large entities (if data_size_hints suggest it)
    - Sequences for controlled ID generation
    - Domain types for reusable type+constraint combinations
-   - EXCLUSION constraints where applicable (e.g. non-overlapping date ranges)""",
+   - EXCLUSION constraints where applicable (e.g. non-overlapping date ranges)
+   - FILLFACTOR tuning on tables with frequent updates""",
 
         DatabaseType.GRAPH: """- EVERY entity in the LogicalSchema MUST be a separate node label — do NOT
      collapse entities into relationship properties, even for leaf entities.
@@ -84,30 +89,35 @@ class ScriptGeneratorAgent(BaseAgent):
    - Indexes on frequently queried properties (marked as indexed)
    - Uniqueness constraints for unique/primary key attributes
    - Use PascalCase for node labels and UPPER_SNAKE_CASE for relationship types
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
-   - Full-text indexes on text/string properties that users would search
-   - Existence constraints (IS NOT NULL) on all required properties
-   - Node key constraints for composite uniqueness
+   PRODUCTION-SCALE DESIGN:
+   - Range indexes on properties used in WHERE clauses and ORDER BY
+   - Text indexes on properties used in full-text search (CONTAINS, STARTS WITH)
+   - Composite indexes on properties frequently queried together
+   - Existence constraints (IS NOT NULL) on all required properties for data integrity at scale
+   MAXIMIZE NATIVE FEATURES — show what graphs do better than relational:
    - Rich relationship properties (e.g. role, weight, timestamp on edges)
      with existence or type constraints on those properties
    - Point/spatial types for geographic data
    - Additional traversal relationships beyond the LogicalSchema to expose
      useful graph navigation paths (e.g. shortcut relationships, reverse lookups)
-   - Range indexes vs text indexes — choose the right index type per property
-   - Composite indexes on frequently co-queried properties""",
+   - Node key constraints for composite uniqueness
+   - Full-text indexes on text/string properties that users would search""",
 
         DatabaseType.VECTOR: """- Collection definitions with scalar and vector fields
    - Vector index configuration (index type, metric type, dimensions)
    - Primary key / ID field for each collection
    - Reference fields implementing relationships between collections
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
-   - Appropriate index type per scale: IVF_FLAT for small, HNSW for latency,
-     IVF_SQ8/IVF_PQ for large-scale — choose wisely based on data_size_hints
-   - Partition keys for data distribution on large collections
+   PRODUCTION-SCALE DESIGN:
+   - Choose index type based on data_size_hints: IVF_FLAT (<100K rows), HNSW (<10M, latency-critical),
+     IVF_SQ8/IVF_PQ (>10M rows, memory-constrained) — match the scale
+   - Tune index params: HNSW (M=16-64, efConstruction=200-500), IVF (nlist=sqrt(N))
+   - Partition keys for data distribution on collections with >1M rows
+   - Scalar indexes on ALL filter fields — hybrid search (vector + filter) is the primary use case
+   MAXIMIZE NATIVE FEATURES — show what vector DBs do better:
    - Multiple vector fields per collection when entity has different embeddings
-   - Scalar indexes on all filter fields for efficient hybrid search
+   - Correct metric type per use case (COSINE for text, L2 for images, IP for recommendations)
    - Dynamic schema fields where additional metadata varies per record
-   - Correct metric type per use case (COSINE for text, L2 for images, IP for recommendations)""",
+   - Consistency level configuration for read/write tradeoffs""",
 
         DatabaseType.DOCUMENT: """- Collection definitions for top-level entities
    - JSON Schema validation rules matching entity attributes
@@ -115,32 +125,41 @@ class ScriptGeneratorAgent(BaseAgent):
    - Relationships via embedded sub-documents (preferred for data accessed together)
      or reference fields (for independently queried entities)
    - Denormalization is expected — embed related data for read performance
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
+   PRODUCTION-SCALE DESIGN:
+   - Compound indexes following ESR rule (Equality, Sort, Range) for query optimization
+   - Covered queries: include all projected fields in indexes where possible
+   - Partial/sparse indexes for optional fields to save space at scale
+   - Shard key design: choose high-cardinality fields for even data distribution
+   - Read concern/write concern configuration for consistency vs performance tradeoffs
+   MAXIMIZE NATIVE FEATURES — show what document DBs do better:
+   - Flexible schema with JSON Schema validation (enum, pattern, min/max, minLength, maxLength)
    - Multi-key indexes on array fields (e.g. tags, categories)
    - Text indexes for full-text search on string/text fields
    - TTL indexes on timestamp fields for data with natural expiration
-   - Compound indexes optimized for common query patterns (ESR rule)
-   - Partial/sparse indexes for fields that exist only on some documents
    - Wildcard indexes on polymorphic or flexible sub-documents
    - Collation-aware indexes for locale-specific string sorting
-   - Schema validation with comprehensive JSON Schema (enum, pattern, min/max)
    - Aggregation pipeline views for common read patterns
+   - Change streams configuration for real-time data processing
    - Capped collections for fixed-size log-like entities""",
 
         DatabaseType.KEY_VALUE: """- Key namespace/keyspace definitions for each entity
    - Data structure definitions (hashes, lists, sets, sorted sets)
    - Key reference patterns implementing relationships
    - Secondary index definitions for indexed attributes
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
+   PRODUCTION-SCALE DESIGN:
+   - Memory-efficient encoding: use hashes for objects (ziplist encoding for small hashes)
+   - Key expiration strategies: volatile-lru, allkeys-lfu depending on use case
+   - Pipeline-friendly key design: namespace:entity_id pattern for batch operations
+   - Secondary indexes via sorted sets for non-primary lookups at scale
+   MAXIMIZE NATIVE FEATURES — show what key-value stores do better:
    - Hashes for entity storage (HSET/HGET for field-level access)
    - Sorted sets for ranked data, leaderboards, time-ordered indexes
    - Sets for unique collections, tags, M:N relationship members
-   - Streams for event/activity log entities
-   - HyperLogLog for approximate cardinality counting
+   - Streams with consumer groups for event/activity log entities
+   - HyperLogLog for approximate cardinality counting (unique visitors, etc.)
    - Geospatial commands (GEOADD/GEOSEARCH) for location-based entities
    - TTL policies (EXPIRE) on ephemeral/session-like data
-   - Bitmaps for boolean flag matrices
-   - Secondary indexes via sorted sets for non-primary lookups
+   - Bitmaps for boolean flag matrices (feature flags, permissions)
    - Lua scripts for atomic multi-key operations
    - Pub/Sub channels for real-time entity change notifications""",
 
@@ -148,23 +167,36 @@ class ScriptGeneratorAgent(BaseAgent):
    - Time-based partitioning configuration
    - Relationship implementation via foreign keys or tag references
    - Indexes on indexed attributes
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
-   - Continuous aggregates for pre-computed rollups (hourly, daily summaries)
-   - Compression policies on hypertables for storage efficiency
-   - Retention policies with automatic data expiration
-   - Appropriate chunk interval based on data_size_hints and query patterns
+   PRODUCTION-SCALE DESIGN:
+   - Chunk interval tuned to data_size_hints: 1 day for high-frequency, 1 week for low-frequency
+   - Compression policies with segmentby (tags) and orderby (time) for 90%+ compression
+   - Retention policies to automatically drop data older than business requirements
+   - Composite indexes on (time, tag columns) for the primary query pattern: time-range + filter
+   MAXIMIZE NATIVE FEATURES — show what time-series DBs do better:
+   - Continuous aggregates for pre-computed rollups (hourly, daily, weekly summaries)
    - Real-time aggregation functions (time_bucket, first, last, interpolate)
+   - Hierarchical continuous aggregates (minute → hour → day)
    - Data tiering policies (move old data to cheaper storage)
-   - Composite indexes on (time, tag) for common time-range + filter queries
-   - Downsampling continuous aggregates for long-term trend storage""",
+   - Downsampling continuous aggregates for long-term trend storage
+   - Space-partitioning with add_dimension for multi-tenant or multi-device data""",
     }
 
     def _build_system_prompt(self, target: TargetConfig, schema: LogicalSchema, depth: int) -> str:
         structure_rules = self._STRUCTURE_RULES[target.db_type]
         type_hints = format_type_mapping_prompt(target.db_name)
 
-        return f"""You are a database expert specializing in {target.db_name} ({target.db_type.value} database).
-Your task is to generate a complete initialization script that FAITHFULLY implements the given LogicalSchema.
+        return f"""You are a senior database architect specializing in {target.db_name} ({target.db_type.value} database).
+
+CONTEXT: This script is for a PRODUCTION-GRADE database that will hold millions of rows
+and serve as part of a cross-database benchmark. The goal is to showcase {target.db_name}'s
+UNIQUE STRENGTHS compared to other database types. Design the schema as if a team of
+expert DBAs reviewed it for performance at scale.
+
+Use data_size_hints from the LogicalSchema to drive decisions about partitioning,
+index strategies, and storage optimization. Treat them as expected production volumes.
+
+Your task is to generate a complete initialization script that FAITHFULLY implements
+the given LogicalSchema while maximizing {target.db_name}'s native capabilities.
 
 RULES:
 1. Generate ONLY a clean database script — no explanatory comments, no markdown.
@@ -187,6 +219,11 @@ RULES:
    Do NOT rename, abbreviate, or translate any name from the schema.
    The script will be used for automated benchmarking where queries are generated
    programmatically from the schema — any name mismatch will break the pipeline.
+13. PRODUCTION SCALE DESIGN:
+   - Choose index strategies optimized for large datasets (millions of rows).
+   - Apply partitioning/sharding where data_size_hints suggest high volume.
+   - Optimize for both write throughput AND read query patterns.
+   - Use {target.db_name}'s most advanced features to differentiate it from other DB types.
 
 {type_hints}
 
