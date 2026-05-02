@@ -10,6 +10,7 @@ from dbagnets.agents.script.best_practices_checker import BestPracticesCheckerAg
 from dbagnets.log_context import set_log_context
 from dbagnets.agents.script.compliance_checker import SchemaComplianceCheckerAgent
 from dbagnets.agents.script.generator import ScriptGeneratorAgent
+from dbagnets.agents.script.naming_checker import NamingConsistencyCheckerAgent
 from dbagnets.agents.script.syntax_checker import SyntaxCheckerAgent
 from dbagnets.agents.script.version_checker import VersionCheckerAgent
 from dbagnets.models import (
@@ -39,11 +40,14 @@ class ScriptOrchestrator:
         self.parallel_validation = parallel_validation
 
         self.generator = ScriptGeneratorAgent(model)
-        self.compliance_checker = SchemaComplianceCheckerAgent(model)
         self.standard_validators = [
             SyntaxCheckerAgent(model),
             VersionCheckerAgent(model),
             BestPracticesCheckerAgent(model),
+        ]
+        self.schema_validators = [
+            SchemaComplianceCheckerAgent(model),
+            NamingConsistencyCheckerAgent(model),
         ]
 
         self._graph = self._build_graph()
@@ -244,9 +248,8 @@ class ScriptOrchestrator:
         script: str,
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        validators = self.standard_validators
 
-        for validator in validators:
+        for validator in self.standard_validators:
             logger.info("  [%s] Checking...", validator.name)
             start = time.time()
             result = validator.validate(config, script)
@@ -255,13 +258,14 @@ class ScriptOrchestrator:
             logger.info("  [%s] [%s] (%.1fs)", validator.name, icon, elapsed)
             results.append(result)
 
-        logger.info("  [%s] Checking...", self.compliance_checker.name)
-        start = time.time()
-        result = self.compliance_checker.validate(target, schema, script)
-        elapsed = time.time() - start
-        icon = "PASS" if result.passed else "FAIL"
-        logger.info("  [%s] [%s] (%.1fs)", self.compliance_checker.name, icon, elapsed)
-        results.append(result)
+        for validator in self.schema_validators:
+            logger.info("  [%s] Checking...", validator.name)
+            start = time.time()
+            result = validator.validate(target, schema, script)
+            elapsed = time.time() - start
+            icon = "PASS" if result.passed else "FAIL"
+            logger.info("  [%s] [%s] (%.1fs)", validator.name, icon, elapsed)
+            results.append(result)
 
         return results
 
@@ -273,21 +277,20 @@ class ScriptOrchestrator:
         script: str,
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        validators = self.standard_validators
+        total_workers = len(self.standard_validators) + len(self.schema_validators)
 
         with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(validators) + 1
+            max_workers=total_workers
         ) as executor:
             future_to_name: dict[concurrent.futures.Future, str] = {}
 
-            for validator in validators:
+            for validator in self.standard_validators:
                 future = executor.submit(validator.validate, config, script)
                 future_to_name[future] = validator.name
 
-            compliance_future = executor.submit(
-                self.compliance_checker.validate, target, schema, script
-            )
-            future_to_name[compliance_future] = self.compliance_checker.name
+            for validator in self.schema_validators:
+                future = executor.submit(validator.validate, target, schema, script)
+                future_to_name[future] = validator.name
 
             for future in concurrent.futures.as_completed(future_to_name):
                 name = future_to_name[future]

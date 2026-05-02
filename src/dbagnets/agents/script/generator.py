@@ -181,6 +181,12 @@ RULES:
 9. EVERY constraint (primary key, unique, not null, indexed) must be preserved.
 10. Use snake_case naming in English.
 11. Do NOT include any sample data. Generate schema/structure definitions only.
+12. NAMING CONSISTENCY (CRITICAL):
+   Entity names in the script MUST match the LogicalSchema EXACTLY (same spelling, same case).
+   Attribute names in the script MUST match the LogicalSchema EXACTLY.
+   Do NOT rename, abbreviate, or translate any name from the schema.
+   The script will be used for automated benchmarking where queries are generated
+   programmatically from the schema — any name mismatch will break the pipeline.
 
 {type_hints}
 

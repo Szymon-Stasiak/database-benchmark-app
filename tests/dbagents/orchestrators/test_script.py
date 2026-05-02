@@ -50,14 +50,21 @@ _SAMPLE_SCHEMA = LogicalSchema(
 )
 
 
+def _mock_all_validators(orch: ScriptOrchestrator, result_fn=make_pass_result):
+    for v in orch.standard_validators:
+        v.validate = MagicMock(return_value=result_fn(v.name))
+    for v in orch.schema_validators:
+        v.validate = MagicMock(return_value=result_fn(v.name))
+
+
 class TestScriptOrchestrator:
     def test_init_uses_defaults(self):
         orch = ScriptOrchestrator()
         assert orch.model == "vertex_ai/claude-sonnet-4-6"
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
-        assert orch.compliance_checker is not None
         assert len(orch.standard_validators) == 3
+        assert len(orch.schema_validators) == 2
 
     def test_init_accepts_custom_values(self):
         orch = ScriptOrchestrator(
@@ -81,12 +88,7 @@ class TestScriptRun:
 
     def test_returns_success_when_all_pass(self):
         orch = self._setup_orchestrator()
-
-        for v in orch.standard_validators:
-            v.validate = MagicMock(return_value=make_pass_result(v.name))
-        orch.compliance_checker.validate = MagicMock(
-            return_value=make_pass_result(orch.compliance_checker.name)
-        )
+        _mock_all_validators(orch)
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
@@ -103,12 +105,10 @@ class TestScriptRun:
             v.validate = MagicMock(
                 side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
             )
-        orch.compliance_checker.validate = MagicMock(
-            side_effect=[
-                make_fail_result(orch.compliance_checker.name),
-                make_pass_result(orch.compliance_checker.name),
-            ]
-        )
+        for v in orch.schema_validators:
+            v.validate = MagicMock(
+                side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
+            )
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
@@ -121,9 +121,8 @@ class TestScriptRun:
 
         for v in orch.standard_validators:
             v.validate = MagicMock(return_value=make_fail_result(v.name))
-        orch.compliance_checker.validate = MagicMock(
-            return_value=make_fail_result(orch.compliance_checker.name)
-        )
+        for v in orch.schema_validators:
+            v.validate = MagicMock(return_value=make_fail_result(v.name))
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
@@ -146,19 +145,15 @@ class TestScriptRunSequential:
         orch = ScriptOrchestrator(max_iterations=1, parallel_validation=False)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = "SELECT 1;"
-
-        for v in orch.standard_validators:
-            v.validate = MagicMock(return_value=make_pass_result(v.name))
-        orch.compliance_checker.validate = MagicMock(
-            return_value=make_pass_result(orch.compliance_checker.name)
-        )
+        _mock_all_validators(orch)
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
         assert state.success is True
         for v in orch.standard_validators:
             v.validate.assert_called_once()
-        orch.compliance_checker.validate.assert_called_once()
+        for v in orch.schema_validators:
+            v.validate.assert_called_once()
 
 
 class TestScriptRunParallel:
@@ -172,9 +167,8 @@ class TestScriptRunParallel:
         )
         for v in orch.standard_validators[1:]:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
-        orch.compliance_checker.validate = MagicMock(
-            return_value=make_pass_result(orch.compliance_checker.name)
-        )
+        for v in orch.schema_validators:
+            v.validate = MagicMock(return_value=make_pass_result(v.name))
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 

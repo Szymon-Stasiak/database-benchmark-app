@@ -8,6 +8,7 @@ from dbagnets.agents.schema import (
 )
 from dbagnets.agents.script import (
     BestPracticesCheckerAgent,
+    NamingConsistencyCheckerAgent,
     SchemaComplianceCheckerAgent,
     ScriptGeneratorAgent,
     SyntaxCheckerAgent,
@@ -17,6 +18,7 @@ from dbagnets.agents.script import (
 __all__ = [
     "BaseAgent",
     "BestPracticesCheckerAgent",
+    "NamingConsistencyCheckerAgent",
     "SchemaComplianceCheckerAgent",
     "SchemaCompletenessCheckerAgent",
     "SchemaDepthChecker",
