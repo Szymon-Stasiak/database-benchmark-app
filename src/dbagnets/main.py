@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from dbagnets.pipeline_orchestrator import PipelineOrchestrator
+from dbagnets.orchestrators import PipelineOrchestrator
 from dbagnets.log_context import LogContextFilter
 from dbagnets.models import PipelineConfig, DatabaseType, TargetConfig
 

@@ -15,7 +15,7 @@ from dbagnets.models.api import (
     resolve_container,
 )
 from dbagnets.models.config import PipelineConfig, TargetConfig
-from dbagnets.pipeline_orchestrator import PipelineOrchestrator
+from dbagnets.orchestrators import PipelineOrchestrator
 
 load_dotenv()
 

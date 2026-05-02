@@ -8,8 +8,8 @@ from dbagnets.models import PipelineResult, ScriptLoopState
 from dbagnets.models.config import PipelineConfig, TargetConfig
 from dbagnets.models.schema import LogicalSchema
 from dbagnets.models.state import SchemaLoopState
-from dbagnets.schema_orchestrator import SchemaOrchestrator
-from dbagnets.script_orchestrator import ScriptOrchestrator
+from dbagnets.orchestrators.schema import SchemaOrchestrator
+from dbagnets.orchestrators.script import ScriptOrchestrator
 
 logger = logging.getLogger("dbagnets")
 

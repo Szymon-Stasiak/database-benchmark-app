@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from dbagnets.models import ValidationResult, ValidationStatus
 from dbagnets.models.enums import AbstractDataType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
-from dbagnets.schema_orchestrator import SchemaOrchestrator
+from dbagnets.orchestrators import SchemaOrchestrator
 
 
 def make_pass_result(agent_name: str) -> ValidationResult:

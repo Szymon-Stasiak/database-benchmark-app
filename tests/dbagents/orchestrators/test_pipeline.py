@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from dbagnets.pipeline_orchestrator import PipelineOrchestrator
+from dbagnets.orchestrators import PipelineOrchestrator
 from dbagnets.models import PipelineConfig, DatabaseType, TargetConfig
 from dbagnets.models.state import SchemaLoopState, ScriptLoopState
 
@@ -78,8 +78,8 @@ class TestPipelineOrchestrator:
 
 
 class TestPipelineRun:
-    @patch("dbagnets.pipeline_orchestrator.ScriptOrchestrator")
-    @patch("dbagnets.pipeline_orchestrator.SchemaOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.ScriptOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.SchemaOrchestrator")
     def test_returns_success_when_schema_and_all_scripts_succeed(
         self, mock_schema_cls, mock_script_cls
     ):
@@ -99,8 +99,8 @@ class TestPipelineRun:
         assert result.schema_result.success is True
         assert len(result.script_results) == 2
 
-    @patch("dbagnets.pipeline_orchestrator.ScriptOrchestrator")
-    @patch("dbagnets.pipeline_orchestrator.SchemaOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.ScriptOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.SchemaOrchestrator")
     def test_returns_failure_when_schema_fails(
         self, mock_schema_cls, mock_script_cls
     ):
@@ -114,8 +114,8 @@ class TestPipelineRun:
         assert len(result.script_results) == 0
         mock_script_cls.return_value.run.assert_not_called()
 
-    @patch("dbagnets.pipeline_orchestrator.ScriptOrchestrator")
-    @patch("dbagnets.pipeline_orchestrator.SchemaOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.ScriptOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.SchemaOrchestrator")
     def test_returns_failure_when_one_script_fails(
         self, mock_schema_cls, mock_script_cls
     ):
@@ -135,8 +135,8 @@ class TestPipelineRun:
         assert result.schema_result.success is True
         assert len(result.script_results) == 2
 
-    @patch("dbagnets.pipeline_orchestrator.ScriptOrchestrator")
-    @patch("dbagnets.pipeline_orchestrator.SchemaOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.ScriptOrchestrator")
+    @patch("dbagnets.orchestrators.pipeline.SchemaOrchestrator")
     def test_handles_script_exception(
         self, mock_schema_cls, mock_script_cls
     ):
