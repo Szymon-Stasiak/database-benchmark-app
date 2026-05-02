@@ -47,6 +47,15 @@ class Relationship(BaseModel):
     attributes: list[Attribute] = []
 
 
+class DocumentEmbeddingMapping(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entity_name: str
+    is_embedded: bool
+    parent_entity: str | None = None
+    field_name: str | None = None
+
+
 class DataSizeHint(BaseModel):
     model_config = ConfigDict(frozen=True)
 

@@ -12,16 +12,52 @@ from dbagnets.models import (
     ValidatorResponse,
 )
 from dbagnets.models.llm_schemas import (
+    EmbeddingMappingResponse,
     SchemaAttributeResponse,
     SchemaEntityResponse,
     SchemaRelationshipResponse,
 )
 
 
+class TestEmbeddingMappingResponse:
+    def test_stores_top_level_entity(self):
+        m = EmbeddingMappingResponse(entity_name="movies", is_embedded=False)
+        assert m.entity_name == "movies"
+        assert m.is_embedded is False
+        assert m.parent_entity is None
+        assert m.field_name is None
+
+    def test_stores_embedded_entity(self):
+        m = EmbeddingMappingResponse(
+            entity_name="reviews", is_embedded=True,
+            parent_entity="movies", field_name="reviews",
+        )
+        assert m.entity_name == "reviews"
+        assert m.is_embedded is True
+        assert m.parent_entity == "movies"
+        assert m.field_name == "reviews"
+
+
 class TestGeneratedScript:
     def test_stores_script_field(self):
         gs = GeneratedScript(script="CREATE TABLE t;")
         assert gs.script == "CREATE TABLE t;"
+
+    def test_embedding_mappings_defaults_to_empty(self):
+        gs = GeneratedScript(script="CREATE TABLE t;")
+        assert gs.embedding_mappings == []
+
+    def test_stores_embedding_mappings(self):
+        mappings = [
+            EmbeddingMappingResponse(entity_name="movies", is_embedded=False),
+            EmbeddingMappingResponse(
+                entity_name="reviews", is_embedded=True,
+                parent_entity="movies", field_name="reviews",
+            ),
+        ]
+        gs = GeneratedScript(script="db.createCollection('movies');", embedding_mappings=mappings)
+        assert len(gs.embedding_mappings) == 2
+        assert gs.embedding_mappings[1].is_embedded is True
 
     def test_rejects_missing_script(self):
         with pytest.raises(ValidationError):

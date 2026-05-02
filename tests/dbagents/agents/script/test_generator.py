@@ -79,18 +79,49 @@ class TestScriptGeneratorAgent:
 
 
 class TestGenerate:
-    def test_returns_script_from_structured_response(self, sample_target, sample_schema):
+    def test_returns_script_and_empty_mappings(self, sample_target, sample_schema):
         agent = ScriptGeneratorAgent("test-model")
         script_text = "CREATE TABLE movies (id INT PRIMARY KEY, title VARCHAR(255));"
         with patch(
             "dbagnets.agents.base.completion",
             return_value=make_tool_call_response({"script": script_text}),
         ):
-            result = agent.generate(
+            script, mappings = agent.generate(
                 sample_target, sample_schema, "movie management database", 2,
             )
 
-        assert result == script_text
+        assert script == script_text
+        assert mappings == []
+
+    def test_returns_embedding_mappings_when_present(self, sample_schema):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(
+            db_type=DatabaseType.DOCUMENT, db_name="mongodb", db_version="7.0",
+        )
+        response_data = {
+            "script": "db.createCollection('movies');",
+            "embedding_mappings": [
+                {"entity_name": "movies", "is_embedded": False},
+                {"entity_name": "actors", "is_embedded": True,
+                 "parent_entity": "movies", "field_name": "actors"},
+            ],
+        }
+        with patch(
+            "dbagnets.agents.base.completion",
+            return_value=make_tool_call_response(response_data),
+        ):
+            script, mappings = agent.generate(
+                target, sample_schema, "movie management database", 2,
+            )
+
+        assert script == "db.createCollection('movies');"
+        assert len(mappings) == 2
+        assert mappings[0].entity_name == "movies"
+        assert mappings[0].is_embedded is False
+        assert mappings[1].entity_name == "actors"
+        assert mappings[1].is_embedded is True
+        assert mappings[1].parent_entity == "movies"
+        assert mappings[1].field_name == "actors"
 
     def test_passes_feedback_and_previous_script_when_regenerating(
         self, sample_target, sample_schema,
@@ -113,7 +144,7 @@ class TestGenerate:
                     feedback="OK",
                 ),
             ]
-            result = agent.generate(
+            script, mappings = agent.generate(
                 sample_target,
                 sample_schema,
                 "movie management database",
@@ -122,7 +153,8 @@ class TestGenerate:
                 "CREATE TABLE movies (id INT, title VARCHAR(255));",
             )
 
-        assert result == corrected_script
+        assert script == corrected_script
+        assert mappings == []
 
 
 class TestBuildSystemPrompt:
@@ -140,6 +172,23 @@ class TestBuildSystemPrompt:
         prompt = agent._build_system_prompt(sample_target, sample_schema, 2)
 
         assert "relational" in prompt
+
+    def test_includes_embedding_mapping_for_document_db(self, sample_schema):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(
+            db_type=DatabaseType.DOCUMENT, db_name="mongodb", db_version="7.0",
+        )
+        prompt = agent._build_system_prompt(target, sample_schema, 2)
+
+        assert "embedding_mappings" in prompt
+        assert "is_embedded" in prompt
+        assert "parent_entity" in prompt
+
+    def test_excludes_embedding_mapping_for_non_document_db(self, sample_target, sample_schema):
+        agent = ScriptGeneratorAgent("test-model")
+        prompt = agent._build_system_prompt(sample_target, sample_schema, 2)
+
+        assert "embedding_mappings" not in prompt
 
 
 class TestBuildUserPrompt:

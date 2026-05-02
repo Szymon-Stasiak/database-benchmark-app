@@ -296,6 +296,9 @@ IMPORTANT CONSTRAINTS:
 - This script implements a LogicalSchema. The set of entities is FIXED.
   Do NOT suggest merging, combining, or removing entities — even if they
   share similar attributes. The LogicalSchema is the source of truth.
+- Entity and attribute NAMES come from the LogicalSchema and MUST NOT be renamed.
+  If entity names use PascalCase (e.g. "User", "Movie"), that is correct — do NOT
+  suggest renaming them to snake_case. The naming consistency is enforced separately.
 - This is a schema-only script. Do NOT penalize for missing sample data.
 - FAIL only for sections 1-5 (naming, modeling, indexes, constraints/schema,
   data types/design, production scale). These are hard requirements.

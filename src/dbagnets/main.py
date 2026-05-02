@@ -156,6 +156,15 @@ def _run_pipeline(args: argparse.Namespace) -> int:
                 script_path = output_dir / filename
                 script_path.write_text(script_result.final_script, encoding="utf-8")
                 logger.info("Script saved to: %s", script_path)
+
+            if script_result.embedding_mappings:
+                mappings_data = [m.model_dump() for m in script_result.embedding_mappings]
+                mappings_path = output_dir / f"{script_result.target.db_name}_{script_result.target.db_version}_mappings.json"
+                mappings_path.write_text(
+                    json.dumps(mappings_data, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                logger.info("Embedding mappings saved to: %s", mappings_path)
     else:
         if result.schema_result.final_schema_json:
             logger.info("")

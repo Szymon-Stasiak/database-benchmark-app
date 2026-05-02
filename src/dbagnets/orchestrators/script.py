@@ -82,7 +82,7 @@ class ScriptOrchestrator:
         logger.info("")
         logger.info("[ScriptGenerator:%s] Generating script...", target.db_name)
         gen_start = time.time()
-        script = self.generator.generate(
+        script, embedding_mappings = self.generator.generate(
             target, schema, state["idea"], state["depth"], feedback, previous_script
         )
         gen_elapsed = time.time() - gen_start
@@ -91,10 +91,13 @@ class ScriptOrchestrator:
             target.db_name, gen_elapsed, len(script), script.count("\n") + 1,
         )
 
-        return {
+        result: dict = {
             "script": script,
             "current_iteration": iteration,
         }
+        if embedding_mappings:
+            result["embedding_mappings"] = embedding_mappings
+        return result
 
     def _validate_node(self, state: ScriptGraphState) -> dict:
         target = state["target"]
@@ -203,6 +206,7 @@ class ScriptOrchestrator:
             "max_iterations": self.max_iterations,
             "current_iteration": 0,
             "script": None,
+            "embedding_mappings": [],
             "feedback": [],
             "history": [],
             "final_script": None,
@@ -220,6 +224,7 @@ class ScriptOrchestrator:
             current_iteration=final_state["current_iteration"],
             history=final_state["history"],
             final_script=final_state["final_script"],
+            embedding_mappings=final_state["embedding_mappings"],
             success=final_state["success"],
         )
 

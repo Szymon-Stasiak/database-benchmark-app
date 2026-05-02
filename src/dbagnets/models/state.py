@@ -6,6 +6,7 @@ from typing import Annotated, TypedDict
 from pydantic import BaseModel
 
 from dbagnets.models.config import TargetConfig
+from dbagnets.models.schema import DocumentEmbeddingMapping
 from dbagnets.models.validation import IterationResult, ValidationResult
 
 
@@ -29,6 +30,7 @@ class ScriptGraphState(TypedDict):
     max_iterations: int
     current_iteration: int
     script: str | None
+    embedding_mappings: list[DocumentEmbeddingMapping]
     feedback: list[ValidationResult]
     history: Annotated[list[IterationResult], operator.add]
     final_script: str | None
@@ -51,6 +53,7 @@ class ScriptLoopState(BaseModel):
     current_iteration: int = 0
     history: list[IterationResult] = []
     final_script: str | None = None
+    embedding_mappings: list[DocumentEmbeddingMapping] = []
     success: bool = False
 
 

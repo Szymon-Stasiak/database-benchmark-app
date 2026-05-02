@@ -8,6 +8,7 @@ import pytest
 
 from dbagnets.main import setup_logging, parse_args, parse_target, main, DB_TYPE_MAP, _EXTENSIONS
 from dbagnets.models import (
+    DocumentEmbeddingMapping,
     PipelineResult,
     DatabaseType,
     TargetConfig,
@@ -195,6 +196,51 @@ class TestMain:
         assert result == 0
         assert (tmp_path / "schema.json").exists()
         assert (tmp_path / "postgresql_16.sql").exists()
+
+    @patch("dbagnets.main.load_dotenv")
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_writes_embedding_mappings_to_dir(self, mock_orch_cls, mock_dotenv, tmp_path):
+        mongo_target = TargetConfig(
+            db_type=DatabaseType.DOCUMENT, db_name="mongodb", db_version="7.0"
+        )
+        mappings = [
+            DocumentEmbeddingMapping(entity_name="movies", is_embedded=False),
+            DocumentEmbeddingMapping(
+                entity_name="reviews", is_embedded=True,
+                parent_entity="movies", field_name="reviews",
+            ),
+        ]
+        result = PipelineResult(
+            schema_result=SchemaLoopState(
+                idea="test", depth=4, success=True,
+                final_schema_json='{"idea":"test","depth":4,"entities":[],"relationships":[]}',
+            ),
+            script_results=[
+                ScriptLoopState(
+                    target=mongo_target, success=True,
+                    final_script="db.createCollection('movies');",
+                    embedding_mappings=mappings,
+                ),
+            ],
+        )
+        mock_orch_cls.return_value.run.return_value = result
+
+        argv = [
+            "main.py", "--idea", "test", "--depth", "4",
+            "--target", "document:mongodb:7.0",
+            "--output-dir", str(tmp_path),
+        ]
+        with patch("sys.argv", argv):
+            exit_code = main()
+
+        assert exit_code == 0
+        mappings_path = tmp_path / "mongodb_7.0_mappings.json"
+        assert mappings_path.exists()
+        import json
+        data = json.loads(mappings_path.read_text())
+        assert len(data) == 2
+        assert data[1]["is_embedded"] is True
+        assert data[1]["parent_entity"] == "movies"
 
     @patch("dbagnets.main.load_dotenv")
     @patch("dbagnets.main.PipelineOrchestrator")

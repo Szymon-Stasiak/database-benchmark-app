@@ -9,8 +9,16 @@ from dbagnets.models.enums import (
 )
 
 
+class EmbeddingMappingResponse(BaseModel):
+    entity_name: str
+    is_embedded: bool
+    parent_entity: str | None = None
+    field_name: str | None = None
+
+
 class GeneratedScript(BaseModel):
     script: str
+    embedding_mappings: list[EmbeddingMappingResponse] = []
 
 
 class ValidatorResponse(BaseModel):

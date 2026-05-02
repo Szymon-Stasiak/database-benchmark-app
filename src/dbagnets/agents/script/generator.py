@@ -6,7 +6,7 @@ from dbagnets.agents.base import BaseAgent
 from dbagnets.models.config import TargetConfig
 from dbagnets.models.enums import DatabaseType
 from dbagnets.models.llm_schemas import GeneratedScript
-from dbagnets.models.schema import LogicalSchema
+from dbagnets.models.schema import DocumentEmbeddingMapping, LogicalSchema
 from dbagnets.models.type_mapping import format_type_mapping_prompt
 from dbagnets.models.validation import ValidationResult
 
@@ -31,7 +31,7 @@ class ScriptGeneratorAgent(BaseAgent):
         depth: int,
         feedback: list[ValidationResult] | None = None,
         previous_script: str | None = None,
-    ) -> str:
+    ) -> tuple[str, list[DocumentEmbeddingMapping]]:
         system_prompt = self._build_system_prompt(target, schema, depth)
         user_prompt = self._build_user_prompt(target, schema, idea, depth, feedback, previous_script)
 
@@ -47,7 +47,22 @@ class ScriptGeneratorAgent(BaseAgent):
         )
         script = result.script
         logger.info("[ScriptGenerator:%s] Generated script: %d chars, %d lines", target.db_name, len(script), script.count("\n") + 1)
-        return script
+
+        mappings: list[DocumentEmbeddingMapping] = []
+        if target.db_type == DatabaseType.DOCUMENT and result.embedding_mappings:
+            mappings = [
+                DocumentEmbeddingMapping(
+                    entity_name=m.entity_name,
+                    is_embedded=m.is_embedded,
+                    parent_entity=m.parent_entity,
+                    field_name=m.field_name,
+                )
+                for m in result.embedding_mappings
+            ]
+            embedded = [m.entity_name for m in mappings if m.is_embedded]
+            logger.info("[ScriptGenerator:%s] Embedding mappings: %d entities, %d embedded", target.db_name, len(mappings), len(embedded))
+
+        return script, mappings
 
     _STRUCTURE_RULES: dict[DatabaseType, str] = {
         DatabaseType.RELATIONAL: """- CREATE TABLE statements with columns and data types
@@ -185,6 +200,22 @@ class ScriptGeneratorAgent(BaseAgent):
         structure_rules = self._STRUCTURE_RULES[target.db_type]
         type_hints = format_type_mapping_prompt(target.db_name)
 
+        embedding_instruction = ""
+        if target.db_type == DatabaseType.DOCUMENT:
+            embedding_instruction = """
+EMBEDDING MAPPING (required for document databases):
+For each entity in the LogicalSchema, fill the "embedding_mappings" array:
+- entity_name: exact entity name from the LogicalSchema
+- is_embedded: true if stored as a sub-document within another collection, false if top-level collection
+- parent_entity: if embedded, the name of the parent entity (must be another LogicalSchema entity)
+- field_name: if embedded, the field/key name used in the parent document (snake_case)
+Every LogicalSchema entity MUST appear exactly once in this array.
+"""
+
+        tool_instruction = 'Use the generate_script tool to return the complete database script in the "script" field.'
+        if target.db_type == DatabaseType.DOCUMENT:
+            tool_instruction += '\nAlso fill the "embedding_mappings" array with the embedding mapping for each entity.'
+
         return f"""You are a senior database architect specializing in {target.db_name} ({target.db_type.value} database).
 
 CONTEXT: This script is for a PRODUCTION-GRADE database that will hold millions of rows
@@ -226,8 +257,8 @@ RULES:
    - Use {target.db_name}'s most advanced features to differentiate it from other DB types.
 
 {type_hints}
-
-Use the generate_script tool to return the complete database script in the "script" field."""
+{embedding_instruction}
+{tool_instruction}"""
 
     def _build_user_prompt(
         self,

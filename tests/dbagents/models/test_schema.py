@@ -7,6 +7,7 @@ from dbagnets.models import (
     Attribute,
     AttributeConstraint,
     DataSizeHint,
+    DocumentEmbeddingMapping,
     Entity,
     LogicalSchema,
     Relationship,
@@ -111,6 +112,30 @@ class TestRelationship:
         )
         with pytest.raises(ValidationError):
             rel.name = "changed"
+
+
+class TestDocumentEmbeddingMapping:
+    def test_stores_top_level_collection(self):
+        m = DocumentEmbeddingMapping(entity_name="movies", is_embedded=False)
+        assert m.entity_name == "movies"
+        assert m.is_embedded is False
+        assert m.parent_entity is None
+        assert m.field_name is None
+
+    def test_stores_embedded_entity(self):
+        m = DocumentEmbeddingMapping(
+            entity_name="reviews", is_embedded=True,
+            parent_entity="movies", field_name="reviews",
+        )
+        assert m.entity_name == "reviews"
+        assert m.is_embedded is True
+        assert m.parent_entity == "movies"
+        assert m.field_name == "reviews"
+
+    def test_is_frozen(self):
+        m = DocumentEmbeddingMapping(entity_name="movies", is_embedded=False)
+        with pytest.raises(ValidationError):
+            m.entity_name = "changed"
 
 
 class TestDataSizeHint:

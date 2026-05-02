@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dbagnets.models import (
+    DocumentEmbeddingMapping,
     PipelineResult,
     DatabaseType,
     SchemaLoopState,
@@ -34,7 +35,26 @@ class TestScriptLoopState:
         assert state.current_iteration == 0
         assert state.history == []
         assert state.final_script is None
+        assert state.embedding_mappings == []
         assert state.success is False
+
+    def test_stores_embedding_mappings(self):
+        target = TargetConfig(
+            db_type=DatabaseType.DOCUMENT,
+            db_name="mongodb",
+            db_version="7.0",
+        )
+        mappings = [
+            DocumentEmbeddingMapping(entity_name="movies", is_embedded=False),
+            DocumentEmbeddingMapping(
+                entity_name="reviews", is_embedded=True,
+                parent_entity="movies", field_name="reviews",
+            ),
+        ]
+        state = ScriptLoopState(target=target, embedding_mappings=mappings)
+        assert len(state.embedding_mappings) == 2
+        assert state.embedding_mappings[0].entity_name == "movies"
+        assert state.embedding_mappings[1].is_embedded is True
 
 
 class TestPipelineResult:

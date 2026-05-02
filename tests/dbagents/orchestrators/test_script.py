@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from dbagnets.models import DatabaseType, TargetConfig, ValidationResult, ValidationStatus
+from dbagnets.models import DatabaseType, DocumentEmbeddingMapping, TargetConfig, ValidationResult, ValidationStatus
 from dbagnets.models.enums import AbstractDataType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
 from dbagnets.orchestrators import ScriptOrchestrator
@@ -83,7 +83,7 @@ class TestScriptRun:
             max_iterations=max_iterations, parallel_validation=parallel
         )
         orch.generator = MagicMock()
-        orch.generator.generate.return_value = "CREATE TABLE test;"
+        orch.generator.generate.return_value = ("CREATE TABLE test;", [])
         return orch
 
     def test_returns_success_when_all_pass(self):
@@ -130,6 +130,25 @@ class TestScriptRun:
         assert len(state.history) == 2
         assert state.final_script is not None
 
+    def test_passes_embedding_mappings_through(self):
+        mappings = [
+            DocumentEmbeddingMapping(entity_name="users", is_embedded=False),
+            DocumentEmbeddingMapping(
+                entity_name="posts", is_embedded=True,
+                parent_entity="users", field_name="posts",
+            ),
+        ]
+        orch = self._setup_orchestrator()
+        orch.generator.generate.return_value = ("db.createCollection('users');", mappings)
+        _mock_all_validators(orch)
+
+        state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
+
+        assert state.success is True
+        assert len(state.embedding_mappings) == 2
+        assert state.embedding_mappings[0].entity_name == "users"
+        assert state.embedding_mappings[1].is_embedded is True
+
     def test_max_iterations_zero(self):
         orch = ScriptOrchestrator(max_iterations=0)
 
@@ -144,7 +163,7 @@ class TestScriptRunSequential:
     def test_calls_validators_sequentially(self):
         orch = ScriptOrchestrator(max_iterations=1, parallel_validation=False)
         orch.generator = MagicMock()
-        orch.generator.generate.return_value = "SELECT 1;"
+        orch.generator.generate.return_value = ("SELECT 1;", [])
         _mock_all_validators(orch)
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
@@ -160,7 +179,7 @@ class TestScriptRunParallel:
     def test_handles_validator_exception(self):
         orch = ScriptOrchestrator(max_iterations=1, parallel_validation=True)
         orch.generator = MagicMock()
-        orch.generator.generate.return_value = "SELECT 1;"
+        orch.generator.generate.return_value = ("SELECT 1;", [])
 
         orch.standard_validators[0].validate = MagicMock(
             side_effect=RuntimeError("API timeout")

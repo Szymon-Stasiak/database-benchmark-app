@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from dbagnets.models.enums import DatabaseType
+from dbagnets.models.schema import DocumentEmbeddingMapping
 
 
 class TargetRequest(BaseModel):
@@ -34,6 +35,7 @@ class ScriptResult(BaseModel):
     db_version: str
     container: ContainerInfo
     script: str
+    embedding_mappings: list[DocumentEmbeddingMapping] = []
     success: bool
     iterations_used: int
 

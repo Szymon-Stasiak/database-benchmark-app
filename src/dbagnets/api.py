@@ -83,6 +83,7 @@ def generate(request: GenerateRequest) -> GenerateResponse:
                 db_version=sr.target.db_version,
                 container=container,
                 script=sr.final_script or "",
+                embedding_mappings=sr.embedding_mappings,
                 success=sr.success,
                 iterations_used=sr.current_iteration,
             )
