@@ -78,6 +78,96 @@ benchmark_output/
   mongodb_7.0.js           # MongoDB initialization script
 ```
 
+### API Mode (FastAPI)
+
+Run as a microservice and send requests via HTTP.
+
+```bash
+# Start the server
+uvicorn dbagnets.api:app --host 0.0.0.0 --port 8000
+```
+
+**POST /generate**
+
+```bash
+curl -X POST http://localhost:8000/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idea": "movie management system with actors, directors, genres and reviews",
+    "depth": 4,
+    "targets": [
+      {"db_type": "relational", "db_name": "postgresql", "db_version": "16"},
+      {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"},
+      {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"}
+    ],
+    "model": "vertex_ai/claude-sonnet-4-6",
+    "max_iterations": 10
+  }'
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "logical_schema": {
+    "idea": "movie management system with actors, directors, genres and reviews",
+    "depth": 4,
+    "depth_chain": ["genre", "movie", "review", "user", "watchlist"],
+    "entities": ["..."],
+    "relationships": ["..."]
+  },
+  "scripts": [
+    {
+      "db_type": "relational",
+      "db_name": "postgresql",
+      "db_version": "16",
+      "container": {
+        "docker_image": "postgres:16",
+        "default_port": 5432,
+        "environment": {
+          "POSTGRES_PASSWORD": "postgres",
+          "POSTGRES_DB": "benchmark"
+        }
+      },
+      "script": "CREATE TABLE genre (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  name VARCHAR(100) NOT NULL UNIQUE,\n  ...\n);\n...",
+      "success": true,
+      "iterations_used": 3
+    },
+    {
+      "db_type": "graph",
+      "db_name": "neo4j",
+      "db_version": "5.0",
+      "container": {
+        "docker_image": "neo4j:5.0",
+        "default_port": 7687,
+        "environment": {
+          "NEO4J_AUTH": "neo4j/benchmark"
+        }
+      },
+      "script": "CREATE CONSTRAINT genre_name_unique FOR (g:Genre) REQUIRE g.name IS UNIQUE;\n...",
+      "success": true,
+      "iterations_used": 2
+    },
+    {
+      "db_type": "document",
+      "db_name": "mongodb",
+      "db_version": "7.0",
+      "container": {
+        "docker_image": "mongo:7.0",
+        "default_port": 27017,
+        "environment": {}
+      },
+      "script": "db.createCollection('genres', {\n  validator: { $jsonSchema: { ... } }\n});\n...",
+      "success": true,
+      "iterations_used": 4
+    }
+  ]
+}
+```
+
+Interactive API docs are available at `http://localhost:8000/docs` (Swagger UI).
+
 ## Options
 
 | Flag | Description | Default |

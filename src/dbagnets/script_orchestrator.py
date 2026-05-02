@@ -8,14 +8,12 @@ from langgraph.graph import END, StateGraph
 
 from dbagnets.agents.script.best_practices_checker import BestPracticesCheckerAgent
 from dbagnets.log_context import set_log_context
-from dbagnets.agents.script.depth_checker import DepthCheckerAgent
 from dbagnets.agents.script.compliance_checker import SchemaComplianceCheckerAgent
 from dbagnets.agents.script.generator import ScriptGeneratorAgent
 from dbagnets.agents.script.syntax_checker import SyntaxCheckerAgent
 from dbagnets.agents.script.version_checker import VersionCheckerAgent
 from dbagnets.models import (
     DatabaseConfig,
-    DatabaseType,
     IterationResult,
     ScriptGraphState,
     ScriptLoopState,
@@ -45,19 +43,10 @@ class ScriptOrchestrator:
         self.standard_validators = [
             SyntaxCheckerAgent(model),
             VersionCheckerAgent(model),
-            DepthCheckerAgent(model),
             BestPracticesCheckerAgent(model),
         ]
 
         self._graph = self._build_graph()
-
-    def _get_validators_for_target(self, db_type: DatabaseType) -> list:
-        # Graph DDL (Cypher) only defines constraints/indexes — no relationship
-        # patterns — so DepthChecker cannot determine depth from the script.
-        # SchemaDepthChecker already verified depth at the schema level.
-        if db_type == DatabaseType.GRAPH:
-            return [v for v in self.standard_validators if not isinstance(v, DepthCheckerAgent)]
-        return list(self.standard_validators)
 
     def _build_graph(self) -> StateGraph:
         graph = StateGraph(ScriptGraphState)
@@ -255,7 +244,7 @@ class ScriptOrchestrator:
         script: str,
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        validators = self._get_validators_for_target(target.db_type)
+        validators = self.standard_validators
 
         for validator in validators:
             logger.info("  [%s] Checking...", validator.name)
@@ -284,7 +273,7 @@ class ScriptOrchestrator:
         script: str,
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        validators = self._get_validators_for_target(target.db_type)
+        validators = self.standard_validators
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=len(validators) + 1

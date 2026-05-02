@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from dbagnets.agents.script.depth_checker import DepthCheckerAgent
 from dbagnets.models import DatabaseType, TargetConfig, ValidationResult, ValidationStatus
 from dbagnets.models.enums import AbstractDataType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
@@ -51,30 +50,6 @@ _SAMPLE_SCHEMA = LogicalSchema(
 )
 
 
-_GRAPH_TARGET = TargetConfig(
-    db_type=DatabaseType.GRAPH,
-    db_name="neo4j",
-    db_version="5.0",
-)
-
-_GRAPH_SCHEMA = LogicalSchema(
-    idea="test",
-    depth=1,
-    entities=[
-        Entity(name="users", attributes=[Attribute(name="id", data_type=AbstractDataType.INTEGER)]),
-        Entity(name="posts", attributes=[Attribute(name="id", data_type=AbstractDataType.INTEGER)]),
-    ],
-    relationships=[
-        Relationship(
-            name="authored",
-            source_entity="users",
-            target_entity="posts",
-            cardinality=RelationshipCardinality.ONE_TO_MANY,
-        ),
-    ],
-)
-
-
 class TestScriptOrchestrator:
     def test_init_uses_defaults(self):
         orch = ScriptOrchestrator()
@@ -82,7 +57,7 @@ class TestScriptOrchestrator:
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
         assert orch.compliance_checker is not None
-        assert len(orch.standard_validators) == 4
+        assert len(orch.standard_validators) == 3
 
     def test_init_accepts_custom_values(self):
         orch = ScriptOrchestrator(
@@ -91,25 +66,6 @@ class TestScriptOrchestrator:
         assert orch.model == "openai/gpt-4o"
         assert orch.max_iterations == 5
         assert orch.parallel_validation is False
-
-
-class TestGetValidatorsForTarget:
-    def test_relational_includes_depth_checker(self):
-        orch = ScriptOrchestrator()
-        validators = orch._get_validators_for_target(DatabaseType.RELATIONAL)
-        assert any(isinstance(v, DepthCheckerAgent) for v in validators)
-        assert len(validators) == 4
-
-    def test_graph_excludes_depth_checker(self):
-        orch = ScriptOrchestrator()
-        validators = orch._get_validators_for_target(DatabaseType.GRAPH)
-        assert not any(isinstance(v, DepthCheckerAgent) for v in validators)
-        assert len(validators) == 3
-
-    def test_document_includes_depth_checker(self):
-        orch = ScriptOrchestrator()
-        validators = orch._get_validators_for_target(DatabaseType.DOCUMENT)
-        assert any(isinstance(v, DepthCheckerAgent) for v in validators)
 
 
 class TestScriptRun:
@@ -183,25 +139,6 @@ class TestScriptRun:
         assert state.success is False
         assert state.final_script is None
         assert len(state.history) == 0
-
-
-class TestScriptRunGraph:
-    def test_graph_target_skips_depth_checker(self):
-        orch = ScriptOrchestrator(max_iterations=1, parallel_validation=False)
-        orch.generator = MagicMock()
-        orch.generator.generate.return_value = "CREATE CONSTRAINT FOR (u:User) REQUIRE u.id IS UNIQUE;"
-
-        for v in orch.standard_validators:
-            v.validate = MagicMock(return_value=make_pass_result(v.name))
-        orch.compliance_checker.validate = MagicMock(
-            return_value=make_pass_result(orch.compliance_checker.name)
-        )
-
-        state = orch.run(_GRAPH_TARGET, _GRAPH_SCHEMA, "test", 1)
-
-        assert state.success is True
-        depth_checker = next(v for v in orch.standard_validators if isinstance(v, DepthCheckerAgent))
-        depth_checker.validate.assert_not_called()
 
 
 class TestScriptRunSequential:

@@ -111,8 +111,15 @@ CHECK EACH OF THESE:
    Every attribute of every entity must be present with an equivalent data type.
    {type_hints}
 
-3. RELATIONSHIP COVERAGE:
-   Every relationship must be implemented appropriately for this database type.
+3. RELATIONSHIP COVERAGE (MOST IMPORTANT):
+   Go through EVERY relationship in the LogicalSchema one by one.
+   For each relationship verify:
+   - It exists in the script (as FK, relationship type, reference, embedded doc, etc.)
+   - The direction (source -> target) is correct
+   - The cardinality (1:1, 1:N, M:N) is correctly implemented
+   - For M:N: a junction table/collection or equivalent mechanism exists
+   - For 1:N: a foreign key, reference, or relationship connecting both entities exists
+   List each relationship by name and mark it as FOUND or MISSING.
 
 4. CONSTRAINT PRESERVATION:
    Primary keys, unique constraints, NOT NULL constraints, and indexes
@@ -122,13 +129,11 @@ CHECK EACH OF THESE:
    If any attribute has type VECTOR, verify the script uses the
    appropriate vector type/extension for {target.db_name}.
 
-6. DEPTH PRESERVATION:
-   The relationship chain depth from the LogicalSchema MUST be preserved.
-   Do NOT suggest removing entities that are part of the depth chain.
-
 FAIL if any entity, attribute, relationship, or constraint
 from the LogicalSchema is missing or incorrectly mapped
 (accounting for the database-specific rules above).
+In your feedback, list every MISSING relationship by name so the
+generator knows exactly what to fix.
 
 Use the validate tool to return your assessment."""
 

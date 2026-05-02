@@ -26,11 +26,21 @@ from dbagnets.models.schema import (
     LogicalSchema,
     Relationship,
 )
+from dbagnets.models.api import (
+    ContainerInfo,
+    GenerateRequest,
+    GenerateResponse,
+    ScriptResult,
+    TargetRequest,
+)
 
 __all__ = [
     "AbstractDataType",
     "Attribute",
     "AttributeConstraint",
+    "ContainerInfo",
+    "GenerateRequest",
+    "GenerateResponse",
     "PipelineConfig",
     "PipelineResult",
     "DatabaseConfig",
@@ -47,7 +57,9 @@ __all__ = [
     "SchemaLoopState",
     "ScriptGraphState",
     "ScriptLoopState",
+    "ScriptResult",
     "TargetConfig",
+    "TargetRequest",
     "ValidationResult",
     "ValidationStatus",
     "ValidatorResponse",
