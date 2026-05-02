@@ -10,14 +10,14 @@ from typing import TypeVar
 from litellm import completion
 from pydantic import BaseModel
 
-from dbagnets.models import DatabaseConfig, ValidationResult, ValidatorResponse
+from dbagnets.models import ValidationResult, ValidatorResponse
 
 logger = logging.getLogger("dbagnets")
 
 T = TypeVar("T", bound=BaseModel)
 
 
-def flatten_json_schema(schema: dict) -> dict:
+def flatten_json_schema(schema: dict) -> object:
     """Inline $defs references for API compatibility."""
     defs = schema.pop("$defs", {})
     schema.pop("title", None)
@@ -51,33 +51,6 @@ class BaseAgent(ABC):
     @abstractmethod
     def role_description(self) -> str:
         ...
-
-    def _call_llm(self, system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> str:
-        logger.debug("[%s] Sending request to %s (max_tokens=%d)", self.name, self.model, max_tokens)
-        logger.debug("[%s] System prompt length: %d chars", self.name, len(system_prompt))
-        logger.debug("[%s] User prompt length: %d chars", self.name, len(user_prompt))
-
-        start = time.time()
-        response = completion(
-            model=self.model,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        elapsed = time.time() - start
-
-        response_text = response.choices[0].message.content
-        prompt_tokens = response.usage.prompt_tokens
-        completion_tokens = response.usage.completion_tokens
-
-        logger.info(
-            "[%s] LLM response in %.1fs | tokens: %d in / %d out | response: %d chars",
-            self.name, elapsed, prompt_tokens, completion_tokens, len(response_text),
-        )
-
-        return response_text
 
     def _call_llm_structured(
         self,
@@ -129,7 +102,7 @@ class BaseAgent(ABC):
         raise ValueError(f"[{self.name}] No tool call found in LLM response")
 
     _RESPONSE_FORMAT_RULES = """
-
+    
 RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
 - PASS:
   feedback = exactly ONE short sentence (under 30 words). Example: "The script passes all checks."
@@ -162,13 +135,4 @@ RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
             feedback=response.feedback,
             details=response.details,
             todos=response.todos,
-        )
-
-    def _build_db_context(self, config: DatabaseConfig) -> str:
-        return (
-            f"Database type: {config.db_type.value}\n"
-            f"Engine: {config.db_name}\n"
-            f"Version: {config.db_version}\n"
-            f"Description/idea: {config.idea}\n"
-            f"Required relationship depth: {config.depth}"
         )

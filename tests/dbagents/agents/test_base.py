@@ -62,37 +62,6 @@ class TestBaseAgent:
         agent = _ConcreteAgent()
         assert BaseAgent.role_description.fget(agent) is None
 
-
-class TestCallLlm:
-    def test_sends_correct_params_to_litellm(self):
-        agent = _ConcreteAgent("test-model")
-        with patch("dbagnets.agents.base.completion", return_value=make_text_response("response")) as mock_comp:
-            agent._call_llm("system prompt", "user prompt")
-
-        mock_comp.assert_called_once_with(
-            model="test-model",
-            max_tokens=8192,
-            messages=[
-                {"role": "system", "content": "system prompt"},
-                {"role": "user", "content": "user prompt"},
-            ],
-        )
-
-    def test_returns_text_from_response(self):
-        agent = _ConcreteAgent("test-model")
-        with patch("dbagnets.agents.base.completion", return_value=make_text_response("hello world")):
-            result = agent._call_llm("s", "u")
-
-        assert result == "hello world"
-
-    def test_passes_custom_max_tokens(self):
-        agent = _ConcreteAgent("test-model")
-        with patch("dbagnets.agents.base.completion", return_value=make_text_response("ok")) as mock_comp:
-            agent._call_llm("s", "u", max_tokens=1024)
-
-        assert mock_comp.call_args.kwargs["max_tokens"] == 1024
-
-
 class TestCallLlmStructured:
     def test_passes_tools_and_tool_choice(self):
         agent = _ConcreteAgent("test-model")
@@ -228,15 +197,3 @@ class TestFlattenJsonSchema:
             "type": "object",
             "properties": {"val": {"type": "integer"}},
         }
-
-
-class TestBuildDbContext:
-    def test_includes_all_config_fields_in_output(self, sample_config):
-        agent = _ConcreteAgent("test-model")
-        ctx = agent._build_db_context(sample_config)
-
-        assert "relational" in ctx
-        assert "postgresql" in ctx
-        assert "16" in ctx
-        assert "movie management database" in ctx
-        assert "4" in ctx
