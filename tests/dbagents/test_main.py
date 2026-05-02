@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import logging
 from unittest.mock import patch
 
 import pytest
 
-from dbagnets.main import setup_logging, parse_args, main, DB_TYPE_MAP
-from dbagnets.models import DatabaseType, LoopState
+from dbagnets.main import setup_logging, parse_args, parse_target, main, DB_TYPE_MAP, _EXTENSIONS
+from dbagnets.models import (
+    PipelineResult,
+    DatabaseType,
+    TargetConfig,
+)
+from dbagnets.models.state import SchemaLoopState, ScriptLoopState
 
 
 class TestDbTypeMap:
@@ -45,120 +51,207 @@ class TestSetupLogging:
 
 
 class TestParseArgs:
-    def test_parses_all_required_args_with_correct_defaults(self):
-        with patch("sys.argv", [
-            "main.py",
-            "--db-type", "relational",
-            "--db-name", "postgresql",
-            "--db-version", "16",
+    def test_parses_required_args_with_defaults(self):
+        args = parse_args([
+            "--target", "relational:postgresql:16",
             "--idea", "test database",
             "--depth", "4",
-        ]):
-            args = parse_args()
+        ])
 
-        assert args.db_type == "relational"
-        assert args.db_name == "postgresql"
-        assert args.db_version == "16"
+        assert args.target == ["relational:postgresql:16"]
         assert args.idea == "test database"
         assert args.depth == 4
         assert args.max_iterations == 10
         assert args.model == "vertex_ai/claude-sonnet-4-6"
-        assert args.output is None
+        assert args.output_dir is None
         assert args.sequential is False
         assert args.verbose is False
 
     def test_parses_all_optional_args(self):
-        with patch("sys.argv", [
-            "main.py",
-            "--db-type", "graph",
-            "--db-name", "neo4j",
-            "--db-version", "5",
+        args = parse_args([
+            "--target", "graph:neo4j:5",
             "--idea", "social network",
             "--depth", "3",
             "--max-iterations", "5",
             "--model", "openai/gpt-4o",
-            "--output", "out.sql",
+            "--output-dir", "/tmp/out",
             "--sequential",
             "-v",
-        ]):
-            args = parse_args()
+        ])
 
-        assert args.db_type == "graph"
+        assert args.target == ["graph:neo4j:5"]
         assert args.max_iterations == 5
         assert args.model == "openai/gpt-4o"
-        assert args.output == "out.sql"
+        assert args.output_dir == "/tmp/out"
         assert args.sequential is True
         assert args.verbose is True
+
+    def test_parses_multiple_targets(self):
+        args = parse_args([
+            "--idea", "test",
+            "--depth", "4",
+            "--target", "relational:postgresql:16",
+            "--target", "graph:neo4j:5",
+            "--target", "document:mongodb:7",
+        ])
+
+        assert len(args.target) == 3
+        assert args.target[0] == "relational:postgresql:16"
+        assert args.target[1] == "graph:neo4j:5"
+        assert args.target[2] == "document:mongodb:7"
+
+    def test_target_is_required(self):
+        with pytest.raises(SystemExit):
+            parse_args(["--idea", "test", "--depth", "4"])
+
+
+class TestParseTarget:
+    def test_parses_valid_target_string(self):
+        target = parse_target("relational:postgresql:16")
+        assert target.db_type == DatabaseType.RELATIONAL
+        assert target.db_name == "postgresql"
+        assert target.db_version == "16"
+
+    def test_raises_on_invalid_format(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="Invalid target format"):
+            parse_target("invalid")
+
+    def test_raises_on_unknown_db_type(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="Unknown database type"):
+            parse_target("nosql:foo:1")
+
+
+class TestExtensions:
+    def test_maps_all_database_types(self):
+        for db_type in DatabaseType:
+            assert db_type in _EXTENSIONS, f"Missing extension for {db_type}"
 
 
 class TestMain:
     REQUIRED_ARGV = [
         "main.py",
-        "--db-type", "relational",
-        "--db-name", "postgresql",
-        "--db-version", "16",
         "--idea", "test",
         "--depth", "4",
+        "--target", "relational:postgresql:16",
     ]
 
-    def _make_state(self, sample_config, success=True, final_script="CREATE TABLE t;"):
-        return LoopState(config=sample_config, success=success, final_script=final_script)
+    @staticmethod
+    def _make_pipeline_result(success: bool = True) -> PipelineResult:
+        pg_target = TargetConfig(
+            db_type=DatabaseType.RELATIONAL, db_name="postgresql", db_version="16"
+        )
+        schema_result = SchemaLoopState(
+            idea="test",
+            depth=4,
+            max_iterations=10,
+            current_iteration=1,
+            success=True,
+            final_schema_json='{"idea":"test","depth":4,"entities":[],"relationships":[]}',
+        )
+        script_results = [
+            ScriptLoopState(
+                target=pg_target,
+                max_iterations=10,
+                current_iteration=1,
+                success=success,
+                final_script="CREATE TABLE test;",
+            ),
+        ]
+        return PipelineResult(
+            schema_result=schema_result,
+            script_results=script_results,
+        )
 
     @patch("dbagnets.main.load_dotenv")
-    @patch("dbagnets.main.AgentOrchestrator")
-    def test_prints_script_to_stdout_on_success(
-        self, mock_orch_cls, mock_dotenv, sample_config, capsys
-    ):
-        mock_orch_cls.return_value.run.return_value = self._make_state(sample_config)
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_returns_0_on_success(self, mock_orch_cls, mock_dotenv, capsys):
+        mock_orch_cls.return_value.run.return_value = self._make_pipeline_result()
 
         with patch("sys.argv", self.REQUIRED_ARGV):
             result = main()
 
         assert result == 0
-        captured = capsys.readouterr()
-        assert "CREATE TABLE t;" in captured.out
+        mock_orch_cls.return_value.run.assert_called_once()
 
     @patch("dbagnets.main.load_dotenv")
-    @patch("dbagnets.main.AgentOrchestrator")
-    def test_writes_script_to_file_when_output_flag_given(
-        self, mock_orch_cls, mock_dotenv, sample_config, tmp_path
-    ):
-        output_file = tmp_path / "output.sql"
-        mock_orch_cls.return_value.run.return_value = self._make_state(sample_config)
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_returns_1_on_failure(self, mock_orch_cls, mock_dotenv):
+        mock_orch_cls.return_value.run.return_value = self._make_pipeline_result(success=False)
 
-        argv = self.REQUIRED_ARGV + ["--output", str(output_file)]
+        with patch("sys.argv", self.REQUIRED_ARGV):
+            result = main()
+
+        assert result == 1
+
+    @patch("dbagnets.main.load_dotenv")
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_writes_output_to_dir(self, mock_orch_cls, mock_dotenv, tmp_path):
+        mock_orch_cls.return_value.run.return_value = self._make_pipeline_result()
+
+        argv = self.REQUIRED_ARGV + ["--output-dir", str(tmp_path)]
         with patch("sys.argv", argv):
             result = main()
 
         assert result == 0
-        assert output_file.read_text() == "CREATE TABLE t;"
+        assert (tmp_path / "schema.json").exists()
+        assert (tmp_path / "postgresql_16.sql").exists()
 
     @patch("dbagnets.main.load_dotenv")
-    @patch("dbagnets.main.AgentOrchestrator")
-    def test_returns_1_when_orchestrator_loop_fails(
-        self, mock_orch_cls, mock_dotenv, sample_config
-    ):
-        mock_orch_cls.return_value.run.return_value = self._make_state(
-            sample_config, success=False, final_script="partial"
-        )
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_prints_to_stdout_without_output_dir(self, mock_orch_cls, mock_dotenv, capsys):
+        mock_orch_cls.return_value.run.return_value = self._make_pipeline_result()
 
         with patch("sys.argv", self.REQUIRED_ARGV):
             result = main()
 
-        assert result == 1
-
-    @patch("dbagnets.main.load_dotenv")
-    @patch("dbagnets.main.AgentOrchestrator")
-    def test_skips_output_when_final_script_is_none(
-        self, mock_orch_cls, mock_dotenv, sample_config, capsys
-    ):
-        mock_orch_cls.return_value.run.return_value = self._make_state(
-            sample_config, success=False, final_script=None
-        )
-
-        with patch("sys.argv", self.REQUIRED_ARGV):
-            result = main()
-
-        assert result == 1
+        assert result == 0
         captured = capsys.readouterr()
-        assert "CREATE TABLE" not in captured.out
+        assert "CREATE TABLE test;" in captured.out
+
+    @patch("dbagnets.main.load_dotenv")
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_multiple_targets(self, mock_orch_cls, mock_dotenv):
+        pg_target = TargetConfig(db_type=DatabaseType.RELATIONAL, db_name="postgresql", db_version="16")
+        neo4j_target = TargetConfig(db_type=DatabaseType.GRAPH, db_name="neo4j", db_version="5")
+        result = PipelineResult(
+            schema_result=SchemaLoopState(
+                idea="test", depth=2, success=True,
+                final_schema_json='{"idea":"test","depth":2,"entities":[],"relationships":[]}',
+            ),
+            script_results=[
+                ScriptLoopState(target=pg_target, success=True, final_script="CREATE TABLE t;"),
+                ScriptLoopState(target=neo4j_target, success=True, final_script="CREATE (n:T)"),
+            ],
+        )
+        mock_orch_cls.return_value.run.return_value = result
+
+        with patch("sys.argv", [
+            "main.py",
+            "--idea", "test", "--depth", "2",
+            "--target", "relational:postgresql:16",
+            "--target", "graph:neo4j:5",
+        ]):
+            exit_code = main()
+
+        assert exit_code == 0
+
+    @patch("dbagnets.main.load_dotenv")
+    @patch("dbagnets.main.PipelineOrchestrator")
+    def test_passes_model_and_iterations_to_orchestrator(self, mock_orch_cls, mock_dotenv):
+        mock_orch_cls.return_value.run.return_value = self._make_pipeline_result()
+
+        with patch("sys.argv", [
+            "main.py",
+            "--idea", "test", "--depth", "4",
+            "--target", "relational:postgresql:16",
+            "--model", "openai/gpt-4o",
+            "--max-iterations", "5",
+            "--sequential",
+        ]):
+            main()
+
+        mock_orch_cls.assert_called_once_with(
+            model="openai/gpt-4o",
+            max_iterations=5,
+            parallel_validation=False,
+        )

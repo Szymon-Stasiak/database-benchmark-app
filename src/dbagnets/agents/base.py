@@ -128,13 +128,30 @@ class BaseAgent(ABC):
 
         raise ValueError(f"[{self.name}] No tool call found in LLM response")
 
+    _RESPONSE_FORMAT_RULES = """
+
+RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
+- PASS:
+  feedback = exactly ONE short sentence (under 30 words). Example: "The script passes all checks."
+  details = "" (empty string)
+  todos = [] (empty list)
+  NEVER add suggestions, recommendations, "minor issues", strengths, or commentary.
+  PASS means ACCEPTED. Say nothing else. No bullet points. No markdown. No sections.
+- FAIL:
+  feedback = exactly ONE sentence naming the core blocker (under 40 words).
+  todos = list of CONCRETE changes required to pass. Each item is a specific
+  instruction like "Add CHECK constraint on users.rating to enforce range 1-10".
+  Only include items that would flip the result from FAIL to PASS.
+  Do NOT include cosmetic, optional, or "nice to have" items.
+  details = "" (empty string, put everything in todos instead)"""
+
     def _validate_with_tool_use(
         self,
         system_prompt: str,
         user_prompt: str,
     ) -> ValidationResult:
         response = self._call_llm_structured(
-            system_prompt=system_prompt,
+            system_prompt=system_prompt + self._RESPONSE_FORMAT_RULES,
             user_prompt=user_prompt,
             response_model=ValidatorResponse,
             tool_name="validate",
@@ -144,6 +161,7 @@ class BaseAgent(ABC):
             status=response.status,
             feedback=response.feedback,
             details=response.details,
+            todos=response.todos,
         )
 
     def _build_db_context(self, config: DatabaseConfig) -> str:

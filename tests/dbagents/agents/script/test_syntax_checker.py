@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from dbagnets.agents.syntax_checker import SyntaxCheckerAgent
+from dbagnets.agents.script.syntax_checker import SyntaxCheckerAgent
 from dbagnets.models import ValidationResult, ValidationStatus
 
 

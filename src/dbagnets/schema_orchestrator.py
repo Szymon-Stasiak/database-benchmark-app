@@ -6,26 +6,25 @@ import time
 
 from langgraph.graph import END, StateGraph
 
+from dbagnets.agents.schema.completeness_checker import SchemaCompletenessCheckerAgent
+from dbagnets.log_context import set_log_context
+from dbagnets.agents.schema.depth_checker import SchemaDepthChecker
+from dbagnets.agents.schema.generator import SchemaGeneratorAgent
+from dbagnets.agents.schema.relationship_checker import SchemaRelationshipCheckerAgent
+from dbagnets.agents.schema.topic_checker import SchemaTopicCheckerAgent
 from dbagnets.models import (
-    DatabaseConfig,
-    GraphState,
     IterationResult,
-    LoopState,
+    SchemaGraphState,
+    SchemaLoopState,
     ValidationResult,
     ValidationStatus,
 )
-from dbagnets.agents.generator import GeneratorAgent
-from dbagnets.agents.syntax_checker import SyntaxCheckerAgent
-from dbagnets.agents.topic_checker import TopicCheckerAgent
-from dbagnets.agents.version_checker import VersionCheckerAgent
-from dbagnets.agents.depth_checker import DepthCheckerAgent
-from dbagnets.agents.best_practices_checker import BestPracticesCheckerAgent
-from dbagnets.agents.completeness_checker import CompletenessCheckerAgent
+from dbagnets.models.schema import LogicalSchema
 
 logger = logging.getLogger("dbagnets")
 
 
-class AgentOrchestrator:
+class SchemaOrchestrator:
 
     def __init__(
         self,
@@ -37,74 +36,73 @@ class AgentOrchestrator:
         self.max_iterations = max_iterations
         self.parallel_validation = parallel_validation
 
-        self.generator = GeneratorAgent(model)
-        self.validators = [
-            SyntaxCheckerAgent(model),
-            TopicCheckerAgent(model),
-            VersionCheckerAgent(model),
-            DepthCheckerAgent(model),
-            BestPracticesCheckerAgent(model),
-            CompletenessCheckerAgent(model),
+        self.generator = SchemaGeneratorAgent(model)
+        self.depth_checker = SchemaDepthChecker()
+        self.llm_validators = [
+            SchemaTopicCheckerAgent(model),
+            SchemaCompletenessCheckerAgent(model),
+            SchemaRelationshipCheckerAgent(model),
         ]
 
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        graph = StateGraph(GraphState)
-        graph.add_node("generate", self._generate_node)
-        graph.add_node("validate", self._validate_node)
+        graph = StateGraph(SchemaGraphState)
+        graph.add_node("generate_schema", self._generate_node)
+        graph.add_node("validate_schema", self._validate_node)
 
-        graph.set_entry_point("generate")
-        graph.add_edge("generate", "validate")
-        graph.add_conditional_edges("validate", self._should_continue)
+        graph.set_entry_point("generate_schema")
+        graph.add_edge("generate_schema", "validate_schema")
+        graph.add_conditional_edges("validate_schema", self._should_continue)
 
         return graph.compile()
 
-    def _generate_node(self, state: GraphState) -> dict:
+    def _generate_node(self, state: SchemaGraphState) -> dict:
         iteration = state["current_iteration"] + 1
 
         logger.info("")
         logger.info("-" * 60)
-        logger.info("  ITERATION %d/%d", iteration, state["max_iterations"])
+        logger.info("  SCHEMA ITERATION %d/%d", iteration, state["max_iterations"])
         logger.info("-" * 60)
 
         feedback = state["feedback"] if state["feedback"] else None
-        previous_script = state["script"]
+        previous_schema_json = state["schema_json"]
 
         logger.info("")
-        logger.info("[Generator] Generating script...")
+        logger.info("[SchemaGenerator] Generating schema...")
         gen_start = time.time()
-        script = self.generator.generate(state["config"], feedback, previous_script)
+        schema = self.generator.generate(
+            state["idea"], state["depth"], feedback, previous_schema_json
+        )
         gen_elapsed = time.time() - gen_start
         logger.info(
-            "[Generator] Script generated in %.1fs (%d chars, %d lines)",
-            gen_elapsed, len(script), script.count("\n") + 1,
+            "[SchemaGenerator] Schema generated in %.1fs (%d entities, %d relationships)",
+            gen_elapsed, len(schema.entities), len(schema.relationships),
         )
 
         return {
-            "script": script,
+            "schema_json": schema.model_dump_json(),
             "current_iteration": iteration,
         }
 
-    def _validate_node(self, state: GraphState) -> dict:
-        config = state["config"]
-        script = state["script"]
+    def _validate_node(self, state: SchemaGraphState) -> dict:
+        schema_json = state["schema_json"]
+        schema = LogicalSchema.model_validate_json(schema_json)
         iteration = state["current_iteration"]
 
         logger.info("")
         logger.info(
-            "[Validation] Running %d validators (%s)...",
-            len(self.validators),
+            "[SchemaValidation] Running validators (%s)...",
             "parallel" if self.parallel_validation else "sequential",
         )
         val_start = time.time()
-        validations = self._run_validators(config, script)
+        validations = self._run_validators(schema)
         val_elapsed = time.time() - val_start
-        logger.info("[Validation] All validators finished in %.1fs", val_elapsed)
+        logger.info("[SchemaValidation] All validators finished in %.1fs", val_elapsed)
 
         iteration_result = IterationResult(
             iteration=iteration,
-            script=script,
+            script=schema_json,
             validations=validations,
         )
 
@@ -114,16 +112,13 @@ class AgentOrchestrator:
         logger.info("")
         logger.info(iteration_result.summary())
         logger.info("")
-        logger.info(
-            "[Iteration %d] Score: %d/%d passed",
-            iteration, passed, total,
-        )
+        logger.info("[Iteration %d] Score: %d/%d passed", iteration, passed, total)
 
         if iteration_result.all_passed:
             return {
                 "history": [iteration_result],
                 "feedback": [],
-                "final_script": script,
+                "final_schema_json": schema_json,
                 "success": True,
             }
 
@@ -135,114 +130,113 @@ class AgentOrchestrator:
         )
 
         if iteration < state["max_iterations"]:
-            logger.info("[Loop] Feeding back errors to Generator for next iteration...")
+            logger.info("[Loop] Feeding back errors to SchemaGenerator for next iteration...")
 
         return {
             "history": [iteration_result],
             "feedback": failed,
         }
 
-    def _should_continue(self, state: GraphState) -> str:
+    def _should_continue(self, state: SchemaGraphState) -> str:
         if state["success"]:
             logger.info("")
             logger.info("=" * 60)
-            logger.info("  SUCCESS! All validations passed.")
-            logger.info(
-                "  Completed in %d iteration(s)",
-                state["current_iteration"],
-            )
+            logger.info("  SCHEMA SUCCESS! All validations passed.")
+            logger.info("  Completed in %d iteration(s)", state["current_iteration"])
             logger.info("=" * 60)
             return END
 
         if state["current_iteration"] >= state["max_iterations"]:
             logger.info("")
             logger.info("=" * 60)
-            logger.info("  FAILED: Exhausted %d iterations", state["max_iterations"])
+            logger.info("  SCHEMA FAILED: Exhausted %d iterations", state["max_iterations"])
             logger.info("=" * 60)
             return END
 
-        return "generate"
+        return "generate_schema"
 
-    def run(self, config: DatabaseConfig) -> LoopState:
+    def run(self, idea: str, depth: int) -> SchemaLoopState:
         total_start = time.time()
+        set_log_context("schema")
 
         logger.info("=" * 60)
-        logger.info("  DBagnets - Agent Loop")
+        logger.info("  Phase 1: Schema Generation")
         logger.info("=" * 60)
-        logger.info("  Database: %s %s (%s)", config.db_name, config.db_version, config.db_type.value)
-        logger.info("  Idea: %s", config.idea)
-        logger.info("  Relationship depth: %d", config.depth)
+        logger.info("  Idea: %s", idea)
+        logger.info("  Relationship depth: %d", depth)
         logger.info("  Max iterations: %d", self.max_iterations)
-        logger.info("  Validation mode: %s", "parallel" if self.parallel_validation else "sequential")
         logger.info("  Model: %s", self.model)
         logger.info("=" * 60)
 
         if self.max_iterations == 0:
-            return LoopState(config=config, max_iterations=0)
+            return SchemaLoopState(idea=idea, depth=depth, max_iterations=0)
 
-        initial_state: GraphState = {
-            "config": config,
+        initial_state: SchemaGraphState = {
+            "idea": idea,
+            "depth": depth,
             "max_iterations": self.max_iterations,
             "current_iteration": 0,
-            "script": None,
+            "schema_json": None,
             "feedback": [],
             "history": [],
-            "final_script": None,
+            "final_schema_json": None,
             "success": False,
         }
 
         final_state = self._graph.invoke(initial_state)
 
         total_elapsed = time.time() - total_start
-        logger.info("  Total time: %.1fs", total_elapsed)
+        logger.info("  Phase 1 total time: %.1fs", total_elapsed)
 
-        loop_state = LoopState(
-            config=config,
+        return SchemaLoopState(
+            idea=idea,
+            depth=depth,
             max_iterations=self.max_iterations,
             current_iteration=final_state["current_iteration"],
             history=final_state["history"],
-            final_script=final_state["final_script"],
+            final_schema_json=final_state["final_schema_json"],
             success=final_state["success"],
         )
 
-        if not loop_state.success and loop_state.history:
-            last = loop_state.history[-1]
-            loop_state.final_script = last.script
-            passed_count = sum(1 for v in last.validations if v.passed)
-            logger.info("  Best result: %d/%d validations passed", passed_count, len(last.validations))
-
-        return loop_state
-
-    def _run_validators(
-        self, config: DatabaseConfig, script: str
-    ) -> list[ValidationResult]:
+    def _run_validators(self, schema: LogicalSchema) -> list[ValidationResult]:
         if self.parallel_validation:
-            return self._run_validators_parallel(config, script)
-        return self._run_validators_sequential(config, script)
+            return self._run_validators_parallel(schema)
+        return self._run_validators_sequential(schema)
 
-    def _run_validators_sequential(
-        self, config: DatabaseConfig, script: str
-    ) -> list[ValidationResult]:
+    def _run_validators_sequential(self, schema: LogicalSchema) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        for validator in self.validators:
+
+        logger.info("  [%s] Checking...", self.depth_checker.name)
+        start = time.time()
+        result = self.depth_checker.validate(schema)
+        elapsed = time.time() - start
+        icon = "PASS" if result.passed else "FAIL"
+        logger.info("  [%s] [%s] (%.1fs)", self.depth_checker.name, icon, elapsed)
+        results.append(result)
+
+        for validator in self.llm_validators:
             logger.info("  [%s] Checking...", validator.name)
             start = time.time()
-            result = validator.validate(config, script)
+            result = validator.validate(schema)
             elapsed = time.time() - start
             icon = "PASS" if result.passed else "FAIL"
             logger.info("  [%s] [%s] (%.1fs)", validator.name, icon, elapsed)
             results.append(result)
+
         return results
 
-    def _run_validators_parallel(
-        self, config: DatabaseConfig, script: str
-    ) -> list[ValidationResult]:
+    def _run_validators_parallel(self, schema: LogicalSchema) -> list[ValidationResult]:
         results: list[ValidationResult] = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.validators)) as executor:
+        depth_result = self.depth_checker.validate(schema)
+        icon = "PASS" if depth_result.passed else "FAIL"
+        logger.info("  [%s] [%s]", self.depth_checker.name, icon)
+        results.append(depth_result)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.llm_validators)) as executor:
             future_to_validator = {
-                executor.submit(validator.validate, config, script): validator
-                for validator in self.validators
+                executor.submit(validator.validate, schema): validator
+                for validator in self.llm_validators
             }
 
             for future in concurrent.futures.as_completed(future_to_validator):

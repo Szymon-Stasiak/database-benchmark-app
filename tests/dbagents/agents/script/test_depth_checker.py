@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from dbagnets.agents.depth_checker import DepthCheckerAgent
+from dbagnets.agents.script.depth_checker import DepthCheckerAgent
 from dbagnets.models import ValidationResult, ValidationStatus
 
 

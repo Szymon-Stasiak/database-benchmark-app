@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from dbagnets.agents.version_checker import VersionCheckerAgent
+from dbagnets.agents.script.version_checker import VersionCheckerAgent
 from dbagnets.models import ValidationResult, ValidationStatus
 
 

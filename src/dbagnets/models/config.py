@@ -13,3 +13,19 @@ class DatabaseConfig(BaseModel):
     db_version: str       # e.g. "13", "5.0", "2.3"
     idea: str             # e.g. "movie management database"
     depth: int            # relationship depth, e.g. 4
+
+
+class TargetConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    db_type: DatabaseType
+    db_name: str
+    db_version: str
+
+
+class PipelineConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    idea: str
+    depth: int
+    targets: list[TargetConfig]

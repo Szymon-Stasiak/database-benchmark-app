@@ -66,19 +66,30 @@ Your task is to:
 4. Check whether the longest path has exactly {depth} levels""",
 
         DatabaseType.DOCUMENT: """DEFINITION OF RELATIONSHIP DEPTH:
-Relationship depth = the longest chain of document references between collections.
-References include DBRef, manual references (storing _id of another collection),
-or embedded sub-documents that represent separate entities.
+Relationship depth = the longest chain of entity-to-entity links, whether
+implemented as cross-collection references OR embedded sub-documents.
+
+CRITICAL COUNTING RULES:
+- A reference field (storing another collection's ID) counts as 1 hop.
+- An embedded sub-document that represents a SEPARATE ENTITY from the
+  LogicalSchema also counts as 1 hop (e.g. votes embedded inside comments
+  = 1 hop from comment to vote).
+- Denormalized SNAPSHOTS (copies of fields for read performance, like
+  director_snapshot in movies) do NOT count as hops — they are cached
+  copies, not entity relationships.
+- Count the chain of DISTINCT ENTITIES, not collections.
 
 Examples:
-- depth=1: Collection_A -> Collection_B (1 reference)
-- depth=2: Collection_A -> Collection_B -> Collection_C (2 references)
-- depth=3: Collection_A -> Collection_B -> Collection_C -> Collection_D (3 references)
+- depth=1: Entity_A -> Entity_B (1 link, regardless of embed vs reference)
+- depth=2: Entity_A -> Entity_B -> Entity_C (2 links)
+- depth=4: directors -> movies -> reviews -> comments -> comment_votes
+  (4 links, even if comment_votes is embedded inside comments)
 
 Your task is to:
-1. Identify ALL collections and their reference/embedding relationships
-2. Map the reference graph
-3. Find the longest path
+1. Identify ALL entities from the LogicalSchema and how each is implemented
+   (standalone collection, embedded sub-document, or snapshot)
+2. Map the entity relationship graph (ignoring snapshots)
+3. Find the longest path of distinct entities
 4. Check whether the longest path has exactly {depth} levels""",
 
         DatabaseType.KEY_VALUE: """DEFINITION OF RELATIONSHIP DEPTH:

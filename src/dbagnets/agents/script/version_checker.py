@@ -23,37 +23,66 @@ class VersionCheckerAgent(BaseAgent):
 - GENERATED ALWAYS AS IDENTITY (PostgreSQL < 10)
 - CREATE INDEX CONCURRENTLY with IF NOT EXISTS (PostgreSQL < 9.5)
 - JSON_TABLE (MySQL < 8.0)
-- ON CONFLICT DO UPDATE (PostgreSQL < 9.5)""",
+- ON CONFLICT DO UPDATE (PostgreSQL < 9.5)
+- CREATE PROCEDURE (PostgreSQL < 11)
+- GENERATED ALWAYS AS (stored/virtual) computed columns (PostgreSQL < 12, MySQL < 5.7)
+- Declarative table partitioning (PostgreSQL < 10)
+- EXCLUSION constraints require btree_gist extension (PostgreSQL)
+- CREATE OR REPLACE TRIGGER (PostgreSQL < 14)
+- ENUM type variations differ between engines (PostgreSQL CREATE TYPE vs MySQL ENUM column)""",
 
         DatabaseType.GRAPH: """Examples of version incompatibilities:
 - Node key constraints (Neo4j < 5.0)
 - CREATE CONSTRAINT ... IS NOT NULL (Neo4j < 4.0)
 - SHOW INDEXES (Neo4j < 4.2)
-- Vector indexes (Neo4j < 5.11)""",
+- Vector indexes (Neo4j < 5.11)
+- Full-text indexes via db.index.fulltext.createNodeIndex (Neo4j < 4.0 uses different syntax)
+- CREATE CONSTRAINT ... IS UNIQUE new syntax (Neo4j 5.x vs 4.x)
+- Point type and spatial indexes (Neo4j < 3.4)
+- Composite range indexes (Neo4j < 5.0)
+- EXIST → IS NOT NULL constraint rename (Neo4j 5.0)""",
 
         DatabaseType.VECTOR: """Examples of version incompatibilities:
 - GPU index support (Milvus < 2.3)
 - JSON field type (Milvus < 2.2)
 - Dynamic schema (Milvus < 2.2)
-- Range search (Milvus < 2.3)""",
+- Range search (Milvus < 2.3)
+- Multiple vector fields per collection (Milvus < 2.4)
+- Partition key (Milvus < 2.2.9)
+- ScaNN index type (Milvus < 2.4)
+- Upsert operations (Milvus < 2.3)""",
 
         DatabaseType.DOCUMENT: """Examples of version incompatibilities:
 - JSON Schema validation (MongoDB < 3.6)
 - $merge aggregation stage (MongoDB < 4.2)
 - Wildcard indexes (MongoDB < 4.2)
-- Time series collections (MongoDB < 5.0)""",
+- Time series collections (MongoDB < 5.0)
+- Clustered indexes on collections (MongoDB < 5.3)
+- $densify and $fill operators (MongoDB < 5.3)
+- Queryable encryption (MongoDB < 7.0)
+- Compound wildcard indexes (MongoDB < 7.0)
+- Partial indexes (MongoDB < 3.2)
+- Collation support (MongoDB < 3.4)""",
 
         DatabaseType.KEY_VALUE: """Examples of version incompatibilities:
 - Streams (Redis < 5.0)
 - ACL (Redis < 6.0)
 - JSON module (Redis < 6.2 without RedisJSON)
-- Functions (Redis < 7.0)""",
+- Functions (Redis < 7.0)
+- GETDEL command (Redis < 6.2)
+- OBJECT FREQ (Redis < 4.0)
+- Client-side caching (Redis < 6.0)
+- Sharded pub/sub (Redis < 7.0)""",
 
         DatabaseType.TIME_SERIES: """Examples of version incompatibilities:
 - Continuous aggregates (TimescaleDB < 1.3)
 - Compression (TimescaleDB < 1.5)
 - Hierarchical continuous aggregates (TimescaleDB < 2.9)
-- Flux language (InfluxDB < 2.0)""",
+- Flux language (InfluxDB < 2.0)
+- Real-time continuous aggregates (TimescaleDB < 2.7)
+- Compression with cagg (TimescaleDB < 2.6)
+- Data tiering / tiered storage (TimescaleDB < 2.13)
+- add_dimension for multi-dimensional partitioning (TimescaleDB)""",
     }
 
     def validate(self, config: DatabaseConfig, script: str) -> ValidationResult:

@@ -1,32 +1,25 @@
 # DBagnets
 
-Agent loop that generates database initialization scripts using Claude.
+Agent-loop application that generates database initialization scripts using LLMs via LiteLLM (100+ providers). Supports two modes: single-database generation and multi-database benchmark mode with a shared logical schema.
 
-## Usage
+## Modes
+
+### Single-Database Mode
+
+Generates a single initialization script for one database target. The agent loop generates the script, validates it (syntax, version compatibility, depth, topic, completeness, best practices), and refines it until all validators pass.
 
 ```bash
-cd src
-
 # PostgreSQL - movie management system
-python main.py \
+python -m dbagnets.main \
   --db-type relational \
   --db-name postgresql \
-  --db-version 13 \
+  --db-version 16 \
   --idea "movie management system with actors, directors, genres and reviews" \
   --depth 4 \
   --output init.sql
 
-# MySQL - e-commerce platform
-python main.py \
-  --db-type relational \
-  --db-name mysql \
-  --db-version 8.0 \
-  --idea "e-commerce platform with products, orders, customers and shipping" \
-  --depth 4 \
-  --output shop.sql
-
 # Neo4j - social network
-python main.py \
+python -m dbagnets.main \
   --db-type graph \
   --db-name neo4j \
   --db-version 5.0 \
@@ -35,65 +28,86 @@ python main.py \
   --output social.cypher
 
 # Milvus - image search
-python main.py \
+python -m dbagnets.main \
   --db-type vector \
   --db-name milvus \
   --db-version 2.3 \
   --idea "image similarity search engine with tags and categories" \
   --depth 2 \
   --output images.py
+```
 
-# With debug logging
-python main.py \
-  --db-type relational \
-  --db-name postgresql \
-  --db-version 16 \
-  --idea "hospital management with patients, doctors, appointments and prescriptions" \
-  --depth 5 \
-  --verbose
+### Benchmark Mode (Multi-Database)
 
-# Sequential validation (slower but easier to read logs)
-python main.py \
-  --db-type relational \
-  --db-name postgresql \
-  --db-version 15 \
-  --idea "library management system" \
-  --depth 3 \
-  --sequential
+Generates equivalent scripts for multiple database technologies from a single invocation. The pipeline works in two phases:
 
-# Custom model and iteration limit
-python main.py \
-  --db-type relational \
-  --db-name postgresql \
-  --db-version 14 \
-  --idea "university course registration system" \
+1. **Phase 1 — Logical Schema**: An agent generates a technology-independent schema (entities, relationships, data types, constraints). It is validated through a loop with deterministic checks (depth via graph algorithm) and LLM validators (topic, completeness, relationships). The validated schema is saved as `schema.json`.
+
+2. **Phase 2 — Parallel Script Generation**: For each target database, an independent agent loop generates a script that faithfully implements the logical schema. Each script is validated for syntax, version compatibility, depth, best practices, and schema compliance (correct entities, equivalent data types, matching indexes and constraints).
+
+```bash
+# Generate equivalent scripts for PostgreSQL, Neo4j, and MongoDB
+python -m dbagnets.main \
+  --idea "movie management system with actors, directors, genres and reviews" \
   --depth 4 \
-  --model claude-sonnet-4-6 \
-  --max-iterations 5
+  --target relational:postgresql:16 \
+  --target graph:neo4j:5.0 \
+  --target document:mongodb:7.0 \
+  --output-dir ./benchmark_output
 
-# Pipe script to file, logs go to stderr
-python main.py \
-  --db-type relational \
-  --db-name postgresql \
-  --db-version 13 \
-  --idea "restaurant reservation system" \
-  --depth 3 \
-  > restaurant.sql
+# With a different model and custom iteration limit
+python -m dbagnets.main \
+  --idea "e-commerce platform with products, orders, customers and shipping" \
+  --depth 4 \
+  --target relational:postgresql:16 \
+  --target relational:mysql:8.0 \
+  --target graph:neo4j:5.0 \
+  --target document:mongodb:7.0 \
+  --target vector:milvus:2.3 \
+  --model openai/gpt-4o \
+  --max-iterations 5 \
+  --output-dir ./ecommerce_benchmark
+```
+
+Output directory structure:
+```
+benchmark_output/
+  schema.json              # Validated logical schema (source of truth)
+  postgresql_16.sql        # PostgreSQL initialization script
+  neo4j_5.0.cypher         # Neo4j initialization script
+  mongodb_7.0.js           # MongoDB initialization script
 ```
 
 ## Options
 
-```
---db-type        relational | graph | vector | document | key_value | time_series
---db-name        Engine name (postgresql, mysql, neo4j, milvus, etc.)
---db-version     Engine version (13, 8.0, 5.0, etc.)
---idea           What the database is for (free text)
---depth          Relationship depth (number of FK levels)
---output         Save script to file (default: stdout)
---max-iterations Max agent loop iterations (default: 10)
---model          Claude model (default: claude-sonnet-4-6)
---region         Vertex AI region (default: global)
---project-id     GCP project ID
---sequential     Run validators one by one instead of in parallel
--v, --verbose    Debug logging (prompts, token counts)
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--idea` | What the database is for (free text). **Required.** | — |
+| `--depth` | Relationship depth — longest chain of relationships between entities. **Required.** | — |
+| `--target` | Target database in `TYPE:NAME:VERSION` format (e.g. `relational:postgresql:16`). Repeatable. Activates benchmark mode. | — |
+| `--db-type` | Database type (single-DB mode). One of: `relational`, `graph`, `vector`, `document`, `key_value`, `time_series`. | — |
+| `--db-name` | Database engine name, e.g. `postgresql`, `neo4j`, `milvus` (single-DB mode). | — |
+| `--db-version` | Database engine version, e.g. `16`, `5.0`, `2.3` (single-DB mode). | — |
+| `--output` | Save script to file (single-DB mode). Without this flag, the script is printed to stdout. | stdout |
+| `--output-dir` | Output directory for benchmark mode. Saves `schema.json` and per-target scripts. Without this flag, output is printed to stdout. | stdout |
+| `--max-iterations` | Maximum agent loop iterations before giving up. | `10` |
+| `--model` | LiteLLM model string. Supports any provider: `vertex_ai/claude-sonnet-4-6`, `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`, etc. | `vertex_ai/claude-sonnet-4-6` |
+| `--sequential` | Run validators sequentially instead of in parallel. Useful for debugging. | parallel |
+| `-v`, `--verbose` | Enable debug logging (prompts, token counts, timing details). | off |
+
+## Supported Database Types
+
+| Type | Example engines | Script format |
+|------|----------------|---------------|
+| `relational` | PostgreSQL, MySQL, SQLite | `.sql` |
+| `graph` | Neo4j, Amazon Neptune | `.cypher` |
+| `vector` | Milvus, Qdrant | `.py` |
+| `document` | MongoDB, CouchDB | `.js` |
+| `key_value` | Redis, DynamoDB | `.redis` |
+| `time_series` | TimescaleDB, InfluxDB | `.sql` |
+
+## Tests
+
+```bash
+python -m pytest --cov=src/dbagnets --cov-report=term-missing
 ```

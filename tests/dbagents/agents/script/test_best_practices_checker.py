@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from dbagnets.agents.best_practices_checker import BestPracticesCheckerAgent
+from dbagnets.agents.script.best_practices_checker import BestPracticesCheckerAgent
 from dbagnets.models import ValidationResult, ValidationStatus
 
 

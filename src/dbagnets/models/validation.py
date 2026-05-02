@@ -10,6 +10,7 @@ class ValidationResult(BaseModel):
     status: ValidationStatus
     feedback: str
     details: str = ""
+    todos: list[str] = []
 
     @property
     def passed(self) -> bool:
@@ -34,4 +35,7 @@ class IterationResult(BaseModel):
         for v in self.validations:
             icon = "PASS" if v.passed else "FAIL"
             lines.append(f"  [{icon}] {v.agent_name}: {v.feedback}")
+            if not v.passed and v.todos:
+                for todo in v.todos:
+                    lines.append(f"        TODO: {todo}")
         return "\n".join(lines)

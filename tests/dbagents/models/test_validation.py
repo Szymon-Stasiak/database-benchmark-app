@@ -16,6 +16,17 @@ class TestValidationResult:
         r = ValidationResult(agent_name="Test", status=ValidationStatus.PASS, feedback="OK")
         assert r.details == ""
 
+    def test_todos_defaults_to_empty_list(self):
+        r = ValidationResult(agent_name="Test", status=ValidationStatus.PASS, feedback="OK")
+        assert r.todos == []
+
+    def test_todos_stored_when_provided(self):
+        r = ValidationResult(
+            agent_name="Test", status=ValidationStatus.FAIL, feedback="Bad",
+            todos=["Fix X", "Add Y"],
+        )
+        assert r.todos == ["Fix X", "Add Y"]
+
 
 class TestIterationResult:
     def test_all_passed_returns_true_when_every_validation_passes(self):
@@ -70,3 +81,19 @@ class TestIterationResult:
         result = IterationResult(iteration=1, script="x")
         assert result.validations == []
         assert result.all_passed is True
+
+    def test_summary_includes_todos_for_failed_validations(self):
+        result = IterationResult(
+            iteration=1,
+            script="SELECT 1;",
+            validations=[
+                ValidationResult(
+                    agent_name="Checker", status=ValidationStatus.FAIL,
+                    feedback="Missing features",
+                    todos=["Add index on users.email", "Add CHECK on age"],
+                ),
+            ],
+        )
+        text = result.summary()
+        assert "TODO: Add index on users.email" in text
+        assert "TODO: Add CHECK on age" in text
