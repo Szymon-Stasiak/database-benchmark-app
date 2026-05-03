@@ -72,6 +72,15 @@ class ScriptGeneratorAgent(BaseAgent):
    - Junction tables for M:N relationships
    PRODUCTION-SCALE DESIGN:
    - Table partitioning (RANGE by date, LIST by category) for entities with high data_size_hints
+     CRITICAL PARTITIONING RULE: When partitioning a table, keep the original single-column
+     PRIMARY KEY (e.g. id SERIAL PRIMARY KEY) intact. Do NOT create a composite PK that
+     includes the partition key (e.g. (id, created_at)). Instead, add the partition column
+     as a separate NOT NULL column and partition by it. This preserves FK referenceability —
+     other tables can still reference the single-column PK. If PostgreSQL requires the
+     partition key in the PK, use a UNIQUE constraint on (id, partition_col) instead of
+     making it the PK, and keep id as the sole PK for FK references.
+     Also: do NOT combine FILLFACTOR with PARTITION BY in the same CREATE TABLE — set
+     FILLFACTOR via ALTER TABLE after creation.
    - Covering indexes (INCLUDE columns) for frequently queried combinations
    - Partial indexes on commonly filtered subsets (e.g. WHERE status = 'active')
    - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups

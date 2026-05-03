@@ -54,9 +54,17 @@ class BestPracticesCheckerAgent(BaseAgent):
 
 6. PRODUCTION SCALE (FAIL if missing for high-volume entities):
    - Table partitioning for entities with high data_size_hints (>100K rows)
+     PARTITIONING + FK RULE: Partitioned tables MUST keep a single-column PRIMARY KEY
+     (e.g. id) so that other tables can reference it via FK. Do NOT require a composite
+     PK that includes the partition column — this breaks FK references. Accept either:
+     (a) single-column PK + partition by a separate column, or
+     (b) single-column PK + UNIQUE(id, partition_col) for PostgreSQL compatibility.
+     Do NOT fail a script that uses partitioning with a single-column PK.
+     Also: FILLFACTOR must NOT appear in the same CREATE TABLE as PARTITION BY —
+     it should be applied via ALTER TABLE afterward. Do NOT fail for this ordering.
    - Covering indexes (INCLUDE) for the most common query patterns
    - Appropriate index types: B-tree for equality/range, GIN for arrays/JSONB/full-text
-   - FILLFACTOR tuning on tables with frequent updates
+   - FILLFACTOR tuning on tables with frequent updates (via ALTER TABLE if partitioned)
 
 7. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
    These are nice-to-have features. If 2+ are present, PASS. If none are present,
