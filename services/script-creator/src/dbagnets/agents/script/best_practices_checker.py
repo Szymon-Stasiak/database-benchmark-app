@@ -100,13 +100,13 @@ class BestPracticesCheckerAgent(BaseAgent):
 3. INDEXES & CONSTRAINTS:
    - Unique constraints on natural identifiers
    - Indexes on frequently queried properties
-   - Node key constraints where composite uniqueness is needed
    - Range indexes vs text indexes — correct index type per property data type
    - Composite indexes on frequently co-queried properties
+   - Do NOT use existence constraints (IS NOT NULL) or node key constraints —
+     these require Neo4j Enterprise Edition and FAIL on Community Edition.
 
 4. PROPERTIES:
    - Appropriate property types (not strings for everything)
-   - Existence constraints (IS NOT NULL) on all required properties
    - Temporal properties use proper types (datetime, date)
    - Point/spatial types for geographic data
 
@@ -114,8 +114,6 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Composite indexes on properties frequently queried together
    - Range indexes on all properties used in WHERE clauses and ORDER BY
    - Text indexes on all string properties used in CONTAINS / STARTS WITH queries
-   - Existence constraints (IS NOT NULL) on all required properties for data integrity at scale
-   - Node key constraints for composite uniqueness on high-volume node labels
 
 6. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
    These are nice-to-have features. If 2+ are present, PASS. If none are present,

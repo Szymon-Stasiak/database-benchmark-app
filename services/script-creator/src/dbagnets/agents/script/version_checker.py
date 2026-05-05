@@ -32,8 +32,9 @@ class VersionCheckerAgent(BaseAgent):
 - ENUM type variations differ between engines (PostgreSQL CREATE TYPE vs MySQL ENUM column)""",
 
         DatabaseType.GRAPH: """Examples of version incompatibilities:
-- Node key constraints (Neo4j < 5.0)
-- CREATE CONSTRAINT ... IS NOT NULL (Neo4j < 4.0)
+- Property existence constraints (IS NOT NULL) and node key constraints
+  require Neo4j ENTERPRISE Edition — they FAIL on Community Edition.
+  Flag any IS NOT NULL or NODE KEY constraint as FAIL.
 - SHOW INDEXES (Neo4j < 4.2)
 - Vector indexes (Neo4j < 5.11)
 - Full-text indexes via db.index.fulltext.createNodeIndex (Neo4j < 4.0 uses different syntax)

@@ -102,7 +102,6 @@ class ScriptGeneratorAgent(BaseAgent):
    - For EACH relationship in the LogicalSchema, the script MUST include either:
      (a) relationship property constraints (e.g. CREATE CONSTRAINT ... FOR ()-[r:REL_TYPE]-() ...)
      (b) relationship property indexes
-     (c) or relationship existence constraints
      so that every relationship type is explicitly defined in the DDL.
    - FOREIGN KEY vs PRIMARY KEY distinction (CRITICAL):
      A PRIMARY KEY is an entity's OWN identifier on its OWN node
@@ -113,14 +112,17 @@ class ScriptGeneratorAgent(BaseAgent):
    - Indexes on frequently queried properties (marked as indexed)
    - Uniqueness constraints for unique/primary key attributes
    - Use PascalCase for node labels and UPPER_SNAKE_CASE for relationship types
+   NEO4J COMMUNITY EDITION LIMITATION (CRITICAL):
+   - Property existence constraints (IS NOT NULL) and node key constraints
+     require Neo4j Enterprise Edition. NEVER use them — they will cause runtime
+     errors on Community Edition. Use uniqueness constraints and indexes only.
    PRODUCTION-SCALE DESIGN:
    - Range indexes on properties used in WHERE clauses and ORDER BY
    - Text indexes on properties used in full-text search (CONTAINS, STARTS WITH)
    - Composite indexes on properties frequently queried together
-   - Existence constraints (IS NOT NULL) on all required properties for data integrity at scale
    MAXIMIZE NATIVE FEATURES — show what graphs do better than relational:
    - Rich relationship properties (e.g. role, weight, timestamp on edges)
-     with existence or type constraints on those properties
+     with indexes on those properties
    - Point/spatial types for geographic data
    - Additional traversal relationships beyond the LogicalSchema to expose
      useful graph navigation paths (e.g. shortcut relationships, reverse lookups)

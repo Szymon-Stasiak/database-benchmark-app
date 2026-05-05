@@ -58,7 +58,7 @@ _CONTAINER_REGISTRY: dict[str, ContainerInfo] = {
         environment={"MYSQL_ROOT_PASSWORD": "root", "MYSQL_DATABASE": "benchmark"},
     ),
     "sqlite": ContainerInfo(
-        docker_image="kesilent/sqlite-web:{version}",
+        docker_image="coleifer/sqlite-web:latest",
         default_port=8080,
         environment={},
     ),
@@ -68,7 +68,7 @@ _CONTAINER_REGISTRY: dict[str, ContainerInfo] = {
         environment={"NEO4J_AUTH": "neo4j/benchmark"},
     ),
     "milvus": ContainerInfo(
-        docker_image="milvusdb/milvus:v{version}-standalone",
+        docker_image="milvusdb/milvus:v{version}",
         default_port=19530,
         environment={"ETCD_USE_EMBED": "true"},
     ),

@@ -49,7 +49,8 @@ class SchemaComplianceCheckerAgent(BaseAgent):
   on them. In graphs, relationships replace foreign keys entirely.
 - Other non-FK attributes MUST be present as node properties.
 - Indexed non-FK attributes MUST have indexes.
-- NOT NULL constraints on non-FK attributes MUST be preserved via IS NOT NULL.""",
+- Do NOT require IS NOT NULL (existence) constraints or node key constraints —
+  these are Enterprise-only features and unavailable in Community Edition.""",
 
         DatabaseType.DOCUMENT: """DATABASE-SPECIFIC COMPLIANCE RULES (document):
 - Entities can be implemented as standalone collections OR as embedded sub-documents

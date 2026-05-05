@@ -136,7 +136,7 @@ class TestResolveContainer:
             ("neo4j", "5.0", "neo4j:5.0", 7687),
             ("mongodb", "7.0", "mongo:7.0", 27017),
             ("redis", "7", "redis:7", 6379),
-            ("milvus", "2.3", "milvusdb/milvus:v2.3-standalone", 19530),
+            ("milvus", "2.3", "milvusdb/milvus:v2.3", 19530),
             ("qdrant", "1.8", "qdrant/qdrant:v1.8", 6333),
             ("couchdb", "3.3", "couchdb:3.3", 5984),
             ("dynamodb", "2.0", "amazon/dynamodb-local:2.0", 8000),
