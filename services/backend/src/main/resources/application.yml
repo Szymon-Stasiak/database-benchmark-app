@@ -4,8 +4,22 @@ server:
 spring:
   application:
     name: backend
+  datasource:
+    url: jdbc:sqlite:data/benchmark.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
   security:
     oauth2:
       resourceserver:
         jwt:
+          jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
           issuer-uri: https://accounts.google.com
+
+script-creator:
+  base-url: http://localhost:8001
