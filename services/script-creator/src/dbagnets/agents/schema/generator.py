@@ -152,6 +152,10 @@ STEP-BY-STEP APPROACH:
    - Add attributes to each entity (with abstract types).
    - Add any additional entities and M:N or other relationships to enrich the schema.
    - The depth_chain entities are the backbone — do NOT remove them.
+   - CRITICAL: The longest directed path in the ENTIRE graph must be exactly {depth} hops.
+     Do NOT add 1:N relationships that extend beyond the chain's start or end entities.
+     Additional relationships (M:N, reverse 1:N, or between non-adjacent chain entities)
+     are fine as long as they don't create a directed path longer than {depth}.
 
 OUTPUT FORMAT:
 - depth_chain: list of {depth + 1} entity names forming the main chain (left to right).

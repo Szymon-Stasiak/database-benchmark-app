@@ -33,19 +33,31 @@ class SchemaDepthChecker:
                 details=f"Longest path ({longest} hops): {path_str}",
             )
 
+        if longest > schema.depth:
+            fix_hint = (
+                f"The longest directed path is {longest} hops but must be exactly "
+                f"{schema.depth}. Remove or reverse relationships to shorten the "
+                f"longest path. The extra segment is outside your depth_chain — "
+                f"check that no additional 1:N relationships extend beyond the chain ends."
+            )
+        else:
+            fix_hint = (
+                f"The longest directed path is {longest} hops but must be exactly "
+                f"{schema.depth}. Add entities and 1:N relationships to extend "
+                f"the depth_chain to {schema.depth + 1} entities."
+            )
+
         return ValidationResult(
             agent_name=self.name,
             status=ValidationStatus.FAIL,
             feedback=(
                 f"Relationship depth is {longest}, expected {schema.depth}. "
                 f"Current longest path: {path_str}. "
-                f"You need a chain of {schema.depth} directed relationships "
-                f"connecting {schema.depth + 1} entities."
+                f"{fix_hint}"
             ),
             details=(
                 f"Longest path found: {longest} hops: {path_str}. "
-                f"Required: {schema.depth} hops. "
-                f"Add more entities and relationships to extend the chain."
+                f"Required: exactly {schema.depth} hops."
             ),
         )
 

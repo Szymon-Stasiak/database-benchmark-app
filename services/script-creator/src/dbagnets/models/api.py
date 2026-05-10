@@ -107,6 +107,36 @@ _CONTAINER_REGISTRY: dict[str, ContainerInfo] = {
         default_port=8086,
         environment={"DOCKER_INFLUXDB_INIT_MODE": "setup", "DOCKER_INFLUXDB_INIT_USERNAME": "admin", "DOCKER_INFLUXDB_INIT_PASSWORD": "adminadmin", "DOCKER_INFLUXDB_INIT_ORG": "benchmark", "DOCKER_INFLUXDB_INIT_BUCKET": "benchmark"},
     ),
+    "arangodb": ContainerInfo(
+        docker_image="arangodb:{version}",
+        default_port=8529,
+        environment={"ARANGO_ROOT_PASSWORD": "root"},
+    ),
+    "memgraph": ContainerInfo(
+        docker_image="memgraph/memgraph:{version}",
+        default_port=7687,
+        environment={"MEMGRAPH_USER": "memgraph", "MEMGRAPH_PASSWORD": "memgraph"},
+    ),
+    "weaviate": ContainerInfo(
+        docker_image="cr.weaviate.io/semitechnologies/weaviate:{version}",
+        default_port=8080,
+        environment={"AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED": "true", "PERSISTENCE_DATA_PATH": "/var/lib/weaviate"},
+    ),
+    "elasticsearch": ContainerInfo(
+        docker_image="docker.elastic.co/elasticsearch/elasticsearch:{version}",
+        default_port=9200,
+        environment={"discovery.type": "single-node", "xpack.security.enabled": "false", "ES_JAVA_OPTS": "-Xms256m -Xmx256m"},
+    ),
+    "etcd": ContainerInfo(
+        docker_image="quay.io/coreos/etcd:v{version}",
+        default_port=2379,
+        environment={"ETCD_ADVERTISE_CLIENT_URLS": "http://0.0.0.0:2379", "ETCD_LISTEN_CLIENT_URLS": "http://0.0.0.0:2379"},
+    ),
+    "questdb": ContainerInfo(
+        docker_image="questdb/questdb:{version}",
+        default_port=9000,
+        environment={"QDB_CAIRO_COMMIT_LAG": "1000"},
+    ),
 }
 
 _FALLBACK_CONTAINER = ContainerInfo(
