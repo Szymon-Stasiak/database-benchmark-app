@@ -1,0 +1,142 @@
+### Health check
+GET http://{{host}}/docs
+
+### Relational - Movie management (PostgreSQL)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "movie management system with actors, directors, genres and reviews",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "postgresql", "db_version": "16"}
+  ]
+}
+
+### Relational - E-commerce (MySQL)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "e-commerce platform with products, orders, customers, payments and shipping",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "mysql", "db_version": "8.0"}
+  ]
+}
+
+### Graph - Social network (Neo4j)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "social network for developers with projects, skills, companies and endorsements",
+  "depth": 3,
+  "targets": [
+    {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"}
+  ]
+}
+
+### Document - Blog platform (MongoDB)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "blog platform with authors, posts, comments, tags and categories",
+  "depth": 4,
+  "targets": [
+    {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"}
+  ]
+}
+
+### Vector - Image search (Milvus)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "image similarity search engine with tags, categories and user collections",
+  "depth": 3,
+  "targets": [
+    {"db_type": "vector", "db_name": "milvus", "db_version": "2.3"}
+  ]
+}
+
+### Key-Value - Session store (Redis)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "user session and cache store with rate limiting and feature flags",
+  "depth": 2,
+  "targets": [
+    {"db_type": "key_value", "db_name": "redis", "db_version": "7"}
+  ]
+}
+
+### Time Series - IoT metrics (TimescaleDB)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "IoT sensor monitoring with devices, measurements, alerts and dashboards",
+  "depth": 3,
+  "targets": [
+    {"db_type": "time_series", "db_name": "timescaledb", "db_version": "16"}
+  ]
+}
+
+### Benchmark - Multi-database (PostgreSQL + Neo4j + MongoDB)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "movie management system with actors, directors, genres and reviews",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "postgresql", "db_version": "16"},
+    {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"},
+    {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"}
+  ]
+}
+
+### Benchmark - Full stack (5 databases)
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "e-commerce platform with products, orders, customers, payments and shipping",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "postgresql", "db_version": "16"},
+    {"db_type": "relational", "db_name": "mysql", "db_version": "8.0"},
+    {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"},
+    {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"},
+    {"db_type": "key_value", "db_name": "redis", "db_version": "7"}
+  ],
+  "model": "vertex_ai/claude-sonnet-4-6",
+  "max_iterations": 5
+}
+
+### Custom model - OpenAI
+# @timeout = 600000
+POST http://{{host}}/generate
+Content-Type: application/json
+
+{
+  "idea": "library management system with books, authors, members, loans and reservations",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "postgresql", "db_version": "16"}
+  ],
+  "model": "openai/gpt-4o",
+  "max_iterations": 8
+}
