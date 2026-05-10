@@ -6,16 +6,35 @@ interface GoogleJwtPayload {
   email: string
   name: string
   picture: string
+  exp: number
 }
 
 const STORAGE_KEY = "auth_token"
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const { exp } = jwtDecode<GoogleJwtPayload>(token)
+    return Date.now() >= exp * 1000
+  } catch {
+    return true
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY)
+    setUser(null)
+  }, [])
 
   useEffect(() => {
     const storedToken = localStorage.getItem(STORAGE_KEY)
     if (storedToken) {
+      if (isTokenExpired(storedToken)) {
+        logout()
+        return
+      }
       try {
         const decoded = jwtDecode<GoogleJwtPayload>(storedToken)
         setUser({
@@ -25,10 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token: storedToken,
         })
       } catch {
-        localStorage.removeItem(STORAGE_KEY)
+        logout()
       }
     }
-  }, [])
+  }, [logout])
 
   const login = useCallback(async (credential: string) => {
     const decoded = jwtDecode<GoogleJwtPayload>(credential)
@@ -58,11 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // API call is best-effort; user is still authenticated client-side
     }
-  }, [])
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY)
-    setUser(null)
   }, [])
 
   return (
