@@ -128,13 +128,15 @@ class TestValidate:
 
         assert result.status == ValidationStatus.PASS
 
-    def test_mn_relationship_counts_as_one_hop(self):
-        # a --(M:N)--> b  => depth = 1
+    def test_mn_relationship_does_not_count_for_depth(self):
+        # a --(1:N)--> b --(M:N)--> c  => depth = 1 (M:N ignored)
         schema = LogicalSchema(
             idea="test", depth=1,
-            entities=[_entity("a"), _entity("b")],
+            depth_chain=["a", "b"],
+            entities=[_entity("a"), _entity("b"), _entity("c")],
             relationships=[
-                _rel("a_to_b", "a", "b", RelationshipCardinality.MANY_TO_MANY),
+                _rel("a_to_b", "a", "b", RelationshipCardinality.ONE_TO_MANY),
+                _rel("b_to_c", "b", "c", RelationshipCardinality.MANY_TO_MANY),
             ],
         )
         checker = SchemaDepthChecker()

@@ -1,9 +1,15 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Download, Square, RotateCcw, FileText, Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Download, Square, RotateCcw, FileText, Loader2, RefreshCw, Code, Trash2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { ContainerLogsDialog } from "@/components/benchmark/ContainerLogsDialog"
 import { getDatabaseStatusConfig, cn } from "@/lib/utils"
@@ -14,12 +20,27 @@ interface DatabaseCardProps {
   benchmarkId: string
   scriptPreview?: string
   onStatusChange?: (databaseId: string, status: DatabaseResponse["status"]) => void
+  onDelete?: (databaseId: string) => void
 }
 
-export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusChange }: DatabaseCardProps) {
+export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusChange, onDelete }: DatabaseCardProps) {
   const [logsOpen, setLogsOpen] = useState(false)
+  const [scriptOpen, setScriptOpen] = useState(false)
+  const [fullScript, setFullScript] = useState<string | null>(null)
+  const [scriptLoading, setScriptLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [showScript, setShowScript] = useState(false)
+
+  useEffect(() => {
+    if (scriptOpen) {
+      setScriptLoading(true)
+      benchmarkApi.getFullScript(benchmarkId, database.id)
+        .then(setFullScript)
+        .catch(() => setFullScript("Failed to load script"))
+        .finally(() => setScriptLoading(false))
+    } else {
+      setFullScript(null)
+    }
+  }, [scriptOpen, benchmarkId, database.id])
 
   const config = getDatabaseStatusConfig(database.status)
   const canDownloadScript = !["PENDING", "SCRIPT_GENERATING"].includes(database.status)
@@ -46,6 +67,17 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
     }
   }
 
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${database.dbName}? This will stop and remove the container.`)) return
+    setActionLoading("delete")
+    try {
+      await benchmarkApi.deleteDatabase(benchmarkId, database.id)
+      onDelete?.(database.id)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleRedeploy = async () => {
     setActionLoading("redeploy")
     try {
@@ -60,7 +92,7 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
     <>
       <Card className="h-full">
         <CardContent className="p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold capitalize">{database.dbName}</span>
@@ -90,6 +122,17 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
               {database.hostPort && database.status === "RUNNING" && (
                 <Badge variant="outline" className="text-xs">Port: {database.hostPort}</Badge>
               )}
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDelete}
+                disabled={actionLoading === "delete"}
+                title="Delete database"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              >
+                {actionLoading === "delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </Button>
             </div>
           </div>
 
@@ -97,33 +140,11 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
             <p className="mt-2 text-sm text-destructive">{database.errorMessage}</p>
           )}
 
-          {/* Script Preview */}
-          <AnimatePresence>
-            {hasScriptPreview && showScript && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.25 }}
-                className="overflow-hidden"
-              >
-                <pre className="mt-3 rounded-md bg-muted p-3 text-xs font-mono text-muted-foreground overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">
-                  {scriptPreview}
-                </pre>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="flex items-center flex-wrap gap-2 mt-3">
             {hasScriptPreview && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowScript(!showScript)}
-                className="text-xs"
-              >
-                {showScript ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
-                {showScript ? "Hide Script" : "View Script"}
+              <Button variant="outline" size="sm" onClick={() => setScriptOpen(true)} className="text-xs">
+                <Code className="h-3.5 w-3.5 mr-1" />
+                View Script
               </Button>
             )}
 
@@ -150,9 +171,9 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
                   </Button>
                 )}
 
-                <Button variant="outline" size="sm" onClick={handleRestart} disabled={actionLoading === "restart"} title="Restart container" className="text-xs">
+                <Button variant="outline" size="sm" onClick={handleRestart} disabled={actionLoading === "restart"} title="Redeploy container" className="text-xs">
                   {actionLoading === "restart" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                  Restart
+                  Redeploy
                 </Button>
 
                 <Button variant="outline" size="sm" onClick={() => setLogsOpen(true)} title="View container logs" className="text-xs">
@@ -164,6 +185,21 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={scriptOpen} onOpenChange={setScriptOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader className="flex-row items-center justify-between gap-4">
+            <DialogTitle>Script: {database.dbName}</DialogTitle>
+            <Button variant="outline" size="sm" onClick={() => benchmarkApi.downloadScript(benchmarkId, database.id)}>
+              <Download className="h-4 w-4 mr-1" />
+              Download
+            </Button>
+          </DialogHeader>
+          <pre className="flex-1 overflow-auto rounded-md bg-muted p-4 font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all min-h-48 max-h-[60vh]">
+            {scriptLoading ? "Loading script..." : fullScript || "No script available"}
+          </pre>
+        </DialogContent>
+      </Dialog>
 
       <ContainerLogsDialog
         open={logsOpen}

@@ -10,6 +10,7 @@ public record BenchmarkResponse(
     String topic,
     String status,
     Instant createdAt,
+    String logicalSchema,
     List<DatabaseResponse> databases
 ) {
     public record DatabaseResponse(
@@ -40,6 +41,7 @@ public record BenchmarkResponse(
             benchmark.getTopic(),
             benchmark.getStatus().name(),
             benchmark.getCreatedAt(),
+            benchmark.getLogicalSchema(),
             benchmark.getDatabases().stream()
                 .map(DatabaseResponse::from)
                 .toList()

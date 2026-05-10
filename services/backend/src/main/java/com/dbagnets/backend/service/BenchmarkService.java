@@ -57,7 +57,7 @@ public class BenchmarkService {
 
     @Transactional
     public BenchmarkResponse createBenchmark(CreateBenchmarkRequest request, String userEmail) {
-        var benchmark = new Benchmark(request.topic(), userEmail);
+        var benchmark = new Benchmark(request.topic(), userEmail, request.depth());
 
         for (var target : request.databases()) {
             var dbType = DatabaseType.valueOf(target.dbType().toUpperCase());
@@ -103,7 +103,7 @@ public class BenchmarkService {
             .toList();
 
         ScriptCreatorResponse response = scriptCreatorClient.generate(
-            benchmark.getTopic(), 4, targets
+            benchmark.getTopic(), benchmark.getDepth(), targets
         );
 
         if (!response.success()) {
@@ -305,17 +305,22 @@ public class BenchmarkService {
 
     public void redeployBenchmark(String benchmarkId) {
         var benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
-        var failedDbs = benchmark.getDatabases().stream()
-            .filter(db -> db.getStatus() == DatabaseStatus.FAILED && db.getScript() != null)
+        var redeployableDbs = benchmark.getDatabases().stream()
+            .filter(db -> db.getScript() != null
+                && db.getStatus() != DatabaseStatus.RUNNING
+                && db.getStatus() != DatabaseStatus.PENDING
+                && db.getStatus() != DatabaseStatus.SCRIPT_GENERATING
+                && db.getStatus() != DatabaseStatus.CONTAINER_STARTING
+                && db.getStatus() != DatabaseStatus.INITIALIZING)
             .toList();
 
-        if (failedDbs.isEmpty()) {
-            throw new RuntimeException("No failed databases with scripts to redeploy");
+        if (redeployableDbs.isEmpty()) {
+            throw new RuntimeException("No databases available for redeployment");
         }
 
-        log.info("Redeploying benchmark {} with {} failed databases", benchmarkId, failedDbs.size());
+        log.info("Redeploying benchmark {} with {} databases", benchmarkId, redeployableDbs.size());
 
-        for (var db : failedDbs) {
+        for (var db : redeployableDbs) {
             cleanupContainer(db);
             db.setStatus(DatabaseStatus.SCRIPT_READY);
             db.setErrorMessage(null);
@@ -423,6 +428,28 @@ public class BenchmarkService {
         var db = databaseRepository.findById(databaseId).orElseThrow();
         if (db.getScript() == null) return null;
         return db.getScript().substring(0, Math.min(db.getScript().length(), 1000));
+    }
+
+    @Transactional
+    public void deleteDatabase(String benchmarkId, String databaseId) {
+        var benchmark = benchmarkRepository.findById(benchmarkId)
+            .orElseThrow(() -> new RuntimeException("Benchmark not found: " + benchmarkId));
+        var db = benchmark.getDatabases().stream()
+            .filter(d -> d.getId().equals(databaseId))
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("Database not found: " + databaseId));
+
+        cleanupContainer(db);
+        benchmark.getDatabases().remove(db);
+
+        if (benchmark.getDatabases().isEmpty()) {
+            benchmarkRepository.delete(benchmark);
+            log.info("Deleted last database {} and benchmark {}", databaseId, benchmarkId);
+        } else {
+            benchmarkRepository.save(benchmark);
+            finalizeBenchmark(benchmarkId);
+            log.info("Deleted database {} from benchmark {}", databaseId, benchmarkId);
+        }
     }
 
     @Transactional

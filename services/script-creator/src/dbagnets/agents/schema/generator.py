@@ -44,7 +44,8 @@ class SchemaGeneratorAgent(BaseAgent):
             logger.info("[SchemaGenerator] Generating initial schema")
 
         result = self._call_llm_structured(
-            system_prompt, user_prompt, GeneratedSchemaResponse, "generate_schema"
+            system_prompt, user_prompt, GeneratedSchemaResponse, "generate_schema",
+            max_tokens=16384,
         )
 
         schema = self._to_logical_schema(result, idea, depth)

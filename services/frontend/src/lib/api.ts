@@ -60,6 +60,18 @@ export const benchmarkApi = {
 
   get: (id: string) => apiFetch<BenchmarkResponse>(`/api/benchmarks/${id}`),
 
+  getFullScript: async (benchmarkId: string, dbId: string): Promise<string> => {
+    const token = localStorage.getItem("auth_token")
+    const res = await fetch(
+      `/api/benchmarks/${benchmarkId}/databases/${dbId}/script`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    )
+    if (!res.ok) throw new ApiError(res.status, await res.text())
+    return res.text()
+  },
+
   downloadScript: async (benchmarkId: string, dbId: string) => {
     const token = localStorage.getItem("auth_token")
     const res = await fetch(
@@ -109,6 +121,11 @@ export const benchmarkApi = {
     apiFetch<{ preview: string }>(
       `/api/benchmarks/${benchmarkId}/databases/${dbId}/script/preview`,
     ),
+
+  deleteDatabase: (benchmarkId: string, dbId: string) =>
+    apiFetch<void>(`/api/benchmarks/${benchmarkId}/databases/${dbId}`, {
+      method: "DELETE",
+    }),
 
   deleteBenchmark: async (benchmarkId: string) => {
     const token = localStorage.getItem("auth_token")

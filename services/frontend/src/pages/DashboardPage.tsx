@@ -13,9 +13,13 @@ import type { BenchmarkResponse } from "@/types/benchmark"
 export function DashboardPage() {
   const navigate = useNavigate()
   const [benchmarks, setBenchmarks] = useState<BenchmarkResponse[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    benchmarkApi.list().then(setBenchmarks).catch(console.error)
+    benchmarkApi.list()
+      .then(setBenchmarks)
+      .catch(console.error)
+      .finally(() => setLoading(false))
   }, [])
 
   const totalBenchmarks = benchmarks.length
@@ -54,7 +58,11 @@ export function DashboardPage() {
                 </div>
                 <div>
                   <CardDescription>{stat.label}</CardDescription>
-                  <CardTitle className="text-3xl">{stat.value}</CardTitle>
+                  <CardTitle className="text-3xl">
+                    {loading ? (
+                      <div className="h-9 w-10 bg-muted rounded animate-pulse" />
+                    ) : stat.value}
+                  </CardTitle>
                 </div>
               </CardHeader>
             </Card>
@@ -64,7 +72,21 @@ export function DashboardPage() {
 
       <h3 className="text-lg font-semibold mb-4">Benchmarks</h3>
 
-      {benchmarks.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-4 w-48 bg-muted rounded" />
+                  <div className="h-3 w-32 bg-muted rounded" />
+                </div>
+                <div className="h-6 w-20 bg-muted rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : benchmarks.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">

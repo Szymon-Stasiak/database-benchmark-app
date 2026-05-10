@@ -6,6 +6,7 @@ import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import NewBenchmarkPage from "@/pages/NewBenchmarkPage"
 import BenchmarkDetailPage from "@/pages/BenchmarkDetailPage"
+import BenchmarkTestsPage from "@/pages/BenchmarkTestsPage"
 import { AnimatePresence, motion } from "framer-motion"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
@@ -16,10 +17,10 @@ function AnimatedRoutes() {
     <AnimatePresence mode="wait">
       <motion.div
         key={location.pathname}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
       >
         <Routes location={location}>
           <Route path="/login" element={<LoginPage />} />
@@ -36,6 +37,14 @@ function AnimatedRoutes() {
             element={
               <ProtectedRoute>
                 <NewBenchmarkPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/benchmarks/tests"
+            element={
+              <ProtectedRoute>
+                <BenchmarkTestsPage />
               </ProtectedRoute>
             }
           />

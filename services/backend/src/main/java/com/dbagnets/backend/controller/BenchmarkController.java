@@ -142,6 +142,13 @@ public class BenchmarkController {
             .body(script);
     }
 
+    @DeleteMapping("/{id}/databases/{dbId}")
+    public ResponseEntity<Void> deleteDatabase(@PathVariable String id,
+                                                @PathVariable String dbId) {
+        benchmarkService.deleteDatabase(id, dbId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/databases/{dbId}/stop")
     public ResponseEntity<Void> stopDatabase(@PathVariable String id,
                                               @PathVariable String dbId) {

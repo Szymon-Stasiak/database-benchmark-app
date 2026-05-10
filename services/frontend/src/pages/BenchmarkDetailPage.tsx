@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, RefreshCw, Loader2, Info, Trash2 } from "lucide-react"
+import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
 import { DatabaseCard } from "@/components/benchmark/DatabaseCard"
+import { SchemaRelationships, SchemaEntities } from "@/components/benchmark/LogicalSchemaPanel"
 import { AppLayout } from "@/components/AppLayout"
 import { getBenchmarkStatusConfig, cn } from "@/lib/utils"
 import type { BenchmarkResponse, BenchmarkStatus, BenchmarkStatusEvent, DatabaseStatusEvent, ScriptGeneratedEvent } from "@/types/benchmark"
@@ -120,6 +121,18 @@ export default function BenchmarkDetailPage() {
     })
   }, [])
 
+  const handleDeleteDatabase = useCallback((databaseId: string) => {
+    setBenchmark((prev) => {
+      if (!prev) return prev
+      const remaining = prev.databases.filter((db) => db.id !== databaseId)
+      if (remaining.length === 0) {
+        navigate("/dashboard")
+        return prev
+      }
+      return { ...prev, databases: remaining }
+    })
+  }, [navigate])
+
   const handleRedeployAll = async () => {
     if (!id) return
     setRedeployLoading(true)
@@ -142,7 +155,7 @@ export default function BenchmarkDetailPage() {
     }
   }
 
-  const hasFailedDatabases = benchmark?.databases.some((db) => db.status === "FAILED") ?? false
+  const hasInactiveDatabases = benchmark?.databases.some((db) => db.status !== "RUNNING") ?? false
 
   if (error) {
     return (
@@ -157,7 +170,38 @@ export default function BenchmarkDetailPage() {
   if (!benchmark) {
     return (
       <AppLayout>
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 w-32 bg-muted rounded" />
+          <div className="rounded-xl border border-border p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="h-6 w-64 bg-muted rounded" />
+              <div className="h-6 w-24 bg-muted rounded-full" />
+            </div>
+            <div className="h-4 w-48 bg-muted rounded" />
+          </div>
+          <div className="flex items-center justify-between px-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5">
+                <div className="h-8 w-8 rounded-full bg-muted" />
+                <div className="h-3 w-12 bg-muted rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border p-6 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-muted" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-4 w-32 bg-muted rounded" />
+                    <div className="h-3 w-24 bg-muted rounded" />
+                  </div>
+                </div>
+                <div className="h-6 w-20 bg-muted rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </AppLayout>
     )
   }
@@ -188,10 +232,10 @@ export default function BenchmarkDetailPage() {
               Created {new Date(benchmark.createdAt).toLocaleString()}
             </p>
             <div className="flex items-center gap-2">
-              {hasFailedDatabases && (
+              {hasInactiveDatabases && (
                 <Button size="sm" onClick={handleRedeployAll} disabled={redeployLoading}>
                   {redeployLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                  Redeploy All Failed
+                  Redeploy All
                 </Button>
               )}
               <Button size="sm" variant="outline" onClick={handleDelete} disabled={deleteLoading} className="text-destructive hover:text-destructive">
@@ -276,11 +320,20 @@ export default function BenchmarkDetailPage() {
         )}
       </AnimatePresence>
 
-      <h3 className="text-lg font-semibold mb-4">
-        Databases ({benchmark.databases.length})
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">
+          Databases ({benchmark.databases.length})
+        </h3>
+        <Button
+          onClick={() => navigate("/benchmarks/tests")}
+          className="h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+        >
+          <FlaskConical className="h-5 w-5 mr-2" />
+          Start Benchmark Tests
+        </Button>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {benchmark.databases.map((db, i) => (
           <motion.div
             key={db.id}
@@ -293,10 +346,18 @@ export default function BenchmarkDetailPage() {
               benchmarkId={benchmark.id}
               scriptPreview={scriptPreviews[db.id]}
               onStatusChange={handleDatabaseStatusChange}
+              onDelete={handleDeleteDatabase}
             />
           </motion.div>
         ))}
       </div>
+
+      {benchmark.logicalSchema && (
+        <>
+          <SchemaRelationships logicalSchemaJson={benchmark.logicalSchema} />
+          <SchemaEntities logicalSchemaJson={benchmark.logicalSchema} />
+        </>
+      )}
     </AppLayout>
   )
 }

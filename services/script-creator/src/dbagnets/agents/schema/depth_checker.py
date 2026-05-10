@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dbagnets.models.enums import ValidationStatus
+from dbagnets.models.enums import RelationshipCardinality, ValidationStatus
 from dbagnets.models.schema import LogicalSchema
 from dbagnets.models.validation import ValidationResult
 
@@ -15,6 +15,8 @@ class SchemaDepthChecker:
         adjacency: dict[str, list[str]] = {e.name: [] for e in schema.entities}
 
         for rel in schema.relationships:
+            if rel.cardinality == RelationshipCardinality.MANY_TO_MANY:
+                continue
             if rel.source_entity in adjacency:
                 adjacency[rel.source_entity].append(rel.target_entity)
 
@@ -34,11 +36,20 @@ class SchemaDepthChecker:
             )
 
         if longest > schema.depth:
+            chain_set = set(schema.depth_chain) if schema.depth_chain else set()
+            offending = []
+            for rel in schema.relationships:
+                if rel.cardinality == RelationshipCardinality.MANY_TO_MANY:
+                    continue
+                if rel.source_entity in chain_set and rel.target_entity not in chain_set:
+                    offending.append(f"{rel.source_entity} -> {rel.target_entity} ({rel.cardinality.value})")
+                elif rel.source_entity not in chain_set and rel.target_entity in chain_set:
+                    offending.append(f"{rel.source_entity} -> {rel.target_entity} ({rel.cardinality.value})")
+            offending_str = "; ".join(offending) if offending else "unknown"
             fix_hint = (
                 f"The longest directed path is {longest} hops but must be exactly "
-                f"{schema.depth}. Remove or reverse relationships to shorten the "
-                f"longest path. The extra segment is outside your depth_chain — "
-                f"check that no additional 1:N relationships extend beyond the chain ends."
+                f"{schema.depth}. Relationships extending beyond the depth_chain: "
+                f"[{offending_str}]. Fix: change these to M:N, reverse them, or remove them."
             )
         else:
             fix_hint = (

@@ -27,6 +27,7 @@ export interface DatabaseTarget {
 
 export interface CreateBenchmarkRequest {
   topic: string
+  depth: number
   databases: DatabaseTarget[]
 }
 
@@ -65,6 +66,7 @@ export interface BenchmarkResponse {
   topic: string
   status: BenchmarkStatus
   createdAt: string
+  logicalSchema: string | null
   databases: DatabaseResponse[]
 }
 
@@ -82,6 +84,48 @@ export interface DatabaseStatusEvent {
 
 export interface LogsResponse {
   logs: string
+}
+
+export interface LogicalSchemaConstraints {
+  is_primary_key: boolean
+  is_unique: boolean
+  is_nullable: boolean
+  is_indexed: boolean
+}
+
+export interface LogicalSchemaAttribute {
+  name: string
+  data_type: string
+  constraints: LogicalSchemaConstraints
+  description?: string
+}
+
+export interface LogicalSchemaEntity {
+  name: string
+  description: string
+  attributes: LogicalSchemaAttribute[]
+}
+
+export interface LogicalSchemaRelationship {
+  name: string
+  source_entity: string
+  target_entity: string
+  cardinality: string
+  description: string
+}
+
+export interface LogicalSchemaDataSizeHint {
+  entity_name: string
+  expected_row_count: number
+}
+
+export interface LogicalSchema {
+  idea: string
+  depth: number
+  depth_chain: string[]
+  entities: LogicalSchemaEntity[]
+  relationships: LogicalSchemaRelationship[]
+  data_size_hints: LogicalSchemaDataSizeHint[]
 }
 
 export interface ScriptGeneratedEvent {

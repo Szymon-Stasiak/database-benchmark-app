@@ -50,7 +50,9 @@ const FALLBACK_CATALOG: SupportedDatabases = {
 export default function NewBenchmarkPage() {
   const navigate = useNavigate()
   const [topic, setTopic] = useState("")
+  const [depth, setDepth] = useState(4)
   const [targets, setTargets] = useState<DatabaseTarget[]>([])
+
   const [catalog, setCatalog] = useState<SupportedDatabases | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +80,7 @@ export default function NewBenchmarkPage() {
     try {
       const response = await benchmarkApi.create({
         topic: topic.trim(),
+        depth,
         databases: targets,
       })
       navigate(`/benchmarks/${response.id}`)
@@ -106,6 +109,33 @@ export default function NewBenchmarkPage() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Relationship Depth</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Label htmlFor="depth" className="mb-2 block">
+            How deep should the schema relationships be? ({depth})
+          </Label>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-muted-foreground">1</span>
+            <input
+              id="depth"
+              type="range"
+              min={1}
+              max={10}
+              value={depth}
+              onChange={(e) => setDepth(Number(e.target.value))}
+              className="flex-1 accent-primary"
+            />
+            <span className="text-xs text-muted-foreground">10</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Higher depth means more complex entity chains. Recommended: 3-5 for most use cases.
+          </p>
         </CardContent>
       </Card>
 

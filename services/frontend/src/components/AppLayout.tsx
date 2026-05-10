@@ -10,7 +10,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { useNavigate } from "react-router-dom"
+import { FlaskConical } from "lucide-react"
+import { useNavigate, useLocation } from "react-router-dom"
 
 interface AppLayoutProps {
   children: ReactNode
@@ -20,6 +21,7 @@ interface AppLayoutProps {
 export function AppLayout({ children, maxWidth = "default" }: AppLayoutProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const initials = user?.name
     ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -29,12 +31,25 @@ export function AppLayout({ children, maxWidth = "default" }: AppLayoutProps) {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-          <h1
-            className="text-lg font-semibold tracking-tight text-primary cursor-pointer"
-            onClick={() => navigate("/dashboard")}
-          >
-            DBagnets
-          </h1>
+          <div className="flex items-center gap-6">
+            <h1
+              className="text-lg font-semibold tracking-tight text-primary cursor-pointer"
+              onClick={() => navigate("/dashboard")}
+            >
+              DBagnets
+            </h1>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/benchmarks/tests")}
+              className={location.pathname === "/benchmarks/tests"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"}
+            >
+              <FlaskConical className="h-4 w-4 mr-1.5" />
+              Tests
+            </Button>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">

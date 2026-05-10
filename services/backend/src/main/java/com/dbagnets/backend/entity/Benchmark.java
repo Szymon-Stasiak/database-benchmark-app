@@ -26,6 +26,9 @@ public class Benchmark {
     @Column(name = "user_email", nullable = false)
     private String userEmail;
 
+    @Column(nullable = false)
+    private int depth;
+
     @Column(name = "logical_schema", columnDefinition = "TEXT")
     private String logicalSchema;
 
@@ -34,9 +37,10 @@ public class Benchmark {
 
     protected Benchmark() {}
 
-    public Benchmark(String topic, String userEmail) {
+    public Benchmark(String topic, String userEmail, int depth) {
         this.topic = topic;
         this.userEmail = userEmail;
+        this.depth = depth;
         this.status = BenchmarkStatus.PENDING;
         this.createdAt = Instant.now();
     }
@@ -44,6 +48,7 @@ public class Benchmark {
     // Getters and setters
     public String getId() { return id; }
     public String getTopic() { return topic; }
+    public int getDepth() { return depth; }
     public BenchmarkStatus getStatus() { return status; }
     public void setStatus(BenchmarkStatus status) { this.status = status; }
     public Instant getCreatedAt() { return createdAt; }
