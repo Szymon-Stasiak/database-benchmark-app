@@ -7,6 +7,7 @@ import time
 from langgraph.graph import END, StateGraph
 
 from dbagnets.agents.script.best_practices_checker import BestPracticesCheckerAgent
+from dbagnets.agents.script.field_coverage_checker import FieldCoverageChecker
 from dbagnets.log_context import set_log_context
 from dbagnets.agents.script.compliance_checker import SchemaComplianceCheckerAgent
 from dbagnets.agents.script.generator import ScriptGeneratorAgent
@@ -22,7 +23,7 @@ from dbagnets.models import (
     ValidationStatus,
 )
 from dbagnets.models.config import TargetConfig
-from dbagnets.models.schema import LogicalSchema
+from dbagnets.models.schema import DocumentEmbeddingMapping, LogicalSchema
 
 logger = logging.getLogger("dbagnets")
 
@@ -49,6 +50,7 @@ class ScriptOrchestrator:
             SchemaComplianceCheckerAgent(model),
             NamingConsistencyCheckerAgent(model),
         ]
+        self.field_coverage_checker = FieldCoverageChecker()
 
         self._graph = self._build_graph()
 
@@ -113,6 +115,8 @@ class ScriptOrchestrator:
             depth=state["depth"],
         )
 
+        embedding_mappings = state["embedding_mappings"]
+
         logger.info("")
         logger.info(
             "[%s Validation] Running validators (%s)...",
@@ -120,7 +124,9 @@ class ScriptOrchestrator:
             "parallel" if self.parallel_validation else "sequential",
         )
         val_start = time.time()
-        validations = self._run_validators(config, target, schema, script)
+        validations = self._run_validators(
+            config, target, schema, script, embedding_mappings,
+        )
         val_elapsed = time.time() - val_start
         logger.info("[%s Validation] All validators finished in %.1fs", target.db_name, val_elapsed)
 
@@ -240,10 +246,15 @@ class ScriptOrchestrator:
         target: TargetConfig,
         schema: LogicalSchema,
         script: str,
+        embedding_mappings: list[DocumentEmbeddingMapping],
     ) -> list[ValidationResult]:
         if self.parallel_validation:
-            return self._run_validators_parallel(config, target, schema, script)
-        return self._run_validators_sequential(config, target, schema, script)
+            return self._run_validators_parallel(
+                config, target, schema, script, embedding_mappings,
+            )
+        return self._run_validators_sequential(
+            config, target, schema, script, embedding_mappings,
+        )
 
     def _run_validators_sequential(
         self,
@@ -251,6 +262,7 @@ class ScriptOrchestrator:
         target: TargetConfig,
         schema: LogicalSchema,
         script: str,
+        embedding_mappings: list[DocumentEmbeddingMapping],
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
 
@@ -272,6 +284,16 @@ class ScriptOrchestrator:
             logger.info("  [%s] [%s] (%.1fs)", validator.name, icon, elapsed)
             results.append(result)
 
+        logger.info("  [%s] Checking...", self.field_coverage_checker.name)
+        start = time.time()
+        result = self.field_coverage_checker.validate(
+            target, schema, script, embedding_mappings or None,
+        )
+        elapsed = time.time() - start
+        icon = "PASS" if result.passed else "FAIL"
+        logger.info("  [%s] [%s] (%.1fs)", self.field_coverage_checker.name, icon, elapsed)
+        results.append(result)
+
         return results
 
     def _run_validators_parallel(
@@ -280,9 +302,12 @@ class ScriptOrchestrator:
         target: TargetConfig,
         schema: LogicalSchema,
         script: str,
+        embedding_mappings: list[DocumentEmbeddingMapping],
     ) -> list[ValidationResult]:
         results: list[ValidationResult] = []
-        total_workers = len(self.standard_validators) + len(self.schema_validators)
+        total_workers = (
+            len(self.standard_validators) + len(self.schema_validators) + 1
+        )
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=total_workers
@@ -296,6 +321,12 @@ class ScriptOrchestrator:
             for validator in self.schema_validators:
                 future = executor.submit(validator.validate, target, schema, script)
                 future_to_name[future] = validator.name
+
+            future = executor.submit(
+                self.field_coverage_checker.validate,
+                target, schema, script, embedding_mappings or None,
+            )
+            future_to_name[future] = self.field_coverage_checker.name
 
             for future in concurrent.futures.as_completed(future_to_name):
                 name = future_to_name[future]
