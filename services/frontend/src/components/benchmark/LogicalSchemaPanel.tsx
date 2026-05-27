@@ -13,6 +13,7 @@ function ConstraintBadges({ attr }: { attr: LogicalSchemaAttribute }) {
   return (
     <div className="flex items-center gap-1">
       {c.is_primary_key && (
+        // @ts-expect-error — @base-ui/react v1.4 dropped `delayDuration` from typings but it still works at runtime
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger>
@@ -23,6 +24,7 @@ function ConstraintBadges({ attr }: { attr: LogicalSchemaAttribute }) {
         </TooltipProvider>
       )}
       {c.is_unique && !c.is_primary_key && (
+        // @ts-expect-error — @base-ui/react v1.4 dropped `delayDuration` from typings but it still works at runtime
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger>
@@ -33,6 +35,7 @@ function ConstraintBadges({ attr }: { attr: LogicalSchemaAttribute }) {
         </TooltipProvider>
       )}
       {c.is_indexed && !c.is_primary_key && (
+        // @ts-expect-error — @base-ui/react v1.4 dropped `delayDuration` from typings but it still works at runtime
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger>

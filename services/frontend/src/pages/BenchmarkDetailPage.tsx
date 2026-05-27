@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical } from "lucide-react"
+import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
@@ -47,6 +47,7 @@ export default function BenchmarkDetailPage() {
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [redeployLoading, setRedeployLoading] = useState(false)
+  const [hardResetLoading, setHardResetLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [scriptPreviews, setScriptPreviews] = useState<Record<string, string>>({})
 
@@ -140,6 +141,19 @@ export default function BenchmarkDetailPage() {
       await benchmarkApi.redeployBenchmark(id)
     } finally {
       setRedeployLoading(false)
+    }
+  }
+
+  const handleHardReset = async () => {
+    if (!id) return
+    if (!confirm(
+      "Hard reset will FORCE-KILL every database container, DELETE its data volume, and redeploy fresh from the init script.\n\nAll inserted benchmark data will be lost. Continue?",
+    )) return
+    setHardResetLoading(true)
+    try {
+      await benchmarkApi.hardResetBenchmark(id)
+    } finally {
+      setHardResetLoading(false)
     }
   }
 
@@ -238,6 +252,17 @@ export default function BenchmarkDetailPage() {
                   Redeploy All
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleHardReset}
+                disabled={hardResetLoading}
+                title="Force-kill containers, wipe data volumes, redeploy fresh"
+                className="border-amber-500/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              >
+                {hardResetLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Eraser className="h-4 w-4 mr-1" />}
+                Restart (wipe data)
+              </Button>
               <Button size="sm" variant="outline" onClick={handleDelete} disabled={deleteLoading} className="text-destructive hover:text-destructive">
                 {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
                 Delete
@@ -325,11 +350,12 @@ export default function BenchmarkDetailPage() {
           Databases ({benchmark.databases.length})
         </h3>
         <Button
-          onClick={() => navigate("/benchmarks/tests")}
-          className="h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+          onClick={() => navigate(`/benchmarks/${benchmark.id}/inserts`)}
+          disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
+          className="h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <FlaskConical className="h-5 w-5 mr-2" />
-          Start Benchmark Tests
+          Run Insert Benchmark
         </Button>
       </div>
 

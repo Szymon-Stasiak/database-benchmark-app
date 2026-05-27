@@ -4,6 +4,21 @@ server:
 spring:
   application:
     name: backend
+  # Disable Spring Boot auto-configuration for the per-benchmark DB drivers we use directly inside
+  # insert strategies. We open per-strategy MongoClient / Neo4j Driver / JedisPool / Mongo Repos
+  # ad-hoc against benchmark containers — we never want a global bean trying to connect to
+  # localhost:27017 / :7687 / :6379 on startup.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   datasource:
     url: jdbc:sqlite:data/benchmark.db
     driver-class-name: org.sqlite.JDBC

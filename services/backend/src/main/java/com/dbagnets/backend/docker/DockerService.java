@@ -104,6 +104,59 @@ public class DockerService {
         log.info("Removed container {}", containerId.substring(0, 12));
     }
 
+    /** Force-stop + remove with {@code withRemoveVolumes(true)} so anonymous data volumes vanish.
+     *  Used by the "Hard reset" flow that wants a clean slate on every redeploy. */
+    public void hardRemoveContainer(String containerId) {
+        try {
+            dockerClient.removeContainerCmd(containerId)
+                .withForce(true)
+                .withRemoveVolumes(true)
+                .exec();
+            log.info("Hard-removed container {} (with volumes)", containerId.substring(0, 12));
+        } catch (Exception e) {
+            log.warn("Hard remove failed for {}: {}", containerId, e.getMessage());
+        }
+    }
+
+    /**
+     * Find and force-remove every container (running or stopped) whose name starts with
+     * {@code namePrefix}, dropping their anonymous data volumes too. Used as a defensive sweep
+     * before creating a fresh container so stale orphans from a previous run (e.g. a hard reset
+     * that didn't clean up because the DB row had a null containerId) can't keep old data alive.
+     */
+    public void removeContainersByNamePrefix(String namePrefix) {
+        try {
+            var containers = dockerClient.listContainersCmd()
+                .withShowAll(true)
+                .withNameFilter(List.of(namePrefix))
+                .exec();
+            for (var c : containers) {
+                String matched = null;
+                if (c.getNames() != null) {
+                    for (var name : c.getNames()) {
+                        String cleaned = name != null && name.startsWith("/") ? name.substring(1) : name;
+                        if (cleaned != null && cleaned.startsWith(namePrefix)) {
+                            matched = cleaned;
+                            break;
+                        }
+                    }
+                }
+                if (matched == null) continue;
+                try {
+                    dockerClient.removeContainerCmd(c.getId())
+                        .withForce(true)
+                        .withRemoveVolumes(true)
+                        .exec();
+                    log.info("Removed orphan container {} ({})", matched, c.getId().substring(0, 12));
+                } catch (Exception e) {
+                    log.warn("Failed to remove orphan {}: {}", matched, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to list containers for prefix {}: {}", namePrefix, e.getMessage());
+        }
+    }
+
     public String getContainerLogs(String containerId, int tailLines) {
         var sb = new StringBuilder();
         try {

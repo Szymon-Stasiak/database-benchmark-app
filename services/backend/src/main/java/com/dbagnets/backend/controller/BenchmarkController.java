@@ -64,6 +64,14 @@ public class BenchmarkController {
         return ResponseEntity.accepted().build();
     }
 
+    /** Hard reset: force-stop + remove containers WITH data volumes, then redeploy fresh. Use
+     *  when the user wants a clean slate (every previous insert benchmark's data wiped). */
+    @PostMapping("/{id}/hard-reset")
+    public ResponseEntity<Void> hardResetBenchmark(@PathVariable String id) {
+        benchmarkService.hardResetBenchmark(id);
+        return ResponseEntity.accepted().build();
+    }
+
     @PostMapping("/{id}/databases/{dbId}/redeploy")
     public ResponseEntity<Void> redeployDatabase(@PathVariable String id,
                                                   @PathVariable String dbId) {

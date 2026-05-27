@@ -54,12 +54,15 @@ class BestPracticesCheckerAgent(BaseAgent):
 
 6. PRODUCTION SCALE (FAIL if missing for high-volume entities):
    - Table partitioning for entities with high data_size_hints (>100K rows)
-     PARTITIONING + FK RULE: Partitioned tables MUST keep a single-column PRIMARY KEY
-     (e.g. id) so that other tables can reference it via FK. Do NOT require a composite
-     PK that includes the partition column — this breaks FK references. Accept either:
-     (a) single-column PK + partition by a separate column, or
-     (b) single-column PK + UNIQUE(id, partition_col) for PostgreSQL compatibility.
-     Do NOT fail a script that uses partitioning with a single-column PK.
+     PARTITIONING + PK RULE (PostgreSQL hard requirement): on a partitioned table the
+     PRIMARY KEY and every UNIQUE constraint MUST include all partition-key columns.
+     A single-column PRIMARY KEY combined with PARTITION BY on a different column is
+     ILLEGAL and will fail at init with "unique constraint on partitioned table must
+     include all partitioning columns". FAIL the script in this case and tell the
+     generator to use a composite PRIMARY KEY (e.g. PRIMARY KEY (id, created_at))
+     plus matching composite FKs (or drop the FK to that partitioned parent if the
+     partition column can't be propagated). Same rule for UNIQUE constraints: every
+     UNIQUE on a partitioned table must contain every partition column.
      Also: FILLFACTOR must NOT appear in the same CREATE TABLE as PARTITION BY —
      it should be applied via ALTER TABLE afterward. Do NOT fail for this ordering.
    - Covering indexes (INCLUDE) for the most common query patterns

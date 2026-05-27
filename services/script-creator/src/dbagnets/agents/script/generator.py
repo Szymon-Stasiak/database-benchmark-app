@@ -72,13 +72,20 @@ class ScriptGeneratorAgent(BaseAgent):
    - Junction tables for M:N relationships
    PRODUCTION-SCALE DESIGN:
    - Table partitioning (RANGE by date, LIST by category) for entities with high data_size_hints
-     CRITICAL PARTITIONING RULE: When partitioning a table, keep the original single-column
-     PRIMARY KEY (e.g. id SERIAL PRIMARY KEY) intact. Do NOT create a composite PK that
-     includes the partition key (e.g. (id, created_at)). Instead, add the partition column
-     as a separate NOT NULL column and partition by it. This preserves FK referenceability —
-     other tables can still reference the single-column PK. If PostgreSQL requires the
-     partition key in the PK, use a UNIQUE constraint on (id, partition_col) instead of
-     making it the PK, and keep id as the sole PK for FK references.
+     CRITICAL PARTITIONING RULE (PostgreSQL hard requirement, no exceptions):
+       Every PRIMARY KEY and every UNIQUE constraint on a partitioned table MUST contain
+       ALL partition-key columns. PostgreSQL rejects anything else with the error
+       "unique constraint on partitioned table must include all partitioning columns".
+       Therefore:
+         * Use a COMPOSITE PRIMARY KEY that includes the surrogate id AND the partition
+           column, e.g. `PRIMARY KEY (id, created_at)` when `PARTITION BY RANGE (created_at)`.
+         * NEVER write `id SERIAL PRIMARY KEY` together with `PARTITION BY (other_col)`.
+         * NEVER add `UNIQUE (id)` to a partitioned table unless `id` itself is the
+           partition column.
+       Foreign keys to a partitioned parent must reference the full composite key
+       (e.g. `FOREIGN KEY (parent_id, parent_created_at) REFERENCES parent(id, created_at)`).
+       If propagating the partition column to children is impractical, drop the FK on
+       that relationship — it's acceptable for benchmark schemas.
      Also: do NOT combine FILLFACTOR with PARTITION BY in the same CREATE TABLE — set
      FILLFACTOR via ALTER TABLE after creation.
    - Covering indexes (INCLUDE columns) for frequently queried combinations

@@ -51,6 +51,7 @@ export function AppLayout({ children, maxWidth = "default" }: AppLayoutProps) {
             </Button>
           </div>
           <DropdownMenu>
+            {/* @ts-expect-error — @base-ui/react v1.4 dropped `asChild` from typings but it still works at runtime */}
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">

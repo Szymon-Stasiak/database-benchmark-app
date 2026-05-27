@@ -7,6 +7,8 @@ import com.dbagnets.backend.docker.ContainerSpec;
 import com.dbagnets.backend.docker.DockerService;
 import com.dbagnets.backend.docker.ScriptExecutor;
 import com.dbagnets.backend.entity.*;
+import com.dbagnets.backend.insert.repository.InsertRunRepository;
+import com.dbagnets.backend.insert.service.BaselineSizeService;
 import com.dbagnets.backend.model.BenchmarkResponse;
 import com.dbagnets.backend.model.CreateBenchmarkRequest;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
@@ -35,6 +37,8 @@ public class BenchmarkService {
     private final ScriptExecutor scriptExecutor;
     private final SseEmitterService sseEmitterService;
     private final ObjectMapper objectMapper;
+    private final BaselineSizeService baselineSizeService;
+    private final InsertRunRepository insertRunRepository;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public BenchmarkService(
@@ -44,7 +48,9 @@ public class BenchmarkService {
         DockerService dockerService,
         ScriptExecutor scriptExecutor,
         SseEmitterService sseEmitterService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        BaselineSizeService baselineSizeService,
+        InsertRunRepository insertRunRepository
     ) {
         this.benchmarkRepository = benchmarkRepository;
         this.databaseRepository = databaseRepository;
@@ -53,6 +59,8 @@ public class BenchmarkService {
         this.scriptExecutor = scriptExecutor;
         this.sseEmitterService = sseEmitterService;
         this.objectMapper = objectMapper;
+        this.baselineSizeService = baselineSizeService;
+        this.insertRunRepository = insertRunRepository;
     }
 
     @Transactional
@@ -190,7 +198,15 @@ public class BenchmarkService {
 
             int hostPort = dockerService.findAvailablePort();
             String image = db.getDockerImage() != null ? db.getDockerImage() : getDefaultDockerImage(db.getDbName(), db.getDbVersion());
-            String containerName = "benchmark-" + benchmarkId.substring(0, 8) + "-" + db.getDbName();
+            // Defensive sweep: drop any orphan from a previous run before we try to claim the name.
+            // Hard reset already removes the tracked container, but if its DB row was rewritten with
+            // a null containerId (or the previous removal silently failed), the orphan would survive
+            // with its data volume intact — making "wipe data" not actually wipe anything.
+            String containerNameRoot = "benchmark-" + benchmarkId.substring(0, 8) + "-" + db.getDbName();
+            dockerService.removeContainersByNamePrefix(containerNameRoot);
+            // Append a timestamp so every deploy gets a fresh, distinct container — guarantees we
+            // can't accidentally reattach to a leftover volume even if Docker is slow to reap.
+            String containerName = containerNameRoot + "-" + (System.currentTimeMillis() / 1000L);
 
             int containerPort = getDefaultPort(db.getDbName());
             Map<String, String> env = getDefaultEnvironment(db.getDbName());
@@ -250,6 +266,16 @@ public class BenchmarkService {
         try {
             scriptExecutor.executeScript(db.getContainerId(), db.getDbName(), db.getScript(), db.getHostPort());
             updateDatabaseStatus(db.getId(), DatabaseStatus.RUNNING);
+            // Snapshot the engine+schema footprint NOW so the size chart correctly attributes the
+            // delta to user data. If we let the 30s-scheduled BaselineSizeService run on its own,
+            // a user inserting fast (e.g. 10k Neo4j rows in < 30s) gets a baseline taken AFTER the
+            // insert, which makes dataBytes = max(0, size - baseline) ≈ 0 — the chart then shows
+            // the data segment as empty even though plenty was inserted.
+            try {
+                baselineSizeService.captureFor(dbId);
+            } catch (Exception ex) {
+                log.warn("Eager baseline capture failed for {} ({}): {}", db.getDbName(), dbId, ex.getMessage());
+            }
         } catch (Exception e) {
             log.error("Failed to initialize {} ({})", db.getDbName(), dbId, e);
             db.setStatus(DatabaseStatus.FAILED);
@@ -388,6 +414,63 @@ public class BenchmarkService {
             db.setContainerId(null);
             db.setHostPort(null);
         }
+    }
+
+    /**
+     * Force-kill every container for this benchmark, drop their data volumes, clear any inserted
+     * rows from the metadata DB, and immediately redeploy fresh. Use when the user wants a
+     * clean-slate run (data accumulated across previous insert benchmarks is gone).
+     */
+    @Transactional
+    public void hardResetBenchmark(String benchmarkId) {
+        var benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
+        log.info("HARD RESET requested for benchmark {} — wiping {} containers and volumes",
+            benchmarkId, benchmark.getDatabases().size());
+
+        // Wipe insert history so DatabaseSizeService.buildResponse() re-engages the "no inserts
+        // yet → clamp dataBytes to 0" rule for the freshly redeployed containers. Without this,
+        // leftover InsertResult rows from a previous run keep `hasInsertHistory = true` and the
+        // chart leaks engine background drift (WAL rotation, etc.) as user data.
+        long wipedRuns = insertRunRepository.deleteByBenchmarkId(benchmarkId);
+        if (wipedRuns > 0) {
+            log.info("Hard reset wiped {} insert run(s) for benchmark {}", wipedRuns, benchmarkId);
+        }
+
+        String benchmarkPrefix = "benchmark-" + benchmarkId.substring(0, 8) + "-";
+        for (var db : benchmark.getDatabases()) {
+            if (db.getContainerId() != null) {
+                try {
+                    dockerService.stopContainer(db.getContainerId());
+                } catch (Exception ignored) { /* might already be stopped */ }
+                dockerService.hardRemoveContainer(db.getContainerId());
+                db.setContainerId(null);
+                db.setHostPort(null);
+            }
+            // Belt-and-suspenders: nuke any container whose name still starts with
+            // "benchmark-<id8>-<dbName>". Catches orphans left behind when the tracked
+            // containerId was already null or a previous remove silently failed — those would
+            // otherwise carry their data volume into the next deploy and defeat "wipe data".
+            dockerService.removeContainersByNamePrefix(benchmarkPrefix + db.getDbName());
+            db.setStatus(DatabaseStatus.SCRIPT_READY);
+            db.setErrorMessage(null);
+            // Wipe the baseline so it's re-captured against the fresh empty container.
+            db.setBaselineSizeBytes(null);
+            db.setBaselineRecordedAt(null);
+            databaseRepository.save(db);
+        }
+        updateBenchmarkStatus(benchmarkId, BenchmarkStatus.STARTING_CONTAINERS);
+
+        executor.submit(() -> {
+            try {
+                startContainers(benchmarkId);
+                initializeDatabases(benchmarkId);
+                finalizeBenchmark(benchmarkId);
+            } catch (Exception e) {
+                log.error("Hard reset failed for benchmark {}", benchmarkId, e);
+                failRemainingDatabases(benchmarkId, e.getMessage());
+                updateBenchmarkStatus(benchmarkId, BenchmarkStatus.FAILED);
+            }
+        });
     }
 
     @Transactional

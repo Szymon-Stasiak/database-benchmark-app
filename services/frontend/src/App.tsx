@@ -7,6 +7,7 @@ import { DashboardPage } from "@/pages/DashboardPage"
 import NewBenchmarkPage from "@/pages/NewBenchmarkPage"
 import BenchmarkDetailPage from "@/pages/BenchmarkDetailPage"
 import BenchmarkTestsPage from "@/pages/BenchmarkTestsPage"
+import BenchmarkInsertsPage from "@/pages/BenchmarkInsertsPage"
 import { AnimatePresence, motion } from "framer-motion"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
@@ -53,6 +54,14 @@ function AnimatedRoutes() {
             element={
               <ProtectedRoute>
                 <BenchmarkDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/benchmarks/:id/inserts"
+            element={
+              <ProtectedRoute>
+                <BenchmarkInsertsPage />
               </ProtectedRoute>
             }
           />

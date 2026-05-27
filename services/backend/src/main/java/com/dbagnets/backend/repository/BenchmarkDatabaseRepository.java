@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface BenchmarkDatabaseRepository extends JpaRepository<BenchmarkDatabase, String> {
     List<BenchmarkDatabase> findByBenchmarkId(String benchmarkId);
+    List<BenchmarkDatabase> findByStatusIn(List<DatabaseStatus> statuses);
     long countByStatus(DatabaseStatus status);
 }

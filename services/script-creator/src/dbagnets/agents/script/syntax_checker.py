@@ -28,7 +28,14 @@ class SyntaxCheckerAgent(BaseAgent):
 6. Whether statement ordering is correct (referenced tables must be created before referencing tables)
 7. Whether advanced features use correct syntax: CHECK constraints, ENUM types,
    CREATE VIEW, CREATE TRIGGER, CREATE FUNCTION, GENERATED columns, PARTITION BY,
-   CREATE DOMAIN, CREATE SEQUENCE, EXCLUSION constraints, partial indexes""",
+   CREATE DOMAIN, CREATE SEQUENCE, EXCLUSION constraints, partial indexes
+8. PostgreSQL-specific (FAIL the script if violated):
+   For every CREATE TABLE that uses PARTITION BY, verify that the PRIMARY KEY and
+   every UNIQUE constraint on that table contain ALL partition-key columns. A
+   table like `CREATE TABLE t (id SERIAL PRIMARY KEY, ts TIMESTAMP) PARTITION BY RANGE (ts)`
+   is illegal — PostgreSQL rejects it with "unique constraint on partitioned table
+   must include all partitioning columns". The fix is a composite key such as
+   `PRIMARY KEY (id, ts)`. Same rule for UNIQUE constraints.""",
 
         DatabaseType.GRAPH: """Check:
 1. Whether each Cypher/graph statement has correct syntax (CREATE, MERGE, constraint definitions)

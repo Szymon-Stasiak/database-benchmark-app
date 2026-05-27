@@ -90,6 +90,54 @@
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
 
+		<!-- Datafaker — 800+ providers for realistic fake values across many domains -->
+		<dependency>
+			<groupId>net.datafaker</groupId>
+			<artifactId>datafaker</artifactId>
+			<version>2.5.4</version>
+		</dependency>
+
+		<!-- PostgreSQL JDBC driver — first real client wired through virtual-thread worker pool -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.7.4</version>
+		</dependency>
+
+		<!-- HikariCP for per-DB connection pooling (virtual-thread safe in Spring Boot 3.5) -->
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+		</dependency>
+
+		<!-- MySQL JDBC driver -->
+		<dependency>
+			<groupId>com.mysql</groupId>
+			<artifactId>mysql-connector-j</artifactId>
+			<version>9.1.0</version>
+		</dependency>
+
+		<!-- MongoDB native sync driver -->
+		<dependency>
+			<groupId>org.mongodb</groupId>
+			<artifactId>mongodb-driver-sync</artifactId>
+			<version>5.2.0</version>
+		</dependency>
+
+		<!-- Neo4j + Memgraph (Bolt) -->
+		<dependency>
+			<groupId>org.neo4j.driver</groupId>
+			<artifactId>neo4j-java-driver</artifactId>
+			<version>5.25.0</version>
+		</dependency>
+
+		<!-- Redis (Jedis) -->
+		<dependency>
+			<groupId>redis.clients</groupId>
+			<artifactId>jedis</artifactId>
+			<version>5.2.0</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>

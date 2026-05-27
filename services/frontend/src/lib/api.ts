@@ -4,6 +4,14 @@ import type {
   SupportedDatabases,
   LogsResponse,
 } from "@/types/benchmark"
+import type {
+  CascadePreviewRequest,
+  CascadePreviewResponse,
+  DatabaseSizeResponse,
+  EntityChoice,
+  InsertRunResponse,
+  StartInsertRunRequest,
+} from "@/types/insert"
 
 class ApiError extends Error {
   status: number
@@ -95,6 +103,11 @@ export const benchmarkApi = {
       method: "POST",
     }),
 
+  hardResetBenchmark: (benchmarkId: string) =>
+    apiFetch<void>(`/api/benchmarks/${benchmarkId}/hard-reset`, {
+      method: "POST",
+    }),
+
   redeployDatabase: (benchmarkId: string, dbId: string) =>
     apiFetch<void>(
       `/api/benchmarks/${benchmarkId}/databases/${dbId}/redeploy`,
@@ -142,6 +155,32 @@ export const benchmarkApi = {
       throw new ApiError(res.status, text)
     }
   },
+}
+
+export const insertApi = {
+  listEntities: (benchmarkId: string) =>
+    apiFetch<EntityChoice[]>(`/api/benchmarks/${benchmarkId}/entities`),
+
+  listRuns: (benchmarkId: string) =>
+    apiFetch<InsertRunResponse[]>(`/api/benchmarks/${benchmarkId}/insert-runs`),
+
+  startRun: (benchmarkId: string, req: StartInsertRunRequest) =>
+    apiFetch<InsertRunResponse>(`/api/benchmarks/${benchmarkId}/insert-runs`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  getRun: (runId: string) =>
+    apiFetch<InsertRunResponse>(`/api/insert-runs/${runId}`),
+
+  getDatabaseSizes: (benchmarkId: string) =>
+    apiFetch<DatabaseSizeResponse[]>(`/api/benchmarks/${benchmarkId}/database-sizes`),
+
+  cascadePreview: (benchmarkId: string, req: CascadePreviewRequest) =>
+    apiFetch<CascadePreviewResponse>(`/api/benchmarks/${benchmarkId}/cascade-preview`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
 }
 
 export { ApiError }
