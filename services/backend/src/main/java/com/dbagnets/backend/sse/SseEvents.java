@@ -1,0 +1,28 @@
+package com.dbagnets.backend.sse;
+
+public interface SseEvents {
+
+    String EVENT_BENCHMARK_STATUS = "benchmark_status";
+    String EVENT_DATABASE_STATUS = "database_status";
+    String EVENT_DATABASE_PORT_ASSIGNED = "database_port_assigned";
+    String EVENT_SCRIPT_GENERATED = "script_generated";
+    String EVENT_DATABASE_SIZE_DIRTY = "database_size_dirty";
+
+    String EVENT_INSERT_RUN_STATUS = "insert_run_status";
+    String EVENT_INSERT_RESULT_STATUS = "insert_result_status";
+    String EVENT_INSERT_BATCH_PROGRESS = "insert_batch_progress";
+
+    String EVENT_HEARTBEAT = "heartbeat";
+    String EVENT_LOG = "log";
+
+    String PAYLOAD_BENCHMARK_ID = "benchmarkId";
+    String PAYLOAD_DATABASE_ID = "databaseId";
+    String PAYLOAD_RUN_ID = "runId";
+    String PAYLOAD_ENTITY_NAME = "entityName";
+    String PAYLOAD_STATUS = "status";
+    String PAYLOAD_ERROR_MESSAGE = "errorMessage";
+    String PAYLOAD_HOST_PORT = "hostPort";
+    String PAYLOAD_SCRIPT_PREVIEW = "scriptPreview";
+
+    long INITIAL_STATE_DELAY_MS = 50L;
+}

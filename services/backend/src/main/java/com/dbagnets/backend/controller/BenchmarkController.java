@@ -64,7 +64,7 @@ public class BenchmarkController {
 
     @PostMapping("/{id}/databases/{dbId}/redeploy")
     public ResponseEntity<Void> redeployDatabase(@PathVariable String id,
-                                                  @PathVariable String dbId) {
+                                                 @PathVariable String dbId) {
         benchmarkService.redeployDatabase(id, dbId);
         return ResponseEntity.accepted().build();
     }
@@ -90,15 +90,15 @@ public class BenchmarkController {
     private void pushInitialState(String benchmarkId, SseEmitter emitter) {
         try {
             Thread.sleep(SseEvents.INITIAL_STATE_DELAY_MS);
-            var benchmark = benchmarkService.getBenchmark(benchmarkId);
+            BenchmarkResponse benchmark = benchmarkService.getBenchmark(benchmarkId);
             emitter.send(SseEmitter.event()
-                .name(SseEvents.EVENT_BENCHMARK_STATUS)
-                .data(objectMapper.writeValueAsString(Map.of(
-                    SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
-                    SseEvents.PAYLOAD_STATUS, benchmark.status()
-                ))));
-            for (var db : benchmark.databases()) {
-                var dbEvent = new HashMap<String, Object>();
+                    .name(SseEvents.EVENT_BENCHMARK_STATUS)
+                    .data(objectMapper.writeValueAsString(Map.of(
+                            SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                            SseEvents.PAYLOAD_STATUS, benchmark.status()
+                    ))));
+            for (BenchmarkResponse.DatabaseResponse db : benchmark.databases()) {
+                HashMap<String, Object> dbEvent = new HashMap<>();
                 dbEvent.put(SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId);
                 dbEvent.put(SseEvents.PAYLOAD_DATABASE_ID, db.id());
                 dbEvent.put(SseEvents.PAYLOAD_STATUS, db.status());
@@ -106,16 +106,16 @@ public class BenchmarkController {
                     dbEvent.put(SseEvents.PAYLOAD_ERROR_MESSAGE, db.errorMessage());
                 }
                 emitter.send(SseEmitter.event()
-                    .name(SseEvents.EVENT_DATABASE_STATUS)
-                    .data(objectMapper.writeValueAsString(dbEvent)));
+                        .name(SseEvents.EVENT_DATABASE_STATUS)
+                        .data(objectMapper.writeValueAsString(dbEvent)));
                 if (db.hostPort() != null) {
                     emitter.send(SseEmitter.event()
-                        .name(SseEvents.EVENT_DATABASE_PORT_ASSIGNED)
-                        .data(objectMapper.writeValueAsString(Map.of(
-                            SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
-                            SseEvents.PAYLOAD_DATABASE_ID, db.id(),
-                            SseEvents.PAYLOAD_HOST_PORT, db.hostPort()
-                        ))));
+                            .name(SseEvents.EVENT_DATABASE_PORT_ASSIGNED)
+                            .data(objectMapper.writeValueAsString(Map.of(
+                                    SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                                    SseEvents.PAYLOAD_DATABASE_ID, db.id(),
+                                    SseEvents.PAYLOAD_HOST_PORT, db.hostPort()
+                            ))));
                 }
             }
         } catch (Exception e) {
@@ -125,7 +125,7 @@ public class BenchmarkController {
 
     @GetMapping("/{id}/databases/{dbId}/script/preview")
     public ResponseEntity<Map<String, String>> getScriptPreview(@PathVariable String id,
-                                                                 @PathVariable String dbId) {
+                                                                @PathVariable String dbId) {
         String preview = benchmarkService.getScriptPreview(id, dbId);
         if (preview == null) {
             return ResponseEntity.notFound().build();
@@ -135,39 +135,39 @@ public class BenchmarkController {
 
     @GetMapping("/{id}/databases/{dbId}/script")
     public ResponseEntity<byte[]> downloadScript(@PathVariable String id,
-                                                  @PathVariable String dbId) {
+                                                 @PathVariable String dbId) {
         byte[] script = benchmarkService.downloadScript(id, dbId);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"init-script.sql\"")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
-            .body(script);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"init-script.sql\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(script);
     }
 
     @DeleteMapping("/{id}/databases/{dbId}")
     public ResponseEntity<Void> deleteDatabase(@PathVariable String id,
-                                                @PathVariable String dbId) {
+                                               @PathVariable String dbId) {
         benchmarkService.deleteDatabase(id, dbId);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/databases/{dbId}/stop")
     public ResponseEntity<Void> stopDatabase(@PathVariable String id,
-                                              @PathVariable String dbId) {
+                                             @PathVariable String dbId) {
         benchmarkService.stopDatabase(id, dbId);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/databases/{dbId}/restart")
     public ResponseEntity<Void> restartDatabase(@PathVariable String id,
-                                                 @PathVariable String dbId) {
+                                                @PathVariable String dbId) {
         benchmarkService.restartDatabase(id, dbId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/databases/{dbId}/logs")
     public LogsResponse getDatabaseLogs(@PathVariable String id,
-                                         @PathVariable String dbId,
-                                         @RequestParam(defaultValue = "200") int tailLines) {
+                                        @PathVariable String dbId,
+                                        @RequestParam(defaultValue = "200") int tailLines) {
         String logs = benchmarkService.getDatabaseLogs(id, dbId, tailLines);
         return new LogsResponse(logs);
     }
@@ -177,8 +177,8 @@ public class BenchmarkController {
         log.debug("Opening log stream for benchmark {} database {}", id, dbId);
         SseEmitter emitter = new SseEmitter(0L);
         benchmarkService.getContainerId(dbId).ifPresentOrElse(
-            containerId -> dockerService.streamLogs(containerId, emitter),
-            emitter::complete
+                containerId -> dockerService.streamLogs(containerId, emitter),
+                emitter::complete
         );
         return emitter;
     }
