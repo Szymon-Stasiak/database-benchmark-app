@@ -38,7 +38,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- Script Creator (FastAPI, port 8001) ---
 echo "Starting script-creator on :8001..."
 (
     cd "$REPO_ROOT/services/script-creator"
@@ -46,17 +45,14 @@ echo "Starting script-creator on :8001..."
 ) &
 PIDS+=($!)
 
-# --- Backend (Spring Boot, port 8080) ---
 echo "Starting backend on :8080..."
 (
     cd "$REPO_ROOT/services/backend"
-    # explicit `compile` forces a fresh build so spring-boot:run always picks up
-    # source changes since the last shutdown (otherwise stale target/classes win).
+
     ./mvnw -q -DskipTests compile spring-boot:run
 ) &
 PIDS+=($!)
 
-# --- Frontend (Vite, port 5173) ---
 echo "Starting frontend on :5173..."
 (
     cd "$REPO_ROOT/services/frontend"

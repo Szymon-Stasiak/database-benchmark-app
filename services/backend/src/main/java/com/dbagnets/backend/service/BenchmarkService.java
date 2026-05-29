@@ -15,8 +15,8 @@ import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,8 +27,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class BenchmarkService {
-    private static final Logger log = LoggerFactory.getLogger(BenchmarkService.class);
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkDatabaseRepository databaseRepository;
@@ -41,31 +42,9 @@ public class BenchmarkService {
     private final InsertRunRepository insertRunRepository;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public BenchmarkService(
-        BenchmarkRepository benchmarkRepository,
-        BenchmarkDatabaseRepository databaseRepository,
-        ScriptCreatorClient scriptCreatorClient,
-        DockerService dockerService,
-        ScriptExecutor scriptExecutor,
-        SseEmitterService sseEmitterService,
-        ObjectMapper objectMapper,
-        BaselineSizeService baselineSizeService,
-        InsertRunRepository insertRunRepository
-    ) {
-        this.benchmarkRepository = benchmarkRepository;
-        this.databaseRepository = databaseRepository;
-        this.scriptCreatorClient = scriptCreatorClient;
-        this.dockerService = dockerService;
-        this.scriptExecutor = scriptExecutor;
-        this.sseEmitterService = sseEmitterService;
-        this.objectMapper = objectMapper;
-        this.baselineSizeService = baselineSizeService;
-        this.insertRunRepository = insertRunRepository;
-    }
-
     @Transactional
-    public BenchmarkResponse createBenchmark(CreateBenchmarkRequest request, String userEmail) {
-        var benchmark = new Benchmark(request.topic(), userEmail, request.depth());
+    public BenchmarkResponse createBenchmark(CreateBenchmarkRequest request, User user) {
+        var benchmark = new Benchmark(request.topic(), user, request.depth());
 
         for (var target : request.databases()) {
             var dbType = DatabaseType.valueOf(target.dbType().toUpperCase());
@@ -495,8 +474,8 @@ public class BenchmarkService {
     }
 
     @Transactional(readOnly = true)
-    public List<BenchmarkResponse> listBenchmarks(String userEmail) {
-        return benchmarkRepository.findByUserEmailOrderByCreatedAtDesc(userEmail).stream()
+    public List<BenchmarkResponse> listBenchmarks(User user) {
+        return benchmarkRepository.findByUserOrderByCreatedAtDesc(user).stream()
             .map(BenchmarkResponse::from)
             .toList();
     }

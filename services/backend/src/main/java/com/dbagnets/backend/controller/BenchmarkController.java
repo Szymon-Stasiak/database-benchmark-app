@@ -1,21 +1,21 @@
 package com.dbagnets.backend.controller;
 
 import com.dbagnets.backend.docker.DockerService;
+import com.dbagnets.backend.entity.User;
 import com.dbagnets.backend.model.BenchmarkResponse;
 import com.dbagnets.backend.model.CreateBenchmarkRequest;
 import com.dbagnets.backend.model.LogsResponse;
+import com.dbagnets.backend.security.CurrentUser;
 import com.dbagnets.backend.service.BenchmarkService;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/benchmarks")
+@RequiredArgsConstructor
 public class BenchmarkController {
 
     private final BenchmarkService benchmarkService;
@@ -33,29 +34,17 @@ public class BenchmarkController {
     private final ObjectMapper objectMapper;
     private final Executor sseInitExecutor = Executors.newCachedThreadPool();
 
-    public BenchmarkController(BenchmarkService benchmarkService,
-                                SseEmitterService sseEmitterService,
-                                DockerService dockerService,
-                                ObjectMapper objectMapper) {
-        this.benchmarkService = benchmarkService;
-        this.sseEmitterService = sseEmitterService;
-        this.dockerService = dockerService;
-        this.objectMapper = objectMapper;
-    }
-
     @PostMapping
     public ResponseEntity<BenchmarkResponse> createBenchmark(
             @Valid @RequestBody CreateBenchmarkRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("email");
-        var response = benchmarkService.createBenchmark(request, email);
+            @CurrentUser User user) {
+        var response = benchmarkService.createBenchmark(request, user);
         return ResponseEntity.status(201).body(response);
     }
 
     @GetMapping
-    public List<BenchmarkResponse> listBenchmarks(@AuthenticationPrincipal Jwt jwt) {
-        String email = jwt.getClaimAsString("email");
-        return benchmarkService.listBenchmarks(email);
+    public List<BenchmarkResponse> listBenchmarks(@CurrentUser User user) {
+        return benchmarkService.listBenchmarks(user);
     }
 
     @PostMapping("/{id}/redeploy")

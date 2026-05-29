@@ -1,6 +1,7 @@
 package com.dbagnets.backend.insert.service;
 
 import com.dbagnets.backend.entity.Benchmark;
+import com.dbagnets.backend.entity.User;
 import com.dbagnets.backend.insert.schema.LogicalSchemaLoader;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,10 +19,11 @@ class EntityCatalogServiceTest {
     private final BenchmarkRepository benchmarkRepository = mock(BenchmarkRepository.class);
     private final LogicalSchemaLoader loader = new LogicalSchemaLoader(new ObjectMapper());
     private final EntityCatalogService service = new EntityCatalogService(benchmarkRepository, loader);
+    private final User dummyUser = User.createFromJwtClaims("sub-test", "u@example.com", "Test", null);
 
     @Test
     void returnsEntityChoicesFromSchema() {
-        Benchmark benchmark = new Benchmark("topic", "u@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         benchmark.setLogicalSchema("""
             {"idea":"x","depth":4,"entities":[
               {"name":"User","description":"u","attributes":[
@@ -41,7 +43,7 @@ class EntityCatalogServiceTest {
 
     @Test
     void returnsEmptyListWhenSchemaMissing() {
-        Benchmark benchmark = new Benchmark("topic", "u@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         when(benchmarkRepository.findById("b1")).thenReturn(Optional.of(benchmark));
         assertTrue(service.listEntities("b1").isEmpty());
     }

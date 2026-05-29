@@ -1,12 +1,19 @@
 package com.dbagnets.backend.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Table(name = "benchmarks")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Benchmark {
 
     @Id
@@ -16,6 +23,7 @@ public class Benchmark {
     @Column(nullable = false)
     private String topic;
 
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private BenchmarkStatus status;
@@ -23,39 +31,27 @@ public class Benchmark {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "user_email", nullable = false)
-    private String userEmail;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(nullable = false)
     private int depth;
 
+    @Setter
     @Column(name = "logical_schema", columnDefinition = "TEXT")
     private String logicalSchema;
 
     @OneToMany(mappedBy = "benchmark", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<BenchmarkDatabase> databases = new ArrayList<>();
 
-    protected Benchmark() {}
-
-    public Benchmark(String topic, String userEmail, int depth) {
+    public Benchmark(String topic, User user, int depth) {
         this.topic = topic;
-        this.userEmail = userEmail;
+        this.user = user;
         this.depth = depth;
         this.status = BenchmarkStatus.PENDING;
         this.createdAt = Instant.now();
     }
-
-    // Getters and setters
-    public String getId() { return id; }
-    public String getTopic() { return topic; }
-    public int getDepth() { return depth; }
-    public BenchmarkStatus getStatus() { return status; }
-    public void setStatus(BenchmarkStatus status) { this.status = status; }
-    public Instant getCreatedAt() { return createdAt; }
-    public String getUserEmail() { return userEmail; }
-    public String getLogicalSchema() { return logicalSchema; }
-    public void setLogicalSchema(String logicalSchema) { this.logicalSchema = logicalSchema; }
-    public List<BenchmarkDatabase> getDatabases() { return databases; }
 
     public void addDatabase(BenchmarkDatabase db) {
         databases.add(db);

@@ -1,6 +1,7 @@
 package com.dbagnets.backend.insert.schema;
 
 import com.dbagnets.backend.entity.Benchmark;
+import com.dbagnets.backend.entity.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -11,16 +12,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class LogicalSchemaLoaderTest {
 
     private final LogicalSchemaLoader loader = new LogicalSchemaLoader(new ObjectMapper());
+    private final User dummyUser = User.createFromJwtClaims("sub-test", "user@example.com", "Test", null);
 
     @Test
     void nullSchemaReturnsEmpty() {
-        Benchmark benchmark = new Benchmark("topic", "user@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         assertEquals(Optional.empty(), loader.load(benchmark));
     }
 
     @Test
     void parsesFullSchema() {
-        Benchmark benchmark = new Benchmark("topic", "user@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         benchmark.setLogicalSchema("""
             {
               "idea": "shop",
@@ -45,7 +47,7 @@ class LogicalSchemaLoaderTest {
 
     @Test
     void unknownFieldsAreIgnored() {
-        Benchmark benchmark = new Benchmark("topic", "user@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         benchmark.setLogicalSchema("""
             {"idea":"x","depth":1,"entities":[],"unknown":42}
             """);
@@ -54,7 +56,7 @@ class LogicalSchemaLoaderTest {
 
     @Test
     void malformedJsonThrows() {
-        Benchmark benchmark = new Benchmark("topic", "user@example.com", 4);
+        Benchmark benchmark = new Benchmark("topic", dummyUser, 4);
         benchmark.setLogicalSchema("not json");
         assertThrows(IllegalStateException.class, () -> loader.load(benchmark));
     }
