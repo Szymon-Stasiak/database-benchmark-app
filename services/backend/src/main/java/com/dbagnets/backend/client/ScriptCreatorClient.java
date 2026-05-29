@@ -1,7 +1,6 @@
 package com.dbagnets.backend.client;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -10,8 +9,8 @@ import java.time.Duration;
 import java.util.List;
 
 @Service
+@Slf4j
 public class ScriptCreatorClient {
-    private static final Logger log = LoggerFactory.getLogger(ScriptCreatorClient.class);
     private final WebClient webClient;
 
     public ScriptCreatorClient(@Value("${script-creator.base-url}") String baseUrl) {

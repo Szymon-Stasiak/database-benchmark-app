@@ -8,8 +8,8 @@ import com.dbagnets.backend.insert.model.DatabaseSizeResponse;
 import com.dbagnets.backend.insert.repository.InsertResultRepository;
 import com.dbagnets.backend.insert.size.DatabaseSizeStrategyFactory;
 import com.dbagnets.backend.repository.BenchmarkRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +23,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class DatabaseSizeService {
 
-    private static final Logger log = LoggerFactory.getLogger(DatabaseSizeService.class);
     /** Per-probe budget. With 2+ DBs receiving inserts in parallel, {@code du -sB1} inside a busy
      *  Neo4j/Mongo container can comfortably push past 5s, so we give each probe more headroom —
      *  probes run concurrently so the total response time still bottoms out at ~this many seconds. */
@@ -44,18 +45,6 @@ public class DatabaseSizeService {
      *  out a DB whose probe was slower than the others on this poll — without the cache the
      *  frontend's {@code dataBytes ?? 0} fallback would zero-out the inserted-data segment. */
     private final ConcurrentHashMap<String, Long> lastGoodSize = new ConcurrentHashMap<>();
-
-    public DatabaseSizeService(
-        BenchmarkRepository benchmarkRepository,
-        DockerService dockerService,
-        DatabaseSizeStrategyFactory factory,
-        InsertResultRepository insertResultRepository
-    ) {
-        this.benchmarkRepository = benchmarkRepository;
-        this.dockerService = dockerService;
-        this.factory = factory;
-        this.insertResultRepository = insertResultRepository;
-    }
 
     @Transactional(readOnly = true)
     public List<DatabaseSizeResponse> sizesFor(String benchmarkId) {

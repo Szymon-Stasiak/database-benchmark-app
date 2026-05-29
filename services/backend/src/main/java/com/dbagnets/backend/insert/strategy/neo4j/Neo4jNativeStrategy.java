@@ -10,11 +10,10 @@ import com.dbagnets.backend.insert.strategy.InsertContext;
 import com.dbagnets.backend.insert.strategy.InsertOutcome;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Config;
+import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,9 +38,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>All records for a batch are sent in a single {@code UNWIND $rows CREATE (n:Label) SET n = row}
  * — the most efficient bulk path in both engines.
  */
+@Slf4j
 public class Neo4jNativeStrategy implements DatabaseInsertStrategy {
 
-    private static final Logger log = LoggerFactory.getLogger(Neo4jNativeStrategy.class);
     private static final Batch POISON = new Batch(-1, -1, List.of());
 
     private final String boltScheme;

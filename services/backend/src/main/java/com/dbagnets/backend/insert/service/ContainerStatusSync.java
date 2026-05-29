@@ -6,8 +6,8 @@ import com.dbagnets.backend.entity.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,9 +30,10 @@ import java.util.Map;
  * </ol>
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class ContainerStatusSync {
 
-    private static final Logger log = LoggerFactory.getLogger(ContainerStatusSync.class);
     private static final long SYNC_PERIOD_MS = 60_000;
     private static final List<DatabaseStatus> SUPPOSEDLY_LIVE = List.of(
         DatabaseStatus.RUNNING,
@@ -43,16 +44,6 @@ public class ContainerStatusSync {
     private final BenchmarkDatabaseRepository databaseRepository;
     private final DockerService dockerService;
     private final SseEmitterService sseEmitterService;
-
-    public ContainerStatusSync(
-        BenchmarkDatabaseRepository databaseRepository,
-        DockerService dockerService,
-        SseEmitterService sseEmitterService
-    ) {
-        this.databaseRepository = databaseRepository;
-        this.dockerService = dockerService;
-        this.sseEmitterService = sseEmitterService;
-    }
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {

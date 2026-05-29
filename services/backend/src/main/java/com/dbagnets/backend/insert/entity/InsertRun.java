@@ -2,6 +2,10 @@ package com.dbagnets.backend.insert.entity;
 
 import com.dbagnets.backend.entity.Benchmark;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -9,6 +13,8 @@ import java.util.List;
 
 @Entity
 @Table(name = "insert_runs")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class InsertRun {
 
     @Id
@@ -43,6 +49,7 @@ public class InsertRun {
     @Column(name = "cascade_json", columnDefinition = "TEXT")
     private String cascadeJson;
 
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private InsertStatus status;
@@ -50,13 +57,12 @@ public class InsertRun {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Setter
     @Column(name = "finished_at")
     private Instant finishedAt;
 
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<InsertResult> results = new ArrayList<>();
-
-    protected InsertRun() {}
 
     public InsertRun(Benchmark benchmark, String entityName, int recordCount, InsertMode mode, Integer batchSize) {
         this(benchmark, entityName, recordCount, mode, batchSize, null, null);
@@ -86,19 +92,4 @@ public class InsertRun {
         results.add(result);
         result.setRun(this);
     }
-
-    public String getId() { return id; }
-    public Benchmark getBenchmark() { return benchmark; }
-    public String getEntityName() { return entityName; }
-    public int getRecordCount() { return recordCount; }
-    public InsertMode getMode() { return mode; }
-    public Integer getBatchSize() { return batchSize; }
-    public Integer getWorkerCount() { return workerCount; }
-    public String getCascadeJson() { return cascadeJson; }
-    public InsertStatus getStatus() { return status; }
-    public void setStatus(InsertStatus status) { this.status = status; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getFinishedAt() { return finishedAt; }
-    public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
-    public List<InsertResult> getResults() { return results; }
 }

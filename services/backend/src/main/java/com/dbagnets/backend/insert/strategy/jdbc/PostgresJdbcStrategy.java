@@ -1,8 +1,7 @@
 package com.dbagnets.backend.insert.strategy.jdbc;
 
 import com.dbagnets.backend.insert.strategy.InsertContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,9 +13,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+@Slf4j
 public class PostgresJdbcStrategy extends JdbcInsertStrategy {
-
-    private static final Logger log = LoggerFactory.getLogger(PostgresJdbcStrategy.class);
 
     @Override
     protected String jdbcUrl(InsertContext ctx) {

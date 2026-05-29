@@ -11,8 +11,7 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.dbagnets.backend.sse.SseEvents;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -24,8 +23,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class DockerService {
-    private static final Logger log = LoggerFactory.getLogger(DockerService.class);
     private DockerClient dockerClient;
 
     @PostConstruct

@@ -1,6 +1,10 @@
 package com.dbagnets.backend.insert.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
 
@@ -13,12 +17,15 @@ import java.time.Instant;
  */
 @Entity
 @Table(name = "insert_results")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class InsertResult {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
+    @Setter(AccessLevel.PACKAGE)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "run_id", nullable = false)
     private InsertRun run;
@@ -30,32 +37,38 @@ public class InsertResult {
     private String dbName;
 
     /** Entity name this row covers (null on legacy single-entity rows). */
+    @Setter
     @Column(name = "entity_name")
     private String entityName;
 
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private InsertStatus status;
 
+    @Setter
     @Column(name = "started_at")
     private Instant startedAt;
 
+    @Setter
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    @Setter
     @Column(name = "duration_ms")
     private Long durationMs;
 
+    @Setter
     @Column(name = "records_inserted")
     private Integer recordsInserted;
 
+    @Setter
     @Column(name = "throughput_rps")
     private Double throughputRps;
 
+    @Setter
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
-
-    protected InsertResult() {}
 
     public InsertResult(String databaseId, String dbName) {
         this(databaseId, dbName, null);
@@ -67,26 +80,4 @@ public class InsertResult {
         this.entityName = entityName;
         this.status = InsertStatus.PENDING;
     }
-
-    public String getId() { return id; }
-    public InsertRun getRun() { return run; }
-    void setRun(InsertRun run) { this.run = run; }
-    public String getDatabaseId() { return databaseId; }
-    public String getDbName() { return dbName; }
-    public String getEntityName() { return entityName; }
-    public void setEntityName(String entityName) { this.entityName = entityName; }
-    public InsertStatus getStatus() { return status; }
-    public void setStatus(InsertStatus status) { this.status = status; }
-    public Instant getStartedAt() { return startedAt; }
-    public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
-    public Instant getFinishedAt() { return finishedAt; }
-    public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
-    public Long getDurationMs() { return durationMs; }
-    public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
-    public Integer getRecordsInserted() { return recordsInserted; }
-    public void setRecordsInserted(Integer recordsInserted) { this.recordsInserted = recordsInserted; }
-    public Double getThroughputRps() { return throughputRps; }
-    public void setThroughputRps(Double throughputRps) { this.throughputRps = throughputRps; }
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 }

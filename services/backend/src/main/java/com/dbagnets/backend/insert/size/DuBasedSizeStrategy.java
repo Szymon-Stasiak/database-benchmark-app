@@ -1,23 +1,19 @@
 package com.dbagnets.backend.insert.size;
 
 import com.dbagnets.backend.docker.DockerService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Universal fallback: shells out to {@code du -sk <path>} inside the container and
  * multiplies the reported 1K-blocks by 1024. Works on every distro that ships busybox or
  * coreutils — which covers all the official DB images we use.
  */
+@RequiredArgsConstructor
+@Slf4j
 public class DuBasedSizeStrategy implements DatabaseSizeStrategy {
 
-    private static final Logger log = LoggerFactory.getLogger(DuBasedSizeStrategy.class);
-
     private final String path;
-
-    public DuBasedSizeStrategy(String path) {
-        this.path = path;
-    }
 
     @Override
     public long sizeBytes(DockerService docker, String containerId, Integer hostPort) {

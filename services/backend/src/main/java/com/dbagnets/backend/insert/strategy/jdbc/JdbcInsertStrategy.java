@@ -12,8 +12,7 @@ import com.dbagnets.backend.insert.strategy.InsertOutcome;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -52,9 +51,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Subclasses only provide the JDBC URL builder; the rest of the path is shared.
  */
+@Slf4j
 public abstract class JdbcInsertStrategy implements DatabaseInsertStrategy {
-
-    private static final Logger log = LoggerFactory.getLogger(JdbcInsertStrategy.class);
 
     /** Sentinel batch that signals workers to stop draining the queue. */
     private static final Batch POISON = new Batch(-1, -1, List.of());

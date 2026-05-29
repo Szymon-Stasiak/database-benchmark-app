@@ -14,9 +14,8 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.InsertManyOptions;
+import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,9 +35,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * worker count. Times only the {@code insertMany}/{@code insertOne} call so the user gets the
  * actual server-side latency without driver-setup overhead.
  */
+@Slf4j
 public class MongoNativeStrategy implements DatabaseInsertStrategy {
 
-    private static final Logger log = LoggerFactory.getLogger(MongoNativeStrategy.class);
     private static final Batch POISON = new Batch(-1, -1, List.of());
 
     @Override

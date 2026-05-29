@@ -1,18 +1,15 @@
 package com.dbagnets.backend.docker;
 
 import com.dbagnets.backend.docker.strategy.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class ScriptExecutor {
-    private static final Logger log = LoggerFactory.getLogger(ScriptExecutor.class);
     private final DockerService dockerService;
-
-    public ScriptExecutor(DockerService dockerService) {
-        this.dockerService = dockerService;
-    }
 
     public void waitForReady(String containerId, String dbName, int hostPort) {
         log.info("Waiting for {} to be ready...", dbName);

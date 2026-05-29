@@ -1,11 +1,10 @@
 package com.dbagnets.backend.docker.strategy;
 
 import com.dbagnets.backend.docker.DockerService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class EtcdScriptStrategy implements ScriptExecutionStrategy {
-    private static final Logger log = LoggerFactory.getLogger(EtcdScriptStrategy.class);
 
     @Override
     public void waitForReady(DockerService docker, String containerId, int hostPort) {

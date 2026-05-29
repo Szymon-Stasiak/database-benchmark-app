@@ -9,8 +9,8 @@ import com.dbagnets.backend.insert.strategy.DatabaseInsertStrategy;
 import com.dbagnets.backend.insert.strategy.InsertContext;
 import com.dbagnets.backend.insert.strategy.InsertOutcome;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -36,16 +36,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * (key = "{entity}:{uuid}"). For BATCH/BULK we use {@link Pipeline} which sends all SETs in a
  * single round-trip — the standard high-throughput Redis pattern.
  */
+@RequiredArgsConstructor
+@Slf4j
 public class RedisJedisStrategy implements DatabaseInsertStrategy {
 
-    private static final Logger log = LoggerFactory.getLogger(RedisJedisStrategy.class);
     private static final Batch POISON = new Batch(-1, -1, List.of());
 
     private final ObjectMapper mapper;
-
-    public RedisJedisStrategy(ObjectMapper mapper) {
-        this.mapper = mapper;
-    }
 
     @Override
     public InsertOutcome insert(DockerService docker, InsertContext ctx, BatchProgressCallback progress) {

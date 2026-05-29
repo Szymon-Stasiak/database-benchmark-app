@@ -38,3 +38,9 @@ spring:
 
 script-creator:
   base-url: http://localhost:8001
+
+app:
+  cors:
+    # Comma-separated list. Override per environment with APP_CORS_ALLOWED_ORIGINS env var
+    # or --app.cors.allowed-origins=... CLI flag (e.g. https://prod.example.com,https://staging.example.com).
+    allowed-origins: http://localhost:5173

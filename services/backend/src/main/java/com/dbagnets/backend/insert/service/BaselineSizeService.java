@@ -7,8 +7,8 @@ import com.dbagnets.backend.insert.entity.InsertStatus;
 import com.dbagnets.backend.insert.repository.InsertResultRepository;
 import com.dbagnets.backend.insert.size.DatabaseSizeStrategyFactory;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,9 +26,10 @@ import java.util.List;
  * interesting until the first insert lands.
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class BaselineSizeService {
 
-    private static final Logger log = LoggerFactory.getLogger(BaselineSizeService.class);
     private static final long PERIOD_MS = 30_000L;
 
     private static final List<InsertStatus> POST_PENDING = List.of(
@@ -38,18 +39,6 @@ public class BaselineSizeService {
     private final DockerService dockerService;
     private final DatabaseSizeStrategyFactory sizeStrategyFactory;
     private final InsertResultRepository insertResultRepository;
-
-    public BaselineSizeService(
-        BenchmarkDatabaseRepository databaseRepository,
-        DockerService dockerService,
-        DatabaseSizeStrategyFactory sizeStrategyFactory,
-        InsertResultRepository insertResultRepository
-    ) {
-        this.databaseRepository = databaseRepository;
-        this.dockerService = dockerService;
-        this.sizeStrategyFactory = sizeStrategyFactory;
-        this.insertResultRepository = insertResultRepository;
-    }
 
     @Scheduled(fixedDelay = PERIOD_MS, initialDelay = PERIOD_MS)
     public void scheduledCapture() {

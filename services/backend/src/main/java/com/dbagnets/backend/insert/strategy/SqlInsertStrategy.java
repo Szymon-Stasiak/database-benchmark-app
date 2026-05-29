@@ -3,8 +3,7 @@ package com.dbagnets.backend.insert.strategy;
 import com.dbagnets.backend.docker.DockerService;
 import com.dbagnets.backend.insert.datagen.GeneratedRecord;
 import com.dbagnets.backend.insert.schema.LogicalAttribute;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -18,9 +17,8 @@ import java.util.StringJoiner;
  * </ul>
  * Subclasses only provide the client command (psql, mysql, ...) and any quirks.
  */
+@Slf4j
 public abstract class SqlInsertStrategy implements DatabaseInsertStrategy {
-
-    private static final Logger log = LoggerFactory.getLogger(SqlInsertStrategy.class);
 
     @Override
     public InsertOutcome insert(DockerService docker, InsertContext context) {

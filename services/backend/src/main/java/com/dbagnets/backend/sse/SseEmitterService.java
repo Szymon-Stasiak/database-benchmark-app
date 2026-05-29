@@ -1,8 +1,8 @@
 package com.dbagnets.backend.sse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -13,14 +13,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class SseEmitterService {
-    private static final Logger log = LoggerFactory.getLogger(SseEmitterService.class);
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
-
-    public SseEmitterService(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
 
     public SseEmitter subscribe(String benchmarkId) {
         var emitter = new SseEmitter(0L);

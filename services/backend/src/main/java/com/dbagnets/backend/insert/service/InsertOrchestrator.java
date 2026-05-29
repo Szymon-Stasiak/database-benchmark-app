@@ -36,8 +36,7 @@ import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,9 +78,8 @@ import java.util.concurrent.Future;
  * </ul>
  */
 @Service
+@Slf4j
 public class InsertOrchestrator {
-
-    private static final Logger log = LoggerFactory.getLogger(InsertOrchestrator.class);
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkDatabaseRepository databaseRepository;

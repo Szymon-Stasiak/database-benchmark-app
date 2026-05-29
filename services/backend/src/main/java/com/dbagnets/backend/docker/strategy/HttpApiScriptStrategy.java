@@ -1,17 +1,14 @@
 package com.dbagnets.backend.docker.strategy;
 
 import com.dbagnets.backend.docker.DockerService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.reactive.function.client.WebClient;
 
+@RequiredArgsConstructor
+@Slf4j
 public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
-    private static final Logger log = LoggerFactory.getLogger(HttpApiScriptStrategy.class);
     private final String dbName;
-
-    public HttpApiScriptStrategy(String dbName) {
-        this.dbName = dbName;
-    }
 
     @Override
     public void waitForReady(DockerService docker, String containerId, int hostPort) {

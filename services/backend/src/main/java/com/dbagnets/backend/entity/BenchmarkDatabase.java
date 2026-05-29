@@ -1,17 +1,24 @@
 package com.dbagnets.backend.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
 
 @Entity
 @Table(name = "benchmark_databases")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BenchmarkDatabase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
+    @Setter(AccessLevel.PACKAGE)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "benchmark_id", nullable = false)
     private Benchmark benchmark;
@@ -26,35 +33,41 @@ public class BenchmarkDatabase {
     @Column(name = "db_version", nullable = false)
     private String dbVersion;
 
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private DatabaseStatus status;
 
+    @Setter
     @Column(name = "container_id")
     private String containerId;
 
+    @Setter
     @Column(columnDefinition = "TEXT")
     private String script;
 
+    @Setter
     @Column(name = "host_port")
     private Integer hostPort;
 
+    @Setter
     @Column(name = "docker_image")
     private String dockerImage;
 
+    @Setter
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
     /** Size (in bytes) of the database on disk right after the container reached RUNNING with an
      *  empty schema — i.e. the size of the engine + applied init script, but before any insert.
      *  Used to draw the "DB engine vs data" split on the memory chart. */
+    @Setter
     @Column(name = "baseline_size_bytes")
     private Long baselineSizeBytes;
 
+    @Setter
     @Column(name = "baseline_recorded_at")
     private Instant baselineRecordedAt;
-
-    protected BenchmarkDatabase() {}
 
     public BenchmarkDatabase(DatabaseType dbType, String dbName, String dbVersion) {
         this.dbType = dbType;
@@ -62,28 +75,4 @@ public class BenchmarkDatabase {
         this.dbVersion = dbVersion;
         this.status = DatabaseStatus.PENDING;
     }
-
-    // Getters and setters
-    public String getId() { return id; }
-    public Benchmark getBenchmark() { return benchmark; }
-    void setBenchmark(Benchmark benchmark) { this.benchmark = benchmark; }
-    public DatabaseType getDbType() { return dbType; }
-    public String getDbName() { return dbName; }
-    public String getDbVersion() { return dbVersion; }
-    public DatabaseStatus getStatus() { return status; }
-    public void setStatus(DatabaseStatus status) { this.status = status; }
-    public String getContainerId() { return containerId; }
-    public void setContainerId(String containerId) { this.containerId = containerId; }
-    public String getScript() { return script; }
-    public void setScript(String script) { this.script = script; }
-    public Integer getHostPort() { return hostPort; }
-    public void setHostPort(Integer hostPort) { this.hostPort = hostPort; }
-    public String getDockerImage() { return dockerImage; }
-    public void setDockerImage(String dockerImage) { this.dockerImage = dockerImage; }
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-    public Long getBaselineSizeBytes() { return baselineSizeBytes; }
-    public void setBaselineSizeBytes(Long baselineSizeBytes) { this.baselineSizeBytes = baselineSizeBytes; }
-    public Instant getBaselineRecordedAt() { return baselineRecordedAt; }
-    public void setBaselineRecordedAt(Instant baselineRecordedAt) { this.baselineRecordedAt = baselineRecordedAt; }
 }
