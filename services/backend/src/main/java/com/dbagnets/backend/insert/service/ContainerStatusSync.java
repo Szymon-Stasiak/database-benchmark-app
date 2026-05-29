@@ -5,6 +5,7 @@ import com.dbagnets.backend.entity.BenchmarkDatabase;
 import com.dbagnets.backend.entity.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.dbagnets.backend.sse.SseEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -82,11 +83,11 @@ public class ContainerStatusSync {
             db.setStatus(DatabaseStatus.STOPPED);
             db.setErrorMessage("Container is no longer running (detected by status sync)");
             databaseRepository.save(db);
-            sseEmitterService.sendEvent(db.getBenchmark().getId(), "database_status", Map.of(
-                "benchmarkId", db.getBenchmark().getId(),
-                "databaseId", db.getId(),
-                "status", DatabaseStatus.STOPPED.name(),
-                "errorMessage", db.getErrorMessage()
+            sseEmitterService.sendEvent(db.getBenchmark().getId(), SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                SseEvents.PAYLOAD_BENCHMARK_ID, db.getBenchmark().getId(),
+                SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                SseEvents.PAYLOAD_STATUS, DatabaseStatus.STOPPED.name(),
+                SseEvents.PAYLOAD_ERROR_MESSAGE, db.getErrorMessage()
             ));
             touched++;
         }

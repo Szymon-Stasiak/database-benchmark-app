@@ -14,6 +14,7 @@ import com.dbagnets.backend.model.CreateBenchmarkRequest;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.dbagnets.backend.sse.SseEvents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -121,15 +123,15 @@ public class BenchmarkService {
                     }
                     db.setStatus(DatabaseStatus.SCRIPT_READY);
                     databaseRepository.save(db);
-                    sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                        "benchmarkId", benchmarkId,
-                        "databaseId", db.getId(),
-                        "status", "SCRIPT_READY"
+                    sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                        SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                        SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                        SseEvents.PAYLOAD_STATUS, "SCRIPT_READY"
                     ));
-                    sseEmitterService.sendEvent(benchmarkId, "script_generated", Map.of(
-                        "benchmarkId", benchmarkId,
-                        "databaseId", db.getId(),
-                        "scriptPreview", db.getScript().substring(0, Math.min(db.getScript().length(), 500))
+                    sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_SCRIPT_GENERATED, Map.of(
+                        SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                        SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                        SseEvents.PAYLOAD_SCRIPT_PREVIEW, db.getScript().substring(0, Math.min(db.getScript().length(), 500))
                     ));
                 });
         }
@@ -141,11 +143,11 @@ public class BenchmarkService {
                 db.setStatus(DatabaseStatus.FAILED);
                 db.setErrorMessage("Script generation failed");
                 databaseRepository.save(db);
-                sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                    "benchmarkId", benchmarkId,
-                    "databaseId", db.getId(),
-                    "status", "FAILED",
-                    "errorMessage", "Script generation failed"
+                sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                    SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                    SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                    SseEvents.PAYLOAD_STATUS, "FAILED",
+                    SseEvents.PAYLOAD_ERROR_MESSAGE, "Script generation failed"
                 ));
             }
         }
@@ -198,10 +200,10 @@ public class BenchmarkService {
             db.setHostPort(hostPort);
             databaseRepository.save(db);
 
-            sseEmitterService.sendEvent(benchmarkId, "database_port_assigned", Map.of(
-                "benchmarkId", benchmarkId,
-                "databaseId", db.getId(),
-                "hostPort", hostPort
+            sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_PORT_ASSIGNED, Map.of(
+                SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                SseEvents.PAYLOAD_HOST_PORT, hostPort
             ));
 
             // Wait for container to be ready
@@ -212,11 +214,11 @@ public class BenchmarkService {
             db.setStatus(DatabaseStatus.FAILED);
             db.setErrorMessage("Container start failed: " + e.getMessage());
             databaseRepository.save(db);
-            sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                "benchmarkId", benchmarkId,
-                "databaseId", db.getId(),
-                "status", "FAILED",
-                "errorMessage", e.getMessage()
+            sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                SseEvents.PAYLOAD_STATUS, "FAILED",
+                SseEvents.PAYLOAD_ERROR_MESSAGE, e.getMessage()
             ));
         }
     }
@@ -260,11 +262,11 @@ public class BenchmarkService {
             db.setStatus(DatabaseStatus.FAILED);
             db.setErrorMessage("Script execution failed: " + e.getMessage());
             databaseRepository.save(db);
-            sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                "benchmarkId", benchmarkId,
-                "databaseId", db.getId(),
-                "status", "FAILED",
-                "errorMessage", e.getMessage()
+            sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                SseEvents.PAYLOAD_STATUS, "FAILED",
+                SseEvents.PAYLOAD_ERROR_MESSAGE, e.getMessage()
             ));
         }
     }
@@ -298,11 +300,11 @@ public class BenchmarkService {
                 db.setStatus(DatabaseStatus.FAILED);
                 db.setErrorMessage(errorMessage);
                 databaseRepository.save(db);
-                sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                    "benchmarkId", benchmarkId,
-                    "databaseId", db.getId(),
-                    "status", "FAILED",
-                    "errorMessage", errorMessage != null ? errorMessage : "Orchestration failed"
+                sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                    SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                    SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
+                    SseEvents.PAYLOAD_STATUS, "FAILED",
+                    SseEvents.PAYLOAD_ERROR_MESSAGE, errorMessage != null ? errorMessage : "Orchestration failed"
                 ));
             }
         }
@@ -543,18 +545,18 @@ public class BenchmarkService {
         return dockerService.getContainerLogs(db.getContainerId(), tailLines);
     }
 
-    public String getContainerId(String databaseId) {
+    public Optional<String> getContainerId(String databaseId) {
         var db = databaseRepository.findById(databaseId).orElseThrow();
-        return db.getContainerId();
+        return Optional.ofNullable(db.getContainerId());
     }
 
     private void updateBenchmarkStatus(String benchmarkId, BenchmarkStatus status) {
         var benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
         benchmark.setStatus(status);
         benchmarkRepository.save(benchmark);
-        sseEmitterService.sendEvent(benchmarkId, "benchmark_status", Map.of(
-            "benchmarkId", benchmarkId,
-            "status", status.name()
+        sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_BENCHMARK_STATUS, Map.of(
+            SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+            SseEvents.PAYLOAD_STATUS, status.name()
         ));
     }
 
@@ -563,10 +565,10 @@ public class BenchmarkService {
         db.setStatus(status);
         databaseRepository.save(db);
         String benchmarkId = db.getBenchmark().getId();
-        sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-            "benchmarkId", benchmarkId,
-            "databaseId", databaseId,
-            "status", status.name()
+        sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+            SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+            SseEvents.PAYLOAD_DATABASE_ID, databaseId,
+            SseEvents.PAYLOAD_STATUS, status.name()
         ));
     }
 

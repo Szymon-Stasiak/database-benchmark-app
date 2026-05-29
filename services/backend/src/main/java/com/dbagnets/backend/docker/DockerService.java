@@ -8,6 +8,7 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient;
 import com.github.dockerjava.api.async.ResultCallback;
+import com.dbagnets.backend.sse.SseEvents;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -188,7 +189,7 @@ public class DockerService {
                 public void onNext(Frame frame) {
                     try {
                         emitter.send(SseEmitter.event()
-                            .name("log")
+                            .name(SseEvents.EVENT_LOG)
                             .data(new String(frame.getPayload())));
                     } catch (IOException e) {
                         try { close(); } catch (IOException ex) { /* ignore */ }

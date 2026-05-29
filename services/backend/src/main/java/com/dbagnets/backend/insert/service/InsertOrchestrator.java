@@ -33,6 +33,7 @@ import com.dbagnets.backend.insert.strategy.InsertStrategyFactory;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.dbagnets.backend.sse.SseEvents;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -296,7 +297,7 @@ public class InsertOrchestrator {
         );
 
         BatchProgressCallback progress = (batchIndex, batchCount, recordsDone) ->
-            sseEmitterService.sendEvent(runId, "insert_batch_progress", new BatchProgressEvent(
+            sseEmitterService.sendEvent(runId, SseEvents.EVENT_INSERT_BATCH_PROGRESS, new BatchProgressEvent(
                 runId, resultId, target.id(), node.name(),
                 batchIndex, batchCount, recordsDone, records.size()));
 
@@ -327,10 +328,10 @@ public class InsertOrchestrator {
         // Nudge the benchmark page to refetch the size chart immediately — far more responsive
         // than waiting up to 30s for the next poll. Sent per phase, per DB, so each chart segment
         // updates independently as its data lands on disk.
-        sseEmitterService.sendEvent(snapshot.benchmarkId(), "database_size_dirty", Map.of(
-            "benchmarkId", snapshot.benchmarkId(),
-            "databaseId", target.id(),
-            "entityName", node.name()
+        sseEmitterService.sendEvent(snapshot.benchmarkId(), SseEvents.EVENT_DATABASE_SIZE_DIRTY, Map.of(
+            SseEvents.PAYLOAD_BENCHMARK_ID, snapshot.benchmarkId(),
+            SseEvents.PAYLOAD_DATABASE_ID, target.id(),
+            SseEvents.PAYLOAD_ENTITY_NAME, node.name()
         ));
     }
 
@@ -480,11 +481,11 @@ public class InsertOrchestrator {
             db.setErrorMessage("Container '" + dbName + "' is not running anymore");
             databaseRepository.save(db);
             String benchmarkId = db.getBenchmark().getId();
-            sseEmitterService.sendEvent(benchmarkId, "database_status", Map.of(
-                "benchmarkId", benchmarkId,
-                "databaseId", databaseId,
-                "status", DatabaseStatus.STOPPED.name(),
-                "errorMessage", db.getErrorMessage()
+            sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
+                SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                SseEvents.PAYLOAD_DATABASE_ID, databaseId,
+                SseEvents.PAYLOAD_STATUS, DatabaseStatus.STOPPED.name(),
+                SseEvents.PAYLOAD_ERROR_MESSAGE, db.getErrorMessage()
             ));
         });
     }
@@ -507,7 +508,7 @@ public class InsertOrchestrator {
             resultRepository.save(result);
             return InsertResultResponse.from(result);
         });
-        sseEmitterService.sendEvent(runId, "insert_result_status", payload);
+        sseEmitterService.sendEvent(runId, SseEvents.EVENT_INSERT_RESULT_STATUS, payload);
     }
 
     private void updateRunStatus(String runId, InsertStatus status) {
@@ -519,9 +520,9 @@ public class InsertOrchestrator {
             }
             runRepository.save(run);
         });
-        sseEmitterService.sendEvent(runId, "insert_run_status", Map.of(
-            "runId", runId,
-            "status", status.name()
+        sseEmitterService.sendEvent(runId, SseEvents.EVENT_INSERT_RUN_STATUS, Map.of(
+            SseEvents.PAYLOAD_RUN_ID, runId,
+            SseEvents.PAYLOAD_STATUS, status.name()
         ));
     }
 

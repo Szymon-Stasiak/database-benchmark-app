@@ -13,6 +13,7 @@ import com.dbagnets.backend.insert.service.DatabaseSizeService;
 import com.dbagnets.backend.insert.service.EntityCatalogService;
 import com.dbagnets.backend.insert.service.InsertOrchestrator;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.dbagnets.backend.sse.SseEvents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -110,26 +111,26 @@ public class InsertController {
                 Thread.sleep(50);
                 InsertRunResponse snapshot = insertOrchestrator.getRun(runId);
                 emitter.send(SseEmitter.event()
-                    .name("insert_run_status")
+                    .name(SseEvents.EVENT_INSERT_RUN_STATUS)
                     .data(objectMapper.writeValueAsString(Map.of(
-                        "runId", runId,
-                        "status", snapshot.status().name()
+                        SseEvents.PAYLOAD_RUN_ID, runId,
+                        SseEvents.PAYLOAD_STATUS, snapshot.status().name()
                     ))));
                 for (var result : snapshot.results()) {
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("id", result.id());
-                    payload.put("databaseId", result.databaseId());
+                    payload.put(SseEvents.PAYLOAD_DATABASE_ID, result.databaseId());
                     payload.put("dbName", result.dbName());
-                    payload.put("entityName", result.entityName());
-                    payload.put("status", result.status().name());
+                    payload.put(SseEvents.PAYLOAD_ENTITY_NAME, result.entityName());
+                    payload.put(SseEvents.PAYLOAD_STATUS, result.status().name());
                     payload.put("startedAt", result.startedAt());
                     payload.put("finishedAt", result.finishedAt());
                     payload.put("durationMs", result.durationMs());
                     payload.put("recordsInserted", result.recordsInserted());
                     payload.put("throughputRps", result.throughputRps());
-                    payload.put("errorMessage", result.errorMessage());
+                    payload.put(SseEvents.PAYLOAD_ERROR_MESSAGE, result.errorMessage());
                     emitter.send(SseEmitter.event()
-                        .name("insert_result_status")
+                        .name(SseEvents.EVENT_INSERT_RESULT_STATUS)
                         .data(objectMapper.writeValueAsString(payload)));
                 }
             } catch (Exception ignored) {

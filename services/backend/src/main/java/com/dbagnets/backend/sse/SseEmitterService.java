@@ -55,7 +55,7 @@ public class SseEmitterService {
             var deadEmitters = new ArrayList<SseEmitter>();
             for (var emitter : list) {
                 try {
-                    emitter.send(SseEmitter.event().name("heartbeat").data("{}"));
+                    emitter.send(SseEmitter.event().name(SseEvents.EVENT_HEARTBEAT).data("{}"));
                 } catch (IOException e) {
                     deadEmitters.add(emitter);
                 }

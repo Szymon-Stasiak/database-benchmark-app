@@ -8,9 +8,11 @@ import com.dbagnets.backend.model.LogsResponse;
 import com.dbagnets.backend.security.CurrentUser;
 import com.dbagnets.backend.service.BenchmarkService;
 import com.dbagnets.backend.sse.SseEmitterService;
+import com.dbagnets.backend.sse.SseEvents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ import java.util.concurrent.Executors;
 @RestController
 @RequestMapping("/api/benchmarks")
 @RequiredArgsConstructor
+@Slf4j
 public class BenchmarkController {
 
     private final BenchmarkService benchmarkService;
@@ -38,7 +41,7 @@ public class BenchmarkController {
     public ResponseEntity<BenchmarkResponse> createBenchmark(
             @Valid @RequestBody CreateBenchmarkRequest request,
             @CurrentUser User user) {
-        var response = benchmarkService.createBenchmark(request, user);
+        BenchmarkResponse response = benchmarkService.createBenchmark(request, user);
         return ResponseEntity.status(201).body(response);
     }
 
@@ -53,8 +56,6 @@ public class BenchmarkController {
         return ResponseEntity.accepted().build();
     }
 
-    /** Hard reset: force-stop + remove containers WITH data volumes, then redeploy fresh. Use
-     *  when the user wants a clean slate (every previous insert benchmark's data wiped). */
     @PostMapping("/{id}/hard-reset")
     public ResponseEntity<Void> hardResetBenchmark(@PathVariable String id) {
         benchmarkService.hardResetBenchmark(id);
@@ -82,41 +83,44 @@ public class BenchmarkController {
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamEvents(@PathVariable String id) {
         SseEmitter emitter = sseEmitterService.subscribe(id);
-        sseInitExecutor.execute(() -> {
-            try {
-                Thread.sleep(50);
-                var benchmark = benchmarkService.getBenchmark(id);
-                emitter.send(SseEmitter.event()
-                    .name("benchmark_status")
-                    .data(objectMapper.writeValueAsString(Map.of(
-                        "benchmarkId", id,
-                        "status", benchmark.status()
-                    ))));
-                for (var db : benchmark.databases()) {
-                    var dbEvent = new HashMap<String, Object>();
-                    dbEvent.put("benchmarkId", id);
-                    dbEvent.put("databaseId", db.id());
-                    dbEvent.put("status", db.status());
-                    if (db.errorMessage() != null) {
-                        dbEvent.put("errorMessage", db.errorMessage());
-                    }
-                    emitter.send(SseEmitter.event()
-                        .name("database_status")
-                        .data(objectMapper.writeValueAsString(dbEvent)));
-                    if (db.hostPort() != null) {
-                        emitter.send(SseEmitter.event()
-                            .name("database_port_assigned")
-                            .data(objectMapper.writeValueAsString(Map.of(
-                                "benchmarkId", id,
-                                "databaseId", db.id(),
-                                "hostPort", db.hostPort()
-                            ))));
-                    }
-                }
-            } catch (Exception e) {
-            }
-        });
+        sseInitExecutor.execute(() -> pushInitialState(id, emitter));
         return emitter;
+    }
+
+    private void pushInitialState(String benchmarkId, SseEmitter emitter) {
+        try {
+            Thread.sleep(SseEvents.INITIAL_STATE_DELAY_MS);
+            var benchmark = benchmarkService.getBenchmark(benchmarkId);
+            emitter.send(SseEmitter.event()
+                .name(SseEvents.EVENT_BENCHMARK_STATUS)
+                .data(objectMapper.writeValueAsString(Map.of(
+                    SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                    SseEvents.PAYLOAD_STATUS, benchmark.status()
+                ))));
+            for (var db : benchmark.databases()) {
+                var dbEvent = new HashMap<String, Object>();
+                dbEvent.put(SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId);
+                dbEvent.put(SseEvents.PAYLOAD_DATABASE_ID, db.id());
+                dbEvent.put(SseEvents.PAYLOAD_STATUS, db.status());
+                if (db.errorMessage() != null) {
+                    dbEvent.put(SseEvents.PAYLOAD_ERROR_MESSAGE, db.errorMessage());
+                }
+                emitter.send(SseEmitter.event()
+                    .name(SseEvents.EVENT_DATABASE_STATUS)
+                    .data(objectMapper.writeValueAsString(dbEvent)));
+                if (db.hostPort() != null) {
+                    emitter.send(SseEmitter.event()
+                        .name(SseEvents.EVENT_DATABASE_PORT_ASSIGNED)
+                        .data(objectMapper.writeValueAsString(Map.of(
+                            SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
+                            SseEvents.PAYLOAD_DATABASE_ID, db.id(),
+                            SseEvents.PAYLOAD_HOST_PORT, db.hostPort()
+                        ))));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to push initial SSE state for benchmark {}: {}", benchmarkId, e.toString());
+        }
     }
 
     @GetMapping("/{id}/databases/{dbId}/script/preview")
@@ -169,15 +173,13 @@ public class BenchmarkController {
     }
 
     @GetMapping(value = "/{id}/databases/{dbId}/logs/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamLogs(@PathVariable String id,
-                                  @PathVariable String dbId) {
-        String containerId = benchmarkService.getContainerId(dbId);
+    public SseEmitter streamLogs(@PathVariable String id, @PathVariable String dbId) {
+        log.debug("Opening log stream for benchmark {} database {}", id, dbId);
         SseEmitter emitter = new SseEmitter(0L);
-        if (containerId != null) {
-            dockerService.streamLogs(containerId, emitter);
-        } else {
-            emitter.complete();
-        }
+        benchmarkService.getContainerId(dbId).ifPresentOrElse(
+            containerId -> dockerService.streamLogs(containerId, emitter),
+            emitter::complete
+        );
         return emitter;
     }
 }
