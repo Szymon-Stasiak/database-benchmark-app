@@ -17,9 +17,6 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /** Origins permitted by CORS. Defaults to the local dev frontend; override per environment
-     *  with the {@code APP_CORS_ALLOWED_ORIGINS} env var (comma-separated) or
-     *  {@code --app.cors.allowed-origins=...} CLI flag. */
     private final List<String> allowedOrigins;
 
     public SecurityConfig(@Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {

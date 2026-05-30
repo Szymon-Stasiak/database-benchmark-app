@@ -10,11 +10,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-/**
- * Maps common business exceptions to HTTP status codes so the frontend gets
- * clean 4xx responses (and stops polling on permanent failures) instead of
- * generic 500s with stack traces in the log.
- */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
