@@ -31,22 +31,17 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
     }
 
     @Override
-    public Object resolveArgument(MethodParameter parameter,
-                                  ModelAndViewContainer mavContainer,
-                                  NativeWebRequest webRequest,
-                                  WebDataBinderFactory binderFactory) {
+    public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
         User cached = (User) webRequest.getAttribute(REQUEST_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
         if (cached != null) {
             return cached;
         }
-
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!(authentication instanceof JwtAuthenticationToken jwtAuth)) {
             throw new AuthenticationCredentialsNotFoundException(
                     "@CurrentUser requires a JWT-authenticated request but found: "
                             + (authentication == null ? "null" : authentication.getClass().getName()));
         }
-
         Jwt jwt = jwtAuth.getToken();
         User resolved = currentUserService.resolve(jwt);
         webRequest.setAttribute(REQUEST_ATTRIBUTE, resolved, RequestAttributes.SCOPE_REQUEST);

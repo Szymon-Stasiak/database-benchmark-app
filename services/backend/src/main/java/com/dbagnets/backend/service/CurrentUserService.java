@@ -17,9 +17,6 @@ public class CurrentUserService {
 
     private final UserRepository userRepository;
 
-    /** Returns the local {@link User} for the JWT principal, creating one on first sight
-     *  (JIT provisioning) and refreshing the profile snapshot whenever the JWT carries new
-     *  email/name/pictureUrl values. */
     @Transactional
     public User resolve(Jwt jwt) {
         String externalId = jwt.getSubject();

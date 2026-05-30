@@ -11,7 +11,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
-import java.util.Objects;
 
 @Entity
 @Table(name = "users")
@@ -53,21 +52,10 @@ public class User {
         return user;
     }
 
-    /** Refreshes mutable profile fields from the latest JWT and stamps {@code lastLoginAt}.
-     *  Returns {@code true} when any profile field actually changed, so callers can decide
-     *  whether to skip a write. */
-    public boolean refreshProfile(String email, String name, String picture) {
-        boolean changed = equalsNullable(this.email, email)
-                || equalsNullable(this.name, name)
-                || equalsNullable(this.pictureUrl, picture);
+    public void refreshProfile(String email, String name, String pictureUrl) {
         this.email = email;
         this.name = name;
-        this.pictureUrl = picture;
+        this.pictureUrl = pictureUrl;
         this.lastLoginAt = Instant.now();
-        return changed;
-    }
-
-    private static boolean equalsNullable(Object a, Object b) {
-        return !Objects.equals(a, b);
     }
 }

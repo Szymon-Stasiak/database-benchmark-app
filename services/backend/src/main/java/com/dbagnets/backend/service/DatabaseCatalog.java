@@ -50,11 +50,4 @@ public class DatabaseCatalog {
     public SupportedDatabasesResponse getSupportedDatabases() {
         return new SupportedDatabasesResponse(CATALOG);
     }
-
-    public boolean isSupported(String dbType, String dbName, String dbVersion) {
-        var options = CATALOG.get(dbType.toUpperCase());
-        if (options == null) return false;
-        return options.stream()
-            .anyMatch(opt -> opt.name().equals(dbName) && opt.versions().contains(dbVersion));
-    }
 }
