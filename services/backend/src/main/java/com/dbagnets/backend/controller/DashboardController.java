@@ -8,6 +8,7 @@ import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,24 +20,20 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DashboardController {
 
+    private static final int RECENT_RUNS_LIMIT = 5;
+
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkDatabaseRepository databaseRepository;
 
     @GetMapping("/dashboard")
     public DashboardResponse getDashboard(@CurrentUser User user) {
-        int totalBenchmarks = (int) benchmarkRepository.count();
-        int activeDatabases = (int) databaseRepository.countByStatus(DatabaseStatus.RUNNING);
+        int totalBenchmarks = (int) benchmarkRepository.countByUser(user);
+        int activeDatabases = (int) databaseRepository.countByBenchmark_UserAndStatus(user, DatabaseStatus.RUNNING);
 
         List<RecentRun> recentRuns = benchmarkRepository
-                .findByUserOrderByCreatedAtDesc(user)
+                .findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, RECENT_RUNS_LIMIT))
                 .stream()
-                .limit(5)
-                .map(b -> new RecentRun(
-                        b.getId(),
-                        b.getTopic(),
-                        b.getStatus().name(),
-                        b.getCreatedAt().toString()
-                ))
+                .map(RecentRun::from)
                 .toList();
 
         return new DashboardResponse(totalBenchmarks, activeDatabases, recentRuns);

@@ -42,7 +42,7 @@ class CurrentUserServiceTest {
         assertThat(created.getExternalId()).isEqualTo("sub-new");
         assertThat(created.getEmail()).isEqualTo("alice@example.com");
         assertThat(created.getName()).isEqualTo("Alice");
-        assertThat(created.getPicture()).isEqualTo("https://example.com/a.png");
+        assertThat(created.getPictureUrl()).isEqualTo("https://example.com/a.png");
         assertThat(result).isSameAs(created);
     }
 
@@ -57,7 +57,7 @@ class CurrentUserServiceTest {
         assertThat(result).isSameAs(existing);
         assertThat(result.getEmail()).isEqualTo("new@example.com");
         assertThat(result.getName()).isEqualTo("New Name");
-        assertThat(result.getPicture()).isEqualTo("new-pic");
+        assertThat(result.getPictureUrl()).isEqualTo("new-pic");
         verify(userRepository, never()).save(any(User.class));
     }
 
@@ -79,7 +79,7 @@ class CurrentUserServiceTest {
                 .subject(subject)
                 .claim("email", email)
                 .claim("name", name)
-                .claim("picture", picture)
+                .claim("pictureUrl", picture)
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(60))
                 .build();

@@ -13,6 +13,6 @@ public class UserController {
 
     @GetMapping("/user")
     public UserInfo getCurrentUser(@CurrentUser User user) {
-        return new UserInfo(user.getEmail(), user.getName(), user.getPicture());
+        return new UserInfo(user.getEmail(), user.getName(), user.getPictureUrl());
     }
 }

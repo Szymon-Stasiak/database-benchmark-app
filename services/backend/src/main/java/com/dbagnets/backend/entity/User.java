@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users")
@@ -32,7 +33,7 @@ public class User {
     private String name;
 
     @Column
-    private String picture;
+    private String pictureUrl;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -46,7 +47,7 @@ public class User {
         user.externalId = externalId;
         user.email = email;
         user.name = name;
-        user.picture = picture;
+        user.pictureUrl = picture;
         user.createdAt = now;
         user.lastLoginAt = now;
         return user;
@@ -56,17 +57,17 @@ public class User {
      *  Returns {@code true} when any profile field actually changed, so callers can decide
      *  whether to skip a write. */
     public boolean refreshProfile(String email, String name, String picture) {
-        boolean changed = !equalsNullable(this.email, email)
-                || !equalsNullable(this.name, name)
-                || !equalsNullable(this.picture, picture);
+        boolean changed = equalsNullable(this.email, email)
+                || equalsNullable(this.name, name)
+                || equalsNullable(this.pictureUrl, picture);
         this.email = email;
         this.name = name;
-        this.picture = picture;
+        this.pictureUrl = picture;
         this.lastLoginAt = Instant.now();
         return changed;
     }
 
     private static boolean equalsNullable(Object a, Object b) {
-        return a == null ? b == null : a.equals(b);
+        return !Objects.equals(a, b);
     }
 }

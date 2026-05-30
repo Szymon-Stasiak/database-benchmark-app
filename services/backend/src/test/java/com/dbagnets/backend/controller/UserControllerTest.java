@@ -44,12 +44,12 @@ class UserControllerTest {
                 .subject("sub-alice")
                 .claim("email", "alice@example.com")
                 .claim("name", "Alice Example")
-                .claim("picture", "https://example.com/alice.png")
+                .claim("pictureUrl", "https://example.com/alice.png")
         )))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("alice@example.com"))
                 .andExpect(jsonPath("$.name").value("Alice Example"))
-                .andExpect(jsonPath("$.picture").value("https://example.com/alice.png"));
+                .andExpect(jsonPath("$.pictureUrl").value("https://example.com/alice.png"));
     }
 
     @Test

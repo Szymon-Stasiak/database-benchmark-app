@@ -1,5 +1,7 @@
 package com.dbagnets.backend.model;
 
+import com.dbagnets.backend.entity.Benchmark;
+
 import java.util.List;
 
 public record DashboardResponse(
@@ -13,5 +15,14 @@ public record DashboardResponse(
             String databaseName,
             String status,
             String timestamp
-    ) {}
+    ) {
+        public static RecentRun from(Benchmark b) {
+            return new RecentRun(
+                    b.getId(),
+                    b.getTopic(),
+                    b.getStatus().name(),
+                    b.getCreatedAt().toString()
+            );
+        }
+    }
 }

@@ -13,13 +13,13 @@ public class CurrentUserService {
 
     private static final String CLAIM_EMAIL = "email";
     private static final String CLAIM_NAME = "name";
-    private static final String CLAIM_PICTURE = "picture";
+    private static final String CLAIM_PICTURE = "pictureUrl";
 
     private final UserRepository userRepository;
 
     /** Returns the local {@link User} for the JWT principal, creating one on first sight
      *  (JIT provisioning) and refreshing the profile snapshot whenever the JWT carries new
-     *  email/name/picture values. */
+     *  email/name/pictureUrl values. */
     @Transactional
     public User resolve(Jwt jwt) {
         String externalId = jwt.getSubject();
