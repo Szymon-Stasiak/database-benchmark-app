@@ -47,6 +47,10 @@ public class BenchmarkDatabase {
     private String script;
 
     @Setter
+    @Column(name = "embedding_mappings", columnDefinition = "TEXT")
+    private String embeddingMappings;
+
+    @Setter
     @Column(name = "host_port")
     private Integer hostPort;
 
@@ -58,9 +62,7 @@ public class BenchmarkDatabase {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    /** Size (in bytes) of the database on disk right after the container reached RUNNING with an
-     *  empty schema — i.e. the size of the engine + applied init script, but before any insert.
-     *  Used to draw the "DB engine vs data" split on the memory chart. */
+
     @Setter
     @Column(name = "baseline_size_bytes")
     private Long baselineSizeBytes;

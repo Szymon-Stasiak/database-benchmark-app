@@ -19,7 +19,28 @@ public class RedisScriptStrategy implements ScriptExecutionStrategy {
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
         String result = docker.execWithStdin(containerId, script, "redis-cli");
-        log.info("Redis script executed: {}", result.substring(0, Math.min(200, result.length())));
+
+        if (result != null && containsError(result)) {
+            String firstError = result.lines()
+                .filter(this::isErrorLine)
+                .findFirst()
+                .orElse(result);
+            throw new RuntimeException("Redis init script failed: " + firstError);
+        }
+        log.info("Redis script executed cleanly ({} chars output)",
+            result == null ? 0 : result.length());
+    }
+
+    private boolean containsError(String output) {
+        return output.lines().anyMatch(this::isErrorLine);
+    }
+
+    private boolean isErrorLine(String line) {
+        String trimmed = line.stripLeading();
+        return trimmed.startsWith("(error)")
+            || trimmed.startsWith("ERR ")
+            || trimmed.startsWith("WRONGTYPE")
+            || trimmed.startsWith("NOAUTH");
     }
 
     private void sleep(long ms) {

@@ -8,8 +8,6 @@ import com.dbagnets.backend.docker.ContainerSpec;
 import com.dbagnets.backend.docker.DockerService;
 import com.dbagnets.backend.docker.ScriptExecutor;
 import com.dbagnets.backend.entity.*;
-import com.dbagnets.backend.insert.repository.InsertRunRepository;
-import com.dbagnets.backend.insert.service.BaselineSizeService;
 import com.dbagnets.backend.model.BenchmarkResponse;
 import com.dbagnets.backend.model.CreateBenchmarkRequest;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
@@ -23,7 +21,6 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.swing.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -46,8 +43,6 @@ public class BenchmarkService {
     private final ScriptExecutor scriptExecutor;
     private final SseEmitterService sseEmitterService;
     private final ObjectMapper objectMapper;
-    private final BaselineSizeService baselineSizeService;
-    private final InsertRunRepository insertRunRepository;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @Transactional
@@ -147,10 +142,6 @@ public class BenchmarkService {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
         log.info("HARD RESET requested for benchmark {} — wiping {} containers and volumes",
                 benchmarkId, benchmark.getDatabases().size());
-        long wipedRuns = insertRunRepository.deleteByBenchmarkId(benchmarkId);
-        if (wipedRuns > 0) {
-            log.info("Hard reset wiped {} insert run(s) for benchmark {}", wipedRuns, benchmarkId);
-        }
 
         String benchmarkPrefix = "benchmark-" + benchmarkId.substring(0, 8) + "-";
         for (BenchmarkDatabase db : benchmark.getDatabases()) {
@@ -318,8 +309,14 @@ public class BenchmarkService {
                 benchmark.getTopic(), benchmark.getDepth(), targets
         );
 
+        long successCount = response.scripts() == null ? 0
+                : response.scripts().stream().filter(ScriptResult::success).count();
+        if (successCount == 0) {
+            throw new RuntimeException("Script generation failed for every database");
+        }
         if (!response.success()) {
-            throw new RuntimeException("Script generation failed");
+            log.warn("Partial script-generation success: {}/{} databases produced a script — failed ones will be marked FAILED, the rest will proceed",
+                    successCount, response.scripts() == null ? 0 : response.scripts().size());
         }
         benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
         try {
@@ -339,6 +336,13 @@ public class BenchmarkService {
                         db.setScript(scriptResult.script());
                         if (scriptResult.container() != null) {
                             db.setDockerImage(scriptResult.container().dockerImage());
+                        }
+                        if (!scriptResult.embeddingMappings().isEmpty()) {
+                            try {
+                                db.setEmbeddingMappings(objectMapper.writeValueAsString(scriptResult.embeddingMappings()));
+                            } catch (Exception e) {
+                                log.warn("Failed to serialize embedding mappings for {}/{}", scriptResult.dbName(), scriptResult.dbVersion(), e);
+                            }
                         }
                         db.setStatus(DatabaseStatus.SCRIPT_READY);
                         databaseRepository.save(db);
@@ -440,11 +444,6 @@ public class BenchmarkService {
         try {
             scriptExecutor.executeScript(db.getContainerId(), db.getDbName(), db.getScript(), db.getHostPort());
             updateDatabaseStatus(db.getId(), DatabaseStatus.RUNNING);
-            try {
-                baselineSizeService.captureFor(dbId);
-            } catch (Exception ex) {
-                log.warn("Eager baseline capture failed for {} ({}): {}", db.getDbName(), dbId, ex.getMessage());
-            }
         } catch (Exception e) {
             log.error("Failed to initialize {} ({})", db.getDbName(), dbId, e);
             db.setStatus(DatabaseStatus.FAILED);

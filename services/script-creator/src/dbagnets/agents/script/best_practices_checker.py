@@ -63,11 +63,18 @@ class BestPracticesCheckerAgent(BaseAgent):
      plus matching composite FKs (or drop the FK to that partitioned parent if the
      partition column can't be propagated). Same rule for UNIQUE constraints: every
      UNIQUE on a partitioned table must contain every partition column.
-     Also: FILLFACTOR must NOT appear in the same CREATE TABLE as PARTITION BY —
-     it should be applied via ALTER TABLE afterward. Do NOT fail for this ordering.
+     STORAGE PARAMS + PARTITIONING (PostgreSQL hard requirement): FAIL the
+     script if any storage parameter (FILLFACTOR, autovacuum_*, toast.*,
+     parallel_workers, etc.) is set on a partitioned PARENT table — neither
+     inline `WITH (...)` nor `ALTER TABLE <parent> SET (...)`. Postgres
+     rejects this with "cannot specify storage parameters for a partitioned
+     table". Acceptable alternatives: skip the storage param entirely, or
+     apply it per leaf partition (`ALTER TABLE <partition_name> SET (...)`).
    - Covering indexes (INCLUDE) for the most common query patterns
    - Appropriate index types: B-tree for equality/range, GIN for arrays/JSONB/full-text
-   - FILLFACTOR tuning on tables with frequent updates (via ALTER TABLE if partitioned)
+   - FILLFACTOR tuning on NON-partitioned tables with frequent updates (via
+     ALTER TABLE after creation). On partitioned tables, set FILLFACTOR per
+     leaf partition or skip it.
 
 7. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
    These are nice-to-have features. If 2+ are present, PASS. If none are present,

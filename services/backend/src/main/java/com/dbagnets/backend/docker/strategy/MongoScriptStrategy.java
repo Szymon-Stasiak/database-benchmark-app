@@ -18,8 +18,34 @@ public class MongoScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
-        String result = docker.execWithStdin(containerId, script, "mongosh", "benchmark");
-        log.info("MongoDB script executed: {}", result.substring(0, Math.min(200, result.length())));
+        String result = docker.execWithStdin(containerId, script,
+            "mongosh", "benchmark", "--quiet");
+
+        if (result != null && containsError(result)) {
+            String firstError = result.lines()
+                .filter(this::isErrorLine)
+                .findFirst()
+                .orElse(result);
+            throw new RuntimeException("MongoDB init script failed: " + firstError);
+        }
+        log.info("MongoDB script executed cleanly ({} chars output)",
+            result == null ? 0 : result.length());
+    }
+
+    private boolean containsError(String output) {
+        return output.lines().anyMatch(this::isErrorLine);
+    }
+
+    private boolean isErrorLine(String line) {
+        String trimmed = line.stripLeading();
+        return trimmed.startsWith("MongoServerError")
+            || trimmed.startsWith("MongoBulkWriteError")
+            || trimmed.startsWith("BulkWriteError")
+            || trimmed.startsWith("SyntaxError")
+            || trimmed.startsWith("TypeError")
+            || trimmed.startsWith("ReferenceError")
+            || trimmed.startsWith("MongoshInvalidInputError")
+            || trimmed.startsWith("Uncaught");
     }
 
     private void sleep(long ms) {

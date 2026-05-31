@@ -89,8 +89,28 @@ class ScriptGeneratorAgent(BaseAgent):
        (e.g. `FOREIGN KEY (parent_id, parent_created_at) REFERENCES parent(id, created_at)`).
        If propagating the partition column to children is impractical, drop the FK on
        that relationship — it's acceptable for benchmark schemas.
-     Also: do NOT combine FILLFACTOR with PARTITION BY in the same CREATE TABLE — set
-     FILLFACTOR via ALTER TABLE after creation.
+     STORAGE PARAMETERS + PARTITIONED TABLES (PostgreSQL hard requirement):
+       PostgreSQL FORBIDS storage parameters (FILLFACTOR, autovacuum_*, toast.*,
+       parallel_workers, etc.) on partitioned parent tables — both inline
+       `WITH (...)` and `ALTER TABLE <parent> SET (...)` raise
+       "cannot specify storage parameters for a partitioned table".
+       Rules:
+         * Do NOT use `WITH (fillfactor=...)` on a CREATE TABLE that has PARTITION BY.
+         * Do NOT use `ALTER TABLE <parent> SET (fillfactor=...)` on a partitioned parent.
+         * If FILLFACTOR is desired for a partitioned entity, apply it per partition:
+           `ALTER TABLE <partition_name> SET (fillfactor=...)` for each leaf partition.
+         * Simplest: skip FILLFACTOR entirely on partitioned tables.
+       Use FILLFACTOR freely on non-partitioned tables (via ALTER TABLE after creation).
+     MYSQL: FULLTEXT INDEX + PARTITIONING (hard requirement):
+       MySQL FORBIDS `FULLTEXT INDEX` (and `SPATIAL INDEX`) on partitioned tables —
+       both inline on CREATE TABLE and via ALTER TABLE on a partitioned parent —
+       erroring with "ER_PARTITION_FULLTEXT_NOT_SUPPORTED" (error 1214).
+       Rules:
+         * Do NOT add `FULLTEXT INDEX ...` or `FULLTEXT KEY ...` on any CREATE TABLE
+           that contains `PARTITION BY ...`, and do NOT add it via ALTER TABLE either.
+         * If full-text search on a high-volume entity is desirable, either drop
+           the partitioning, or skip the FULLTEXT index for that entity.
+       Same restriction applies to SPATIAL indexes on partitioned tables.
    - Covering indexes (INCLUDE columns) for frequently queried combinations
    - Partial indexes on commonly filtered subsets (e.g. WHERE status = 'active')
    - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups
@@ -272,6 +292,29 @@ RULES:
    separate UNIQUE constraint. FK references a unique parent PK by definition.
 10. Use snake_case naming in English.
 11. Do NOT include any sample data. Generate schema/structure definitions only.
+11b. NAMESPACE / DATABASE PROVISIONING (CRITICAL):
+    The execution environment (Docker container) provides a default working
+    scope and the script runner connects to it explicitly. The script MUST
+    operate ONLY within that default scope and MUST NOT create, switch, or
+    reference any alternate database/schema/keyspace.
+    Forbidden statements (PER engine):
+      * Relational (PostgreSQL / MySQL / TimescaleDB):
+          NO `CREATE DATABASE`, NO `CREATE SCHEMA`, NO `USE <db>`,
+          NO `\\c <db>`, NO `SET search_path = ...`, NO schema-qualified
+          identifiers like `myschema.mytable` — use bare table names.
+      * Graph (Neo4j / Memgraph):
+          NO `CREATE DATABASE`, NO `:use <db>`, NO `USE <db>`.
+      * Document (MongoDB):
+          NO `use <db>` directive at the top of the script.
+          Use bare collection references like `db.collection_name.<op>()` —
+          `db` is already bound to the correct working database.
+      * Key-value / time-series / vector / HTTP-API engines:
+          NO bucket / keyspace / index-prefix creation that overrides the
+          container's provided default.
+    Rationale: downstream insert/benchmark code connects to the
+    container-provided default (e.g. `benchmark` for SQL, `benchmark` MongoDB
+    db, default Neo4j database). If the script lands its tables/collections
+    elsewhere, every later query fails with "table/collection does not exist".
 12. NAMING CONSISTENCY (CRITICAL):
    Entity names in the script MUST match the LogicalSchema EXACTLY (same spelling, same case).
    Attribute names in the script MUST match the LogicalSchema EXACTLY.

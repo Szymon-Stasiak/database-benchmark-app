@@ -34,9 +34,34 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
         if ("memgraph".equals(dbName)) {
             result = docker.execWithStdin(containerId, script, "mgconsole");
         } else {
-            result = docker.execWithStdin(containerId, script, "cypher-shell", "-u", "neo4j", "-p", "benchmark");
+            result = docker.execWithStdin(containerId, script,
+                "cypher-shell", "-u", "neo4j", "-p", "benchmark",
+                "--database", "neo4j",
+                "--fail-fast");
         }
-        log.info("{} script executed: {}", dbName, result.substring(0, Math.min(200, result.length())));
+
+        if (result != null && containsError(result)) {
+            String firstError = result.lines()
+                .filter(this::isErrorLine)
+                .findFirst()
+                .orElse(result);
+            throw new RuntimeException(dbName + " init script failed: " + firstError);
+        }
+        log.info("{} script executed cleanly ({} chars output)", dbName,
+            result == null ? 0 : result.length());
+    }
+
+    private boolean containsError(String output) {
+        return output.lines().anyMatch(this::isErrorLine);
+    }
+
+    private boolean isErrorLine(String line) {
+        String trimmed = line.stripLeading();
+        return trimmed.startsWith("Neo.ClientError")
+            || trimmed.startsWith("Neo.DatabaseError")
+            || trimmed.startsWith("Neo.TransientError")
+            || trimmed.toLowerCase().startsWith("error:")
+            || trimmed.toLowerCase().contains("syntax error");
     }
 
     private void sleep(long ms) {

@@ -5,6 +5,15 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 PORTS=(8001 8080 5173)
 PIDS=()
 
+PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "ERROR: $PYTHON_BIN not found." >&2
+    echo "Create the project venv first:" >&2
+    echo "  python3 -m venv $REPO_ROOT/.venv" >&2
+    echo "  $REPO_ROOT/.venv/bin/pip install -e $REPO_ROOT/services/script-creator" >&2
+    exit 1
+fi
+
 free_ports() {
     for port in "${PORTS[@]}"; do
         local pids
@@ -41,7 +50,7 @@ trap cleanup EXIT INT TERM
 echo "Starting script-creator on :8001..."
 (
     cd "$REPO_ROOT/services/script-creator"
-    PYTHONPATH=src python -m uvicorn dbagnets.api:app --port 8001 --reload
+    PYTHONPATH=src "$PYTHON_BIN" -m uvicorn dbagnets.api:app --port 8001 --reload
 ) &
 PIDS+=($!)
 

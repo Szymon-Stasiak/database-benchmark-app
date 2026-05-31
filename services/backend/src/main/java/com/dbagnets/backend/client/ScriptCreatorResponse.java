@@ -16,8 +16,13 @@ public record ScriptCreatorResponse(
         ContainerInfo container,
         String script,
         boolean success,
-        @JsonProperty("iterations_used") int iterationsUsed
-    ) {}
+        @JsonProperty("iterations_used") int iterationsUsed,
+        @JsonProperty("embedding_mappings") List<EmbeddingMapping> embeddingMappings
+    ) {
+        public List<EmbeddingMapping> embeddingMappings() {
+            return embeddingMappings == null ? List.of() : embeddingMappings;
+        }
+    }
 
     public record ContainerInfo(
         @JsonProperty("docker_image") String dockerImage,

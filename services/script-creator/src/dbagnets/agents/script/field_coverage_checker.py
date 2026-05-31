@@ -397,24 +397,41 @@ class FieldCoverageChecker:
             if a.constraints.is_primary_key
         }
 
-        source_entities: set[str] = set()
+        related_entities: set[str] = set()
         has_self_ref = False
         for rel in schema.relationships:
             if rel.target_entity == entity_name:
-                source_entities.add(rel.source_entity.lower())
+                related_entities.add(rel.source_entity.lower())
                 if rel.source_entity == entity_name:
+                    has_self_ref = True
+            if rel.source_entity == entity_name:
+                related_entities.add(rel.target_entity.lower())
+                if rel.target_entity == entity_name:
                     has_self_ref = True
 
         for attr in entity.attributes:
             attr_lower = attr.name.lower()
             if attr_lower in own_pks:
                 continue
-            for source in source_entities:
-                if attr_lower == f"{source}_id":
-                    fk_names.add(attr_lower)
-                    break
+            if not (attr_lower.endswith("_id") or attr_lower.endswith("id")):
+                continue
             if has_self_ref and attr_lower.startswith("parent_"):
                 fk_names.add(attr_lower)
+                continue
+            stem = attr_lower[:-3] if attr_lower.endswith("_id") else attr_lower[:-2]
+            if not stem:
+                continue
+            stem_normalized = stem.replace("_", "")
+            for related in related_entities:
+                related_normalized = related.replace("_", "")
+                if not related_normalized:
+                    continue
+                if stem_normalized == related_normalized:
+                    fk_names.add(attr_lower)
+                    break
+                if stem_normalized in related_normalized or related_normalized in stem_normalized:
+                    fk_names.add(attr_lower)
+                    break
 
         return frozenset(fk_names)
 
