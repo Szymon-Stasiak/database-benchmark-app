@@ -166,19 +166,27 @@ OUTPUT FORMAT:
 - data_size_hints: expected row counts per entity.
 
 RULES:
-1. Abstract data types: string, text, integer, bigint, float, double, decimal, boolean, date, timestamp, uuid, json, vector, enum.
+1. Abstract data types: string, text, integer, bigint, float, double, decimal, boolean, date, timestamp, uuid, json, vector.
 2. Cardinalities: 1:1, 1:N, M:N.
 3. Every entity must have a primary key attribute.
 4. Mark indexed attributes (frequently queried fields).
 5. Use snake_case naming in English.
 6. For M:N relationships, do NOT create junction entities.
 7. The schema must be rich but not overly complex.
+8. CONSTRAINT POLICY (CRITICAL — downstream benchmarks insert random data):
+   - Mark ONLY structural constraints: is_primary_key, is_nullable=false (NOT NULL),
+     is_indexed. Foreign-key style references are captured via relationships.
+   - Do NOT mark is_unique=true for any attribute. Primary keys are unique by
+     definition — flag them with is_primary_key=true only, never with is_unique.
+   - Do NOT populate enum_values. For fields with a limited value set use plain
+     `string` type — random benchmark data must not collide with enum membership.
+   - Do NOT use the `enum` abstract data type.
 
 PRODUCTION-SCALE DESIGN:
 - data_size_hints MUST reflect realistic production volumes (thousands to millions).
   These drive partitioning, indexing, and storage decisions in script generation.
 - Each entity should have 5-15 attributes to make benchmarks meaningful.
-- Include a mix of data types per entity: strings, numerics, timestamps, booleans, enums.
+- Include a mix of data types per entity: strings, numerics, timestamps, booleans.
 - Include at least one entity with an array/list-like attribute (tags, categories).
 - Include at least one text/description field suitable for full-text search.
 - Ensure at least one timestamp attribute exists for time-based query benchmarks.

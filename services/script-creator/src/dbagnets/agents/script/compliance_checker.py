@@ -24,10 +24,14 @@ class SchemaComplianceCheckerAgent(BaseAgent):
 - Every attribute MUST be a column with equivalent data type.
 - 1:N relationships MUST use foreign keys.
 - M:N relationships MUST use junction tables with foreign keys to both sides.
-- All constraints (PK, UNIQUE, NOT NULL, indexes) MUST be preserved.
+- Structural constraints (PRIMARY KEY, FOREIGN KEY, NOT NULL, indexes) MUST be
+  preserved. PRIMARY KEY is implicitly UNIQUE — do NOT require a separate UNIQUE.
 - Additional native features (views, triggers, computed columns, partitioning,
-  CHECK constraints, ENUM types, sequences, domain types) are ALLOWED and
-  encouraged — do NOT penalize for having extra structures beyond the LogicalSchema.""",
+  sequences) are ALLOWED and encouraged — do NOT penalize for having extra
+  structures beyond the LogicalSchema.
+- The script MUST NOT contain value-restricting constraints: UNIQUE outside the
+  PK, CHECK, EXCLUSION, ENUM types, CREATE DOMAIN. Random benchmark data is
+  inserted later and must not collide with value constraints.""",
 
         DatabaseType.GRAPH: """DATABASE-SPECIFIC COMPLIANCE RULES (graph):
 - Every entity MUST be represented as a node label.
@@ -62,10 +66,13 @@ class SchemaComplianceCheckerAgent(BaseAgent):
   documents, or arrays of embedded documents — all are acceptable.
 - Data duplication across collections is ALLOWED and expected in document databases
   (denormalization is the norm, not a flaw).
-- Constraints should be enforced via JSON Schema validation where possible.
+- JSON Schema validation is OPTIONAL; if present it MUST be type-only
+  (bsonType / required). The script MUST NOT use value validators: enum, pattern,
+  minimum, maximum, minLength, maxLength — random benchmark data is inserted later
+  and must not collide with value constraints.
 - Additional native features (text indexes, TTL indexes, partial indexes, wildcard
-  indexes, aggregation pipeline views, capped collections, comprehensive JSON Schema
-  validation with enum/pattern/min/max) are ALLOWED — do NOT penalize.""",
+  indexes, aggregation pipeline views, capped collections) are ALLOWED — do NOT
+  penalize.""",
 
         DatabaseType.VECTOR: """DATABASE-SPECIFIC COMPLIANCE RULES (vector):
 - Every entity MUST be a collection.

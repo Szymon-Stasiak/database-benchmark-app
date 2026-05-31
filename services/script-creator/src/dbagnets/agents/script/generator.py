@@ -68,20 +68,23 @@ class ScriptGeneratorAgent(BaseAgent):
         DatabaseType.RELATIONAL: """- CREATE TABLE statements with columns and data types
    - Primary keys and foreign keys implementing all relationships
    - Indexes on all attributes marked as indexed in the schema
-   - Constraints (NOT NULL, UNIQUE, CHECK) as defined in the schema
+   - NOT NULL constraints as defined in the schema (no UNIQUE outside PK, no CHECK)
    - Junction tables for M:N relationships
+   CONSTRAINT POLICY (CRITICAL — random benchmark data is inserted later):
+   - ONLY structural constraints are allowed: PRIMARY KEY, FOREIGN KEY, NOT NULL.
+   - Do NOT emit: UNIQUE (outside the PK itself), CHECK, EXCLUSION, ENUM types
+     (CREATE TYPE ... AS ENUM, MySQL ENUM(...)), CREATE DOMAIN.
+   - Value-restricting constraints break random-data benchmarks downstream.
    PRODUCTION-SCALE DESIGN:
    - Table partitioning (RANGE by date, LIST by category) for entities with high data_size_hints
      CRITICAL PARTITIONING RULE (PostgreSQL hard requirement, no exceptions):
-       Every PRIMARY KEY and every UNIQUE constraint on a partitioned table MUST contain
-       ALL partition-key columns. PostgreSQL rejects anything else with the error
+       Every PRIMARY KEY on a partitioned table MUST contain ALL partition-key columns.
+       PostgreSQL rejects anything else with the error
        "unique constraint on partitioned table must include all partitioning columns".
        Therefore:
          * Use a COMPOSITE PRIMARY KEY that includes the surrogate id AND the partition
            column, e.g. `PRIMARY KEY (id, created_at)` when `PARTITION BY RANGE (created_at)`.
          * NEVER write `id SERIAL PRIMARY KEY` together with `PARTITION BY (other_col)`.
-         * NEVER add `UNIQUE (id)` to a partitioned table unless `id` itself is the
-           partition column.
        Foreign keys to a partitioned parent must reference the full composite key
        (e.g. `FOREIGN KEY (parent_id, parent_created_at) REFERENCES parent(id, created_at)`).
        If propagating the partition column to children is impractical, drop the FK on
@@ -93,14 +96,10 @@ class ScriptGeneratorAgent(BaseAgent):
    - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups
    - B-tree for equality/range, GIN for arrays/JSONB/full-text, GiST for spatial/ranges
    MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
-   - CHECK constraints with meaningful domain validation (ranges, patterns, enums)
-   - ENUM types for fixed-set columns instead of plain VARCHAR
    - GENERATED/computed columns for derived values
    - Materialized views or regular views for common multi-table read patterns
    - Triggers for audit timestamps (created_at, updated_at auto-population)
    - Sequences for controlled ID generation
-   - Domain types for reusable type+constraint combinations
-   - EXCLUSION constraints where applicable (e.g. non-overlapping date ranges)
    - FILLFACTOR tuning on tables with frequent updates""",
 
         DatabaseType.GRAPH: """- EVERY entity in the LogicalSchema MUST be a separate node label — do NOT
@@ -117,7 +116,9 @@ class ScriptGeneratorAgent(BaseAgent):
      Movie, user_id on Review). FKs MUST be OMITTED — the relationship
      encodes the link. Only omit FK attributes, NEVER omit PKs.
    - Indexes on frequently queried properties (marked as indexed)
-   - Uniqueness constraints for unique/primary key attributes
+   - Uniqueness constraints ONLY for primary-key attributes
+     (no uniqueness on natural identifiers like email/slug — random benchmark
+      data must not collide with value constraints)
    - Use PascalCase for node labels and UPPER_SNAKE_CASE for relationship types
    NEO4J COMMUNITY EDITION LIMITATION (CRITICAL):
    - Property existence constraints (IS NOT NULL) and node key constraints
@@ -133,7 +134,6 @@ class ScriptGeneratorAgent(BaseAgent):
    - Point/spatial types for geographic data
    - Additional traversal relationships beyond the LogicalSchema to expose
      useful graph navigation paths (e.g. shortcut relationships, reverse lookups)
-   - Node key constraints for composite uniqueness
    - Full-text indexes on text/string properties that users would search""",
 
         DatabaseType.VECTOR: """- Collection definitions with scalar and vector fields
@@ -153,11 +153,14 @@ class ScriptGeneratorAgent(BaseAgent):
    - Consistency level configuration for read/write tradeoffs""",
 
         DatabaseType.DOCUMENT: """- Collection definitions for top-level entities
-   - JSON Schema validation rules matching entity attributes
    - Index definitions on indexed attributes
    - Relationships via embedded sub-documents (preferred for data accessed together)
      or reference fields (for independently queried entities)
    - Denormalization is expected — embed related data for read performance
+   CONSTRAINT POLICY (CRITICAL — random benchmark data is inserted later):
+   - JSON Schema validation is OPTIONAL and, if present, MUST be type-only
+     (bsonType / required). Do NOT use enum, pattern, minimum, maximum,
+     minLength, maxLength — value validators break random-data benchmarks.
    PRODUCTION-SCALE DESIGN:
    - Compound indexes following ESR rule (Equality, Sort, Range) for query optimization
    - Covered queries: include all projected fields in indexes where possible
@@ -165,7 +168,6 @@ class ScriptGeneratorAgent(BaseAgent):
    - Shard key design: choose high-cardinality fields for even data distribution
    - Read concern/write concern configuration for consistency vs performance tradeoffs
    MAXIMIZE NATIVE FEATURES — show what document DBs do better:
-   - Flexible schema with JSON Schema validation (enum, pattern, min/max, minLength, maxLength)
    - Multi-key indexes on array fields (e.g. tags, categories)
    - Text indexes for full-text search on string/text fields
    - TTL indexes on timestamp fields for data with natural expiration
@@ -259,7 +261,15 @@ RULES:
 6. EVERY entity in the LogicalSchema must have a corresponding structure in the script.
 7. EVERY attribute must be present with an equivalent data type.
 8. EVERY relationship must be implemented appropriately for this database type.
-9. EVERY constraint (primary key, unique, not null, indexed) must be preserved.
+9. CONSTRAINT POLICY — random benchmark data is inserted later, so the script
+   MUST NOT contain value-restricting constraints:
+   - Preserve: PRIMARY KEY, FOREIGN KEY, NOT NULL, indexed markers.
+   - Do NOT emit: UNIQUE (outside the PK itself), CHECK, EXCLUSION constraints,
+     ENUM types (CREATE TYPE ... AS ENUM, MySQL ENUM(...)), CREATE DOMAIN,
+     or JSON Schema value validators (enum, pattern, minimum, maximum,
+     minLength, maxLength).
+   PRIMARY KEY is implicitly UNIQUE + NOT NULL — never duplicate it as a
+   separate UNIQUE constraint. FK references a unique parent PK by definition.
 10. Use snake_case naming in English.
 11. Do NOT include any sample data. Generate schema/structure definitions only.
 12. NAMING CONSISTENCY (CRITICAL):

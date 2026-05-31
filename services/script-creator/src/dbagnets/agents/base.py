@@ -113,7 +113,7 @@ RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
 - FAIL:
   feedback = exactly ONE sentence naming the core blocker (under 40 words).
   todos = list of CONCRETE changes required to pass. Each item is a specific
-  instruction like "Add CHECK constraint on users.rating to enforce range 1-10".
+  instruction like "Add index on users.email for faster lookups".
   Only include items that would flip the result from FAIL to PASS.
   Do NOT include cosmetic, optional, or "nice to have" items.
   details = "" (empty string, put everything in todos instead)"""

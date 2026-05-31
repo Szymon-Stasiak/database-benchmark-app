@@ -38,18 +38,18 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Functional/expression indexes where queries would benefit
    - No excessive indexing
 
-4. CONSTRAINTS:
+4. CONSTRAINTS (random benchmark data is inserted later — FAIL if violated):
    - NOT NULL used where appropriate
-   - UNIQUE used where needed
-   - CHECK constraints with meaningful domain validation (value ranges, patterns)
    - DEFAULT values make sense
-   - EXCLUSION constraints for non-overlapping ranges where applicable
+   - PRIMARY KEY is the ONLY uniqueness allowed; PK is implicitly UNIQUE + NOT NULL
+   - FAIL if script contains: UNIQUE (outside the PK), CHECK, EXCLUSION,
+     CREATE TYPE ... AS ENUM, MySQL ENUM(...), CREATE DOMAIN
 
 5. DATA TYPES:
    - Appropriate types (not VARCHAR(255) for everything)
    - Dates use proper types (TIMESTAMP, DATE)
    - Monetary values use DECIMAL/NUMERIC
-   - ENUM types for fixed-set columns
+   - Use plain VARCHAR/TEXT for fixed-set columns instead of ENUM types
    - UUID type for unique identifiers
 
 6. PRODUCTION SCALE (FAIL if missing for high-volume entities):
@@ -75,8 +75,7 @@ class BestPracticesCheckerAgent(BaseAgent):
    - GENERATED/computed columns for derived values (e.g. full_name from first+last)
    - Materialized views or views for common multi-table read patterns
    - Triggers for automatic audit fields (created_at, updated_at)
-   - Sequences for controlled ID generation
-   - Domain types for reusable type+constraint bundles""",
+   - Sequences for controlled ID generation""",
 
         DatabaseType.GRAPH: """Check:
 1. NAMING:
@@ -100,8 +99,10 @@ class BestPracticesCheckerAgent(BaseAgent):
      FKs MUST NOT appear as node properties — the graph relationship
      encodes the link. Only remove FK attributes, NEVER remove PKs.
 
-3. INDEXES & CONSTRAINTS:
-   - Unique constraints on natural identifiers
+3. INDEXES & CONSTRAINTS (random benchmark data is inserted later):
+   - Unique constraints ONLY on primary-key properties.
+     FAIL if uniqueness is enforced on any non-PK property (e.g. email, slug) —
+     random data must not collide with value constraints.
    - Indexes on frequently queried properties
    - Range indexes vs text indexes — correct index type per property data type
    - Composite indexes on frequently co-queried properties
@@ -187,12 +188,11 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Multi-key indexes on array fields (tags, categories, etc.)
    - No excessive indexing
 
-4. SCHEMA VALIDATION:
-   - Required fields are enforced
-   - Field types are specified
-   - Enum values are constrained where appropriate
-   - Pattern validation on formatted strings (email, URL, etc.)
-   - Min/max constraints on numeric fields where applicable
+4. SCHEMA VALIDATION (random benchmark data is inserted later — FAIL if violated):
+   - JSON Schema validation is OPTIONAL and, if present, MUST be type-only
+     (bsonType / required). FAIL if validators use: enum, pattern, minimum,
+     maximum, minLength, maxLength — random data must not collide with value
+     constraints.
 
 5. PRODUCTION SCALE (FAIL if missing for high-volume collections):
    - Compound indexes following ESR rule (Equality, Sort, Range) for query optimization
@@ -209,9 +209,7 @@ class BestPracticesCheckerAgent(BaseAgent):
    - Wildcard indexes on polymorphic or flexible sub-documents
    - Collation-aware indexes for locale-specific sorting
    - Aggregation pipeline views for common read patterns
-   - Capped collections for fixed-size log-like entities
-   - Comprehensive JSON Schema validation (not just types — use enum, pattern,
-     minimum, maximum, minLength, maxLength where domain rules apply)""",
+   - Capped collections for fixed-size log-like entities""",
 
         DatabaseType.KEY_VALUE: """Check:
 1. NAMING:
@@ -302,6 +300,20 @@ that will hold millions of rows and serve as a benchmark to showcase {config.db_
 {practices}
 
 IMPORTANT CONSTRAINTS:
+- VALUE-CONSTRAINT POLICY (random benchmark data is inserted later — hard FAIL):
+  FAIL the script if it contains any of these value-restricting features:
+    * UNIQUE constraints outside the PRIMARY KEY itself
+      (PRIMARY KEY is implicitly UNIQUE + NOT NULL — never duplicated as UNIQUE)
+    * CHECK constraints
+    * EXCLUSION constraints
+    * ENUM types (PostgreSQL CREATE TYPE ... AS ENUM, MySQL ENUM(...))
+    * CREATE DOMAIN (it bundles type + constraints)
+    * JSON Schema value validators: enum, pattern, minimum, maximum,
+      minLength, maxLength
+    * Neo4j uniqueness constraints on non-PK properties
+  Only structural constraints are allowed: PRIMARY KEY, FOREIGN KEY,
+  NOT NULL, indexes. Random benchmark data must not collide with value
+  constraints — violations break the downstream insert benchmark.
 - This script implements a LogicalSchema. The set of entities is FIXED.
   Do NOT suggest merging, combining, or removing entities — even if they
   share similar attributes. The LogicalSchema is the source of truth.
