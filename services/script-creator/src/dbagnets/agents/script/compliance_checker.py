@@ -26,9 +26,13 @@ class SchemaComplianceCheckerAgent(BaseAgent):
 - M:N relationships MUST use junction tables with foreign keys to both sides.
 - Structural constraints (PRIMARY KEY, FOREIGN KEY, NOT NULL, indexes) MUST be
   preserved. PRIMARY KEY is implicitly UNIQUE — do NOT require a separate UNIQUE.
-- Additional native features (views, triggers, computed columns, partitioning,
-  sequences) are ALLOWED and encouraged — do NOT penalize for having extra
-  structures beyond the LogicalSchema.
+- Every table MUST have a single-column primary key. Composite primary keys are
+  forbidden (they break the benchmark insert pipeline).
+- Table partitioning (PARTITION BY) is FORBIDDEN — it forces composite PKs.
+  FAIL the script if any table uses PARTITION BY.
+- Additional native features (views, triggers, computed columns, sequences)
+  are ALLOWED and encouraged — do NOT penalize for having extra structures
+  beyond the LogicalSchema.
 - The script MUST NOT contain value-restricting constraints: UNIQUE outside the
   PK, CHECK, EXCLUSION, ENUM types, CREATE DOMAIN. Random benchmark data is
   inserted later and must not collide with value constraints.""",

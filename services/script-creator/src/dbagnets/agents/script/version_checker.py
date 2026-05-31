@@ -26,7 +26,6 @@ class VersionCheckerAgent(BaseAgent):
 - ON CONFLICT DO UPDATE (PostgreSQL < 9.5)
 - CREATE PROCEDURE (PostgreSQL < 11)
 - GENERATED ALWAYS AS (stored/virtual) computed columns (PostgreSQL < 12, MySQL < 5.7)
-- Declarative table partitioning (PostgreSQL < 10)
 - EXCLUSION constraints require btree_gist extension (PostgreSQL)
 - CREATE OR REPLACE TRIGGER (PostgreSQL < 14)
 - ENUM type variations differ between engines (PostgreSQL CREATE TYPE vs MySQL ENUM column)""",

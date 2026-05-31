@@ -27,32 +27,14 @@ class SyntaxCheckerAgent(BaseAgent):
 5. Whether references to tables/columns in FOREIGN KEY are consistent
 6. Whether statement ordering is correct (referenced tables must be created before referencing tables)
 7. Whether advanced features use correct syntax: CREATE VIEW, CREATE TRIGGER,
-   CREATE FUNCTION, GENERATED columns, PARTITION BY, CREATE SEQUENCE,
-   partial indexes
-8. PostgreSQL-specific (FAIL the script if violated):
-   (a) For every CREATE TABLE that uses PARTITION BY, the PRIMARY KEY on that
-       table MUST contain ALL partition-key columns. A table like
-       `CREATE TABLE t (id SERIAL PRIMARY KEY, ts TIMESTAMP) PARTITION BY RANGE (ts)`
-       is illegal — PostgreSQL rejects it with "unique constraint on partitioned
-       table must include all partitioning columns". Fix: composite key such as
-       `PRIMARY KEY (id, ts)`.
-   (b) Storage parameters (FILLFACTOR, autovacuum_*, toast.*, parallel_workers,
-       etc.) MUST NOT be applied to a partitioned parent table — neither inline
-       `WITH (...)` on CREATE TABLE, nor via `ALTER TABLE <parent> SET (...)`.
-       PostgreSQL rejects this with
-       "cannot specify storage parameters for a partitioned table".
-       Identify every CREATE TABLE that has PARTITION BY and check that no
-       subsequent `ALTER TABLE <that_name> SET (...)` targets it. Fix: either
-       drop the storage param, or apply it per leaf partition
-       (`ALTER TABLE <partition_name> SET (...)`).
-   (c) MySQL only — FULLTEXT (and SPATIAL) indexes MUST NOT be defined on a
-       partitioned table. MySQL rejects this at init with
-       "The used table type doesn't support FULLTEXT indexes"
-       (ER_PARTITION_FULLTEXT_NOT_SUPPORTED, error 1214). Identify every
-       CREATE TABLE that contains `PARTITION BY` and FAIL if it also contains
-       `FULLTEXT INDEX`/`FULLTEXT KEY`/`SPATIAL INDEX`/`SPATIAL KEY`, or if
-       a subsequent `ALTER TABLE <that_name> ADD FULLTEXT ...` adds one. Fix:
-       drop the FULLTEXT/SPATIAL index, or drop partitioning for that table.""",
+   CREATE FUNCTION, GENERATED columns, CREATE SEQUENCE, partial indexes
+8. NO TABLE PARTITIONING (FAIL the script if violated):
+   The benchmark pipeline does not support partitioned tables — partitioning
+   forces composite primary keys which break inserts and FK propagation.
+   FAIL any CREATE TABLE statement that contains `PARTITION BY RANGE`,
+   `PARTITION BY LIST`, `PARTITION BY HASH`, or `PARTITION BY KEY`. Tell the
+   generator to remove the PARTITION BY clause and convert any composite
+   primary key back to a single-column surrogate id.""",
 
         DatabaseType.GRAPH: """Check:
 1. Whether each Cypher/graph statement has correct syntax (CREATE, MERGE, constraint definitions)

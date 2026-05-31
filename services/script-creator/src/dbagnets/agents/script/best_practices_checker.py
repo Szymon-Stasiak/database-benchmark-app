@@ -53,28 +53,18 @@ class BestPracticesCheckerAgent(BaseAgent):
    - UUID type for unique identifiers
 
 6. PRODUCTION SCALE (FAIL if missing for high-volume entities):
-   - Table partitioning for entities with high data_size_hints (>100K rows)
-     PARTITIONING + PK RULE (PostgreSQL hard requirement): on a partitioned table the
-     PRIMARY KEY and every UNIQUE constraint MUST include all partition-key columns.
-     A single-column PRIMARY KEY combined with PARTITION BY on a different column is
-     ILLEGAL and will fail at init with "unique constraint on partitioned table must
-     include all partitioning columns". FAIL the script in this case and tell the
-     generator to use a composite PRIMARY KEY (e.g. PRIMARY KEY (id, created_at))
-     plus matching composite FKs (or drop the FK to that partitioned parent if the
-     partition column can't be propagated). Same rule for UNIQUE constraints: every
-     UNIQUE on a partitioned table must contain every partition column.
-     STORAGE PARAMS + PARTITIONING (PostgreSQL hard requirement): FAIL the
-     script if any storage parameter (FILLFACTOR, autovacuum_*, toast.*,
-     parallel_workers, etc.) is set on a partitioned PARENT table — neither
-     inline `WITH (...)` nor `ALTER TABLE <parent> SET (...)`. Postgres
-     rejects this with "cannot specify storage parameters for a partitioned
-     table". Acceptable alternatives: skip the storage param entirely, or
-     apply it per leaf partition (`ALTER TABLE <partition_name> SET (...)`).
+   - NO TABLE PARTITIONING: FAIL the script if any table uses PARTITION BY
+     (RANGE, LIST, HASH, KEY). Partitioning forces composite primary keys which
+     break the benchmark's insert pipeline and break foreign keys from
+     non-partitioned children. Tell the generator to remove all PARTITION BY
+     clauses and use plain non-partitioned tables.
+   - SINGLE-COLUMN PRIMARY KEYS: every table MUST have a single-column PK
+     (a surrogate id). FAIL if any table uses a composite PRIMARY KEY
+     (e.g. `PRIMARY KEY (id, other_col)`).
    - Covering indexes (INCLUDE) for the most common query patterns
    - Appropriate index types: B-tree for equality/range, GIN for arrays/JSONB/full-text
-   - FILLFACTOR tuning on NON-partitioned tables with frequent updates (via
-     ALTER TABLE after creation). On partitioned tables, set FILLFACTOR per
-     leaf partition or skip it.
+   - FILLFACTOR tuning on tables with frequent updates (via ALTER TABLE after
+     creation).
 
 7. NATIVE FEATURE UTILIZATION (PASS with suggestions if missing — do NOT FAIL):
    These are nice-to-have features. If 2+ are present, PASS. If none are present,

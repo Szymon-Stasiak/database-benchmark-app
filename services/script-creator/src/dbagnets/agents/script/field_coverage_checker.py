@@ -396,18 +396,17 @@ class FieldCoverageChecker:
             for a in entity.attributes
             if a.constraints.is_primary_key
         }
+        entity_name_normalized = entity_name.lower().replace("_", "")
 
         related_entities: set[str] = set()
-        has_self_ref = False
         for rel in schema.relationships:
             if rel.target_entity == entity_name:
                 related_entities.add(rel.source_entity.lower())
-                if rel.source_entity == entity_name:
-                    has_self_ref = True
             if rel.source_entity == entity_name:
                 related_entities.add(rel.target_entity.lower())
-                if rel.target_entity == entity_name:
-                    has_self_ref = True
+        # Self-reference is always implicit: an entity can FK to itself even if
+        # the schema does not declare an explicit source=target relationship.
+        related_entities.add(entity_name.lower())
 
         for attr in entity.attributes:
             attr_lower = attr.name.lower()
@@ -415,13 +414,17 @@ class FieldCoverageChecker:
                 continue
             if not (attr_lower.endswith("_id") or attr_lower.endswith("id")):
                 continue
-            if has_self_ref and attr_lower.startswith("parent_"):
+            # `parent_*_id` is the textbook self-reference FK pattern — always treat as FK.
+            if attr_lower.startswith("parent_"):
                 fk_names.add(attr_lower)
                 continue
             stem = attr_lower[:-3] if attr_lower.endswith("_id") else attr_lower[:-2]
             if not stem:
                 continue
             stem_normalized = stem.replace("_", "")
+            if stem_normalized == entity_name_normalized:
+                fk_names.add(attr_lower)
+                continue
             for related in related_entities:
                 related_normalized = related.replace("_", "")
                 if not related_normalized:

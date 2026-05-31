@@ -75,52 +75,28 @@ class ScriptGeneratorAgent(BaseAgent):
    - Do NOT emit: UNIQUE (outside the PK itself), CHECK, EXCLUSION, ENUM types
      (CREATE TYPE ... AS ENUM, MySQL ENUM(...)), CREATE DOMAIN.
    - Value-restricting constraints break random-data benchmarks downstream.
-   PRODUCTION-SCALE DESIGN:
-   - Table partitioning (RANGE by date, LIST by category) for entities with high data_size_hints
-     CRITICAL PARTITIONING RULE (PostgreSQL hard requirement, no exceptions):
-       Every PRIMARY KEY on a partitioned table MUST contain ALL partition-key columns.
-       PostgreSQL rejects anything else with the error
-       "unique constraint on partitioned table must include all partitioning columns".
-       Therefore:
-         * Use a COMPOSITE PRIMARY KEY that includes the surrogate id AND the partition
-           column, e.g. `PRIMARY KEY (id, created_at)` when `PARTITION BY RANGE (created_at)`.
-         * NEVER write `id SERIAL PRIMARY KEY` together with `PARTITION BY (other_col)`.
-       Foreign keys to a partitioned parent must reference the full composite key
-       (e.g. `FOREIGN KEY (parent_id, parent_created_at) REFERENCES parent(id, created_at)`).
-       If propagating the partition column to children is impractical, drop the FK on
-       that relationship — it's acceptable for benchmark schemas.
-     STORAGE PARAMETERS + PARTITIONED TABLES (PostgreSQL hard requirement):
-       PostgreSQL FORBIDS storage parameters (FILLFACTOR, autovacuum_*, toast.*,
-       parallel_workers, etc.) on partitioned parent tables — both inline
-       `WITH (...)` and `ALTER TABLE <parent> SET (...)` raise
-       "cannot specify storage parameters for a partitioned table".
-       Rules:
-         * Do NOT use `WITH (fillfactor=...)` on a CREATE TABLE that has PARTITION BY.
-         * Do NOT use `ALTER TABLE <parent> SET (fillfactor=...)` on a partitioned parent.
-         * If FILLFACTOR is desired for a partitioned entity, apply it per partition:
-           `ALTER TABLE <partition_name> SET (fillfactor=...)` for each leaf partition.
-         * Simplest: skip FILLFACTOR entirely on partitioned tables.
-       Use FILLFACTOR freely on non-partitioned tables (via ALTER TABLE after creation).
-     MYSQL: FULLTEXT INDEX + PARTITIONING (hard requirement):
-       MySQL FORBIDS `FULLTEXT INDEX` (and `SPATIAL INDEX`) on partitioned tables —
-       both inline on CREATE TABLE and via ALTER TABLE on a partitioned parent —
-       erroring with "ER_PARTITION_FULLTEXT_NOT_SUPPORTED" (error 1214).
-       Rules:
-         * Do NOT add `FULLTEXT INDEX ...` or `FULLTEXT KEY ...` on any CREATE TABLE
-           that contains `PARTITION BY ...`, and do NOT add it via ALTER TABLE either.
-         * If full-text search on a high-volume entity is desirable, either drop
-           the partitioning, or skip the FULLTEXT index for that entity.
-       Same restriction applies to SPATIAL indexes on partitioned tables.
+   PRIMARY KEY RULE (CRITICAL — benchmark inserts depend on this):
+   - Every table MUST have a SINGLE-COLUMN primary key (a surrogate id column).
+   - NEVER use composite primary keys (e.g. `PRIMARY KEY (id, other_col)`).
+   - Composite PKs break downstream insert benchmarks and FK propagation.
+   NO TABLE PARTITIONING (CRITICAL):
+   - Do NOT use `PARTITION BY RANGE`, `PARTITION BY LIST`, `PARTITION BY HASH`,
+     or `PARTITION BY KEY` on any table.
+   - Partitioning forces composite primary keys (PostgreSQL hard requirement)
+     and breaks foreign keys from non-partitioned children. Skip it entirely.
+   - For benchmark purposes, plain non-partitioned tables with proper indexes
+     are sufficient and avoid FK conflicts.
+   PRODUCTION-SCALE DESIGN (without partitioning):
    - Covering indexes (INCLUDE columns) for frequently queried combinations
    - Partial indexes on commonly filtered subsets (e.g. WHERE status = 'active')
    - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups
    - B-tree for equality/range, GIN for arrays/JSONB/full-text, GiST for spatial/ranges
+   - FILLFACTOR tuning on tables with frequent updates
    MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
    - GENERATED/computed columns for derived values
    - Materialized views or regular views for common multi-table read patterns
    - Triggers for audit timestamps (created_at, updated_at auto-population)
-   - Sequences for controlled ID generation
-   - FILLFACTOR tuning on tables with frequent updates""",
+   - Sequences for controlled ID generation""",
 
         DatabaseType.GRAPH: """- EVERY entity in the LogicalSchema MUST be a separate node label — do NOT
      collapse entities into relationship properties, even for leaf entities.
@@ -168,6 +144,9 @@ class ScriptGeneratorAgent(BaseAgent):
    - Scalar indexes on ALL filter fields — hybrid search (vector + filter) is the primary use case
    MAXIMIZE NATIVE FEATURES — show what vector DBs do better:
    - Multiple vector fields per collection when entity has different embeddings
+     AND the target database version supports it (see VERSION CONSTRAINTS below).
+     If multi-vector is unsupported, choose the single most important embedding
+     and store the others in a separate collection.
    - Correct metric type per use case (COSINE for text, L2 for images, IP for recommendations)
    - Dynamic schema fields where additional metadata varies per record
    - Consistency level configuration for read/write tradeoffs""",
@@ -239,6 +218,7 @@ class ScriptGeneratorAgent(BaseAgent):
     def _build_system_prompt(self, target: TargetConfig, schema: LogicalSchema, depth: int) -> str:
         structure_rules = self._STRUCTURE_RULES[target.db_type]
         type_hints = format_type_mapping_prompt(target.db_name)
+        version_restrictions = self._version_restrictions(target)
 
         embedding_instruction = ""
         if target.db_type == DatabaseType.DOCUMENT:
@@ -263,8 +243,10 @@ and serve as part of a cross-database benchmark. The goal is to showcase {target
 UNIQUE STRENGTHS compared to other database types. Design the schema as if a team of
 expert DBAs reviewed it for performance at scale.
 
-Use data_size_hints from the LogicalSchema to drive decisions about partitioning,
-index strategies, and storage optimization. Treat them as expected production volumes.
+Use data_size_hints from the LogicalSchema to drive decisions about
+index strategies and storage optimization. Treat them as expected production volumes.
+For relational databases, do NOT use table partitioning — it forces composite
+primary keys that break the benchmark's insert pipeline.
 
 Your task is to generate a complete initialization script that FAITHFULLY implements
 the given LogicalSchema while maximizing {target.db_name}'s native capabilities.
@@ -323,13 +305,44 @@ RULES:
    programmatically from the schema — any name mismatch will break the pipeline.
 13. PRODUCTION SCALE DESIGN:
    - Choose index strategies optimized for large datasets (millions of rows).
-   - Apply partitioning/sharding where data_size_hints suggest high volume.
+   - Apply sharding where data_size_hints suggest high volume (relational: no partitioning).
    - Optimize for both write throughput AND read query patterns.
    - Use {target.db_name}'s most advanced features to differentiate it from other DB types.
 
 {type_hints}
+{version_restrictions}
 {embedding_instruction}
 {tool_instruction}"""
+
+    @staticmethod
+    def _version_restrictions(target: TargetConfig) -> str:
+        notes: list[str] = []
+
+        if target.db_type == DatabaseType.VECTOR and target.db_name.lower() == "milvus":
+            version_tuple = tuple(
+                int(p) for p in target.db_version.split(".") if p.isdigit()
+            ) or (0,)
+
+            if version_tuple < (2, 4):
+                notes.append(
+                    "- Milvus < 2.4: each Collection MUST have EXACTLY ONE vector field. "
+                    "If the LogicalSchema has multiple embedding attributes on one entity, "
+                    "keep only the most important embedding in the main collection and put "
+                    "each additional embedding in its own separate collection that references "
+                    "the parent by id."
+                )
+            if version_tuple < (2, 3):
+                notes.append("- Milvus < 2.3: GPU index types, range search, and upsert are not available.")
+            if version_tuple < (2, 2, 9):
+                notes.append("- Milvus < 2.2.9: partition_key field is not available — use plain partitions.")
+
+        if not notes:
+            return ""
+
+        return (
+            "\nVERSION CONSTRAINTS (hard requirements for this specific version):\n"
+            + "\n".join(notes)
+        )
 
     def _build_user_prompt(
         self,
