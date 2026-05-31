@@ -46,6 +46,25 @@ public class SseEmitterService {
         list.removeAll(deadEmitters);
     }
 
+    public void broadcastBenchmarkStatus(String benchmarkId, Object status) {
+        sendEvent(benchmarkId, SseEvents.EVENT_BENCHMARK_STATUS,
+            SseEvents.benchmarkStatusPayload(benchmarkId, status));
+    }
+
+    public void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status) {
+        broadcastDatabaseStatus(benchmarkId, databaseId, status, null);
+    }
+
+    public void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status, String errorMessage) {
+        sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS,
+            SseEvents.databaseStatusPayload(benchmarkId, databaseId, status, errorMessage));
+    }
+
+    public void broadcastDatabasePortAssigned(String benchmarkId, String databaseId, int hostPort) {
+        sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_PORT_ASSIGNED,
+            SseEvents.databasePortAssignedPayload(benchmarkId, databaseId, hostPort));
+    }
+
     @Scheduled(fixedRate = 30000)
     public void sendHeartbeats() {
         emitters.forEach((benchmarkId, list) -> {

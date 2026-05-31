@@ -45,6 +45,10 @@ public class Benchmark {
     @OneToMany(mappedBy = "benchmark", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<BenchmarkDatabase> databases = new ArrayList<>();
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     public Benchmark(String topic, User user, int depth) {
         this.topic = topic;
         this.user = user;

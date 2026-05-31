@@ -479,12 +479,8 @@ public class InsertOrchestrator {
             db.setErrorMessage("Container '" + dbName + "' is not running anymore");
             databaseRepository.save(db);
             String benchmarkId = db.getBenchmark().getId();
-            sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS, Map.of(
-                SseEvents.PAYLOAD_BENCHMARK_ID, benchmarkId,
-                SseEvents.PAYLOAD_DATABASE_ID, databaseId,
-                SseEvents.PAYLOAD_STATUS, DatabaseStatus.STOPPED.name(),
-                SseEvents.PAYLOAD_ERROR_MESSAGE, db.getErrorMessage()
-            ));
+            sseEmitterService.broadcastDatabaseStatus(benchmarkId, databaseId,
+                DatabaseStatus.STOPPED, db.getErrorMessage());
         });
     }
 

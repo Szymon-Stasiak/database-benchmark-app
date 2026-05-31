@@ -17,7 +17,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -50,7 +49,6 @@ public class DockerService {
     public DockerClient getClient() { return dockerClient; }
 
     public String createAndStartContainer(ContainerSpec spec) {
-        // Pull image (ignore if already exists)
         try {
             dockerClient.pullImageCmd(spec.image())
                 .start()
@@ -58,8 +56,6 @@ public class DockerService {
         } catch (Exception e) {
             log.warn("Image pull failed or timed out for {}, trying local: {}", spec.image(), e.getMessage());
         }
-
-        // Create container
         long memBytes = spec.memoryMb() * 1024 * 1024;
         var hostConfig = HostConfig.newHostConfig()
             .withPortBindings(new PortBinding(
@@ -104,8 +100,6 @@ public class DockerService {
         log.info("Removed container {}", containerId.substring(0, 12));
     }
 
-    /** Force-stop + remove with {@code withRemoveVolumes(true)} so anonymous data volumes vanish.
-     *  Used by the "Hard reset" flow that wants a clean slate on every redeploy. */
     public void hardRemoveContainer(String containerId) {
         try {
             dockerClient.removeContainerCmd(containerId)
@@ -118,12 +112,6 @@ public class DockerService {
         }
     }
 
-    /**
-     * Find and force-remove every container (running or stopped) whose name starts with
-     * {@code namePrefix}, dropping their anonymous data volumes too. Used as a defensive sweep
-     * before creating a fresh container so stale orphans from a previous run (e.g. a hard reset
-     * that didn't clean up because the DB row had a null containerId) can't keep old data alive.
-     */
     public void removeContainersByNamePrefix(String namePrefix) {
         try {
             var containers = dockerClient.listContainersCmd()

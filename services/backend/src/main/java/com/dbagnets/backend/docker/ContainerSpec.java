@@ -9,8 +9,4 @@ public record ContainerSpec(
     int hostPort,
     Map<String, String> environment,
     long memoryMb
-) {
-    public ContainerSpec(String image, String name, int containerPort, int hostPort, Map<String, String> environment) {
-        this(image, name, containerPort, hostPort, environment, 512);
-    }
-}
+){}

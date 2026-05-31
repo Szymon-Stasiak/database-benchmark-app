@@ -21,10 +21,6 @@ public class PostgresScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
-        // -v ON_ERROR_STOP=1 makes psql abort on the first error instead of silently skipping
-        // bad statements (we used to lose CREATE TABLEs that followed a duplicate CREATE TYPE
-        // and end up with an empty schema). Errors land in the captured output so the caller
-        // can surface them.
         String result = docker.execWithStdin(containerId, script, "psql", "-U", "postgres",
             "-d", "benchmark", "-v", "ON_ERROR_STOP=1", "-q");
         if (result != null && result.toLowerCase().contains("error")) {

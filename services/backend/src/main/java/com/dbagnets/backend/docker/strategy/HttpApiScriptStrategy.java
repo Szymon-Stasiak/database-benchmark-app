@@ -41,8 +41,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
-        // For HTTP-based databases, the script is typically a series of API calls
-        // We send the entire script as the request body to a db-specific endpoint
         WebClient client = WebClient.create("http://localhost:" + hostPort);
 
         switch (dbName) {
@@ -53,10 +51,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
     }
 
     private void executeElasticsearch(WebClient client, String script) {
-        // Elasticsearch scripts are typically PUT requests for index creation
-        // Split by blank lines (each section is a separate API call)
-        // For simplicity, send each line that starts with PUT/POST as a separate request
-        // The script from script-creator is typically a bulk operation or index definitions
         try {
             client.post().uri("/_bulk")
                 .header("Content-Type", "application/x-ndjson")
@@ -64,7 +58,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
                 .retrieve().bodyToMono(String.class)
                 .block(java.time.Duration.ofSeconds(30));
         } catch (Exception e) {
-            // Fallback: try line-by-line SQL-like execution
             for (String line : script.split("\n")) {
                 String trimmed = line.trim();
                 if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
@@ -82,7 +75,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
     }
 
     private void executeQuestDb(WebClient client, String script) {
-        // QuestDB uses SQL via HTTP: GET /exec?query=...
         for (String line : script.split(";")) {
             String trimmed = line.trim();
             if (trimmed.isEmpty() || trimmed.startsWith("--")) continue;
@@ -101,7 +93,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
     }
 
     private void executeGeneric(WebClient client, String script) {
-        // For other HTTP-based databases, try POST with the script body
         try {
             client.post().uri("/")
                 .bodyValue(script)

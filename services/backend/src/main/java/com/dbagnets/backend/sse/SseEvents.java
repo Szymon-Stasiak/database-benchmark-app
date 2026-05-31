@@ -1,5 +1,7 @@
 package com.dbagnets.backend.sse;
 
+import java.util.Map;
+
 public interface SseEvents {
 
     String EVENT_BENCHMARK_STATUS = "benchmark_status";
@@ -25,4 +27,36 @@ public interface SseEvents {
     String PAYLOAD_SCRIPT_PREVIEW = "scriptPreview";
 
     long INITIAL_STATE_DELAY_MS = 50L;
+
+    static Map<String, Object> benchmarkStatusPayload(String benchmarkId, Object status) {
+        return Map.of(PAYLOAD_BENCHMARK_ID, benchmarkId, PAYLOAD_STATUS, status);
+    }
+
+    static Map<String, Object> databaseStatusPayload(String benchmarkId, String databaseId, Object status) {
+        return Map.of(
+            PAYLOAD_BENCHMARK_ID, benchmarkId,
+            PAYLOAD_DATABASE_ID, databaseId,
+            PAYLOAD_STATUS, status
+        );
+    }
+
+    static Map<String, Object> databaseStatusPayload(String benchmarkId, String databaseId, Object status, String errorMessage) {
+        if (errorMessage == null) {
+            return databaseStatusPayload(benchmarkId, databaseId, status);
+        }
+        return Map.of(
+            PAYLOAD_BENCHMARK_ID, benchmarkId,
+            PAYLOAD_DATABASE_ID, databaseId,
+            PAYLOAD_STATUS, status,
+            PAYLOAD_ERROR_MESSAGE, errorMessage
+        );
+    }
+
+    static Map<String, Object> databasePortAssignedPayload(String benchmarkId, String databaseId, int hostPort) {
+        return Map.of(
+            PAYLOAD_BENCHMARK_ID, benchmarkId,
+            PAYLOAD_DATABASE_ID, databaseId,
+            PAYLOAD_HOST_PORT, hostPort
+        );
+    }
 }

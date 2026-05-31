@@ -74,12 +74,8 @@ public class ContainerStatusSync {
             db.setStatus(DatabaseStatus.STOPPED);
             db.setErrorMessage("Container is no longer running (detected by status sync)");
             databaseRepository.save(db);
-            sseEmitterService.sendEvent(db.getBenchmark().getId(), SseEvents.EVENT_DATABASE_STATUS, Map.of(
-                SseEvents.PAYLOAD_BENCHMARK_ID, db.getBenchmark().getId(),
-                SseEvents.PAYLOAD_DATABASE_ID, db.getId(),
-                SseEvents.PAYLOAD_STATUS, DatabaseStatus.STOPPED.name(),
-                SseEvents.PAYLOAD_ERROR_MESSAGE, db.getErrorMessage()
-            ));
+            sseEmitterService.broadcastDatabaseStatus(db.getBenchmark().getId(), db.getId(),
+                DatabaseStatus.STOPPED, db.getErrorMessage());
             touched++;
         }
         if (touched > 0) {
