@@ -12,6 +12,15 @@ import type {
   InsertRunResponse,
   StartInsertRunRequest,
 } from "@/types/insert"
+import type {
+  ReadRunResponse,
+  StartReadRunRequest,
+} from "@/types/read"
+import type {
+  DeleteRunResponse,
+  StartDeleteRunRequest,
+} from "@/types/delete"
+import type { ComparisonReportResponse } from "@/types/comparison"
 
 class ApiError extends Error {
   status: number
@@ -181,6 +190,41 @@ export const insertApi = {
       method: "POST",
       body: JSON.stringify(req),
     }),
+}
+
+export const readApi = {
+  listRuns: (benchmarkId: string) =>
+    apiFetch<ReadRunResponse[]>(`/api/benchmarks/${benchmarkId}/read-runs`),
+
+  startRun: (benchmarkId: string, req: StartReadRunRequest) =>
+    apiFetch<ReadRunResponse>(`/api/benchmarks/${benchmarkId}/read-runs`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  getRun: (runId: string) =>
+    apiFetch<ReadRunResponse>(`/api/read-runs/${runId}`),
+}
+
+export const comparisonApi = {
+  getReport: (benchmarkId: string) =>
+    apiFetch<ComparisonReportResponse>(
+      `/api/benchmarks/${benchmarkId}/comparison-report`,
+    ),
+}
+
+export const deleteApi = {
+  listRuns: (benchmarkId: string) =>
+    apiFetch<DeleteRunResponse[]>(`/api/benchmarks/${benchmarkId}/delete-runs`),
+
+  startRun: (benchmarkId: string, req: StartDeleteRunRequest) =>
+    apiFetch<DeleteRunResponse>(`/api/benchmarks/${benchmarkId}/delete-runs`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  getRun: (runId: string) =>
+    apiFetch<DeleteRunResponse>(`/api/delete-runs/${runId}`),
 }
 
 export { ApiError }

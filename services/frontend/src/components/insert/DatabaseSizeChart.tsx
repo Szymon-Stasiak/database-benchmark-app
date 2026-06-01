@@ -83,12 +83,20 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
     }
   })
 
-  const chartData = sizes.map((s) => ({
-    name: s.dbName,
-    baseline: s.baselineBytes ?? 0,
-    data: s.dataBytes ?? (s.baselineBytes ? 0 : s.sizeBytes ?? 0),
-    raw: s,
-  }))
+  const chartData = sizes.map((s) => {
+    const baselineKnown = s.baselineBytes != null
+    const baseline = s.baselineBytes ?? 0
+    const data = baselineKnown
+      ? (s.dataBytes ?? 0)
+      : (s.sizeBytes ?? 0)
+    return {
+      name: s.dbName,
+      baseline,
+      data,
+      baselinePending: !baselineKnown,
+      raw: s,
+    }
+  })
 
   return (
     <Card>
@@ -123,7 +131,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
                 <YAxis tickFormatter={formatBytes} tick={{ fontSize: 11 }} />
                 <Tooltip content={<SizeTooltip />} cursor={{ fill: "var(--muted)", fillOpacity: 0.2 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="baseline" name="DB engine (baseline)" stackId="size" fill="#06b6d4" radius={[0, 0, 0, 0]}>
+                <Bar dataKey="baseline" name="DB engine (baseline)" stackId="size" fill="#3b82f6" radius={[0, 0, 0, 0]}>
                   {chartData.map((_, i) => <Cell key={i} />)}
                 </Bar>
                 <Bar dataKey="data" name="Inserted data" stackId="size" fill="#ec4899" radius={[4, 4, 0, 0]} />
@@ -139,6 +147,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
 interface TooltipRow {
   baseline: number
   data: number
+  baselinePending: boolean
   raw: DatabaseSizeResponse
 }
 
@@ -149,7 +158,7 @@ function SizeTooltip({ active, payload, label }: { active?: boolean; payload?: A
     <div className="rounded-md border border-border bg-background p-2 shadow-md text-xs">
       <div className="font-semibold capitalize mb-1">{label}</div>
       <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-sm inline-block" style={{ backgroundColor: "#06b6d4" }} />
+        <span className="h-2 w-2 rounded-sm inline-block" style={{ backgroundColor: "#3b82f6" }} />
         baseline: <span className="font-mono">{formatBytes(row.baseline)}</span>
       </div>
       <div className="flex items-center gap-2">
@@ -157,6 +166,9 @@ function SizeTooltip({ active, payload, label }: { active?: boolean; payload?: A
         data: <span className="font-mono">{formatBytes(row.data)}</span>
       </div>
       <div className="text-muted-foreground mt-1">total: {row.raw.sizeHuman}</div>
+      {row.baselinePending && (
+        <div className="text-amber-600 dark:text-amber-400 mt-1">baseline pending — showing total</div>
+      )}
     </div>
   )
 }

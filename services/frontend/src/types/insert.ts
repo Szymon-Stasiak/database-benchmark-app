@@ -6,7 +6,7 @@ export const INSERT_MODE_LABELS: Record<InsertMode, string> = {
   BULK: "Bulk — one big INSERT for everything",
 }
 
-export type InsertStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED"
+export type InsertStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
 
 export interface AttributeChoice {
   name: string
@@ -79,6 +79,10 @@ export interface InsertResultResponse {
   recordsInserted: number | null
   throughputRps: number | null
   errorMessage: string | null
+  dbTimeMs: number | null
+  wireTimeMs: number | null
+  overheadMs: number | null
+  conflictsSkipped: number
 }
 
 export interface InsertRunResponse {

@@ -1,5 +1,7 @@
 package com.dbagnets.backend.service;
 
+import com.dbagnets.backend.benchmark.driver.ConnectionCacheRegistry;
+import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.client.ScriptCreatorClient;
 import com.dbagnets.backend.client.ScriptCreatorRequest.TargetRequest;
 import com.dbagnets.backend.client.ScriptCreatorResponse;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,7 +46,11 @@ public class BenchmarkService {
     private final ScriptExecutor scriptExecutor;
     private final SseEmitterService sseEmitterService;
     private final ObjectMapper objectMapper;
+    private final DataSizeProbe dataSizeProbe;
+    private final ConnectionCacheRegistry connectionCacheRegistry;
     private final ExecutorService executor = Executors.newCachedThreadPool();
+
+    private static final String HOST_ADDRESS = "127.0.0.1";
 
     @Transactional
     public BenchmarkResponse createBenchmark(CreateBenchmarkRequest request, User user) {
@@ -154,6 +161,8 @@ public class BenchmarkService {
                 db.setHostPort(null);
             }
             dockerService.removeContainersByNamePrefix(benchmarkPrefix + db.getDbName());
+            connectionCacheRegistry.evictAll(db.getId());
+            dataSizeProbe.invalidate(db.getId());
             db.setStatus(DatabaseStatus.SCRIPT_READY);
             db.setErrorMessage(null);
             db.setBaselineSizeBytes(null);
@@ -444,6 +453,7 @@ public class BenchmarkService {
         try {
             scriptExecutor.executeScript(db.getContainerId(), db.getDbName(), db.getScript(), db.getHostPort());
             updateDatabaseStatus(db.getId(), DatabaseStatus.RUNNING);
+            captureBaseline(benchmarkId, dbId);
         } catch (Exception e) {
             log.error("Failed to initialize {} ({})", db.getDbName(), dbId, e);
             db.setStatus(DatabaseStatus.FAILED);
@@ -451,6 +461,20 @@ public class BenchmarkService {
             databaseRepository.save(db);
             sseEmitterService.broadcastDatabaseStatus(benchmarkId, db.getId(), DatabaseStatus.FAILED, e.getMessage());
         }
+    }
+
+    private void captureBaseline(String benchmarkId, String dbId) {
+        var db = databaseRepository.findById(dbId).orElseThrow();
+        dataSizeProbe.invalidate(dbId);
+        Long bytes = dataSizeProbe.sizeOf(db, HOST_ADDRESS);
+        if (bytes == null) {
+            log.warn("Baseline capture skipped for {} ({}): probe unavailable", db.getDbName(), dbId);
+            return;
+        }
+        db.setBaselineSizeBytes(bytes);
+        db.setBaselineRecordedAt(Instant.now());
+        databaseRepository.save(db);
+        sseEmitterService.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_SIZE_DIRTY, Map.of("databaseId", dbId));
     }
 
     private void finalizeBenchmark(String benchmarkId) {
@@ -498,6 +522,8 @@ public class BenchmarkService {
             db.setContainerId(null);
             db.setHostPort(null);
         }
+        connectionCacheRegistry.evictAll(db.getId());
+        dataSizeProbe.invalidate(db.getId());
     }
 
     private void updateBenchmarkStatus(String benchmarkId, BenchmarkStatus status) {

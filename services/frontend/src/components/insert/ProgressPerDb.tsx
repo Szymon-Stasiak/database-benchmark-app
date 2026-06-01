@@ -1,13 +1,12 @@
 import { useMemo } from "react"
 import { motion } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock, Loader2, MinusCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { BatchProgressEvent, InsertRunResponse, InsertStatus } from "@/types/insert"
 
 interface Props {
   run: InsertRunResponse
-  /** Most recent {@link BatchProgressEvent} per (databaseId, entityName) pair. */
   progress: Map<string, BatchProgressEvent>
 }
 
@@ -18,70 +17,93 @@ const STATUS_CONFIG: Record<
   PENDING: { label: "Pending", bg: "bg-status-info-bg", text: "text-status-info-text", Icon: Clock },
   RUNNING: { label: "Running", bg: "bg-status-info-bg", text: "text-status-info-text", Icon: Loader2, spin: true },
   SUCCESS: { label: "Success", bg: "bg-status-success-bg", text: "text-status-success-text", Icon: CheckCircle2 },
+  PARTIAL: { label: "Partial", bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300", Icon: AlertTriangle },
   FAILED: { label: "Failed", bg: "bg-destructive/10", text: "text-destructive", Icon: XCircle },
+  SKIPPED: { label: "Skipped", bg: "bg-muted", text: "text-muted-foreground", Icon: MinusCircle },
 }
 
-/**
- * Aggregate the per-entity statuses for a database into one overall status:
- * any FAILED → FAILED, else any RUNNING/PENDING → RUNNING/PENDING, else SUCCESS.
- */
+const FALLBACK_STATUS_CFG = STATUS_CONFIG.PENDING
+
 function aggregateStatus(rows: InsertRunResponse["results"]): InsertStatus {
+  if (rows.length === 0) return "PENDING"
   let hasFailed = false
-  let hasPending = false
+  let hasSkipped = false
+  let hasSuccess = false
   let hasRunning = false
+  let hasPending = false
   for (const r of rows) {
     if (r.status === "FAILED") hasFailed = true
+    else if (r.status === "SKIPPED") hasSkipped = true
+    else if (r.status === "SUCCESS") hasSuccess = true
     else if (r.status === "RUNNING") hasRunning = true
     else if (r.status === "PENDING") hasPending = true
   }
-  if (hasFailed) return "FAILED"
   if (hasRunning) return "RUNNING"
   if (hasPending) return "PENDING"
-  return "SUCCESS"
+  if (hasFailed && hasSuccess) return "PARTIAL"
+  if (hasFailed) return "FAILED"
+  if (hasSuccess) return "SUCCESS"
+  if (hasSkipped) return "SKIPPED"
+  return "PENDING"
 }
 
-/**
- * Renders one filling progress bar per (DB × entity) phase, fed by the
- * {@code insert_batch_progress} SSE stream. Stays smooth even at high throughputs because
- * we only render the latest event per key.
- */
+interface DbBucket {
+  databaseId: string
+  dbName: string
+  results: InsertRunResponse["results"]
+  entityNames: string[]
+  totalMs: number
+  totalRecords: number
+}
+
 export function ProgressPerDb({ run, progress }: Props) {
+  const cascadeEntityNames = useMemo(() => parseCascadeEntityNames(run.cascadeJson), [run.cascadeJson])
+
   const byDb = useMemo(() => {
-    const map = new Map<string, {
-      dbName: string
-      results: InsertRunResponse["results"]
-      rows: ReturnType<typeof rowFor>[]
-      totalMs: number
-      totalRecords: number
-    }>()
+    const map = new Map<string, DbBucket>()
     for (const result of run.results) {
-      const evt = progress.get(progressKey(result.databaseId, result.entityName ?? ""))
-      const row = rowFor(result, evt)
       let bucket = map.get(result.databaseId)
       if (!bucket) {
-        bucket = { dbName: result.dbName, results: [], rows: [], totalMs: 0, totalRecords: 0 }
+        bucket = {
+          databaseId: result.databaseId,
+          dbName: result.dbName,
+          results: [],
+          entityNames: [...cascadeEntityNames],
+          totalMs: 0,
+          totalRecords: 0,
+        }
         map.set(result.databaseId, bucket)
       }
       bucket.results.push(result)
-      bucket.rows.push(row)
+      if (result.entityName && !bucket.entityNames.includes(result.entityName)) {
+        bucket.entityNames.push(result.entityName)
+      }
       bucket.totalMs += result.durationMs ?? 0
       bucket.totalRecords += result.recordsInserted ?? 0
     }
+    for (const evt of progress.values()) {
+      const bucket = map.get(evt.databaseId)
+      if (!bucket) continue
+      if (!bucket.entityNames.includes(evt.entityName)) {
+        bucket.entityNames.push(evt.entityName)
+      }
+    }
     return Array.from(map.values())
-  }, [run, progress])
+  }, [run, progress, cascadeEntityNames])
 
   return (
     <div className="space-y-3">
       {byDb.map((bucket) => {
         const status = aggregateStatus(bucket.results)
-        const cfg = STATUS_CONFIG[status]
+        const cfg = STATUS_CONFIG[status] ?? FALLBACK_STATUS_CFG
         const throughput = bucket.totalMs > 0
           ? Math.round((bucket.totalRecords / bucket.totalMs) * 1000)
           : null
         const errorMsg = bucket.results.find((r) => r.status === "FAILED")?.errorMessage
+        const dbStatus: InsertStatus = bucket.results[0]?.status ?? "PENDING"
         return (
           <div
-            key={bucket.dbName}
+            key={bucket.databaseId}
             className={cn(
               "rounded-lg border-2 p-3",
               status === "SUCCESS" && "border-green-500/50 bg-green-500/5",
@@ -104,9 +126,15 @@ export function ProgressPerDb({ run, progress }: Props) {
               </div>
             </div>
             <div className="space-y-2">
-              {bucket.rows.map((row) => (
-                <ProgressRow key={row.key} row={row} />
-              ))}
+              {bucket.entityNames.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Waiting for first batch…</p>
+              ) : (
+                bucket.entityNames.map((entityName) => {
+                  const evt = progress.get(progressKey(bucket.databaseId, entityName))
+                  const row = rowForEntity(entityName, evt, dbStatus)
+                  return <ProgressRow key={entityName} row={row} />
+                })
+              )}
             </div>
             {errorMsg && (
               <p className="mt-2 text-[11px] text-destructive font-mono break-words bg-destructive/5 rounded px-2 py-1">
@@ -136,17 +164,34 @@ interface ProgressRowData {
   status: string
 }
 
-function rowFor(
-  result: InsertRunResponse["results"][number],
+function rowForEntity(
+  entityName: string,
   evt: BatchProgressEvent | undefined,
+  dbStatus: InsertStatus,
 ): ProgressRowData {
+  const done = evt?.recordsDone ?? 0
+  const total = evt?.recordsTotal ?? 0
   return {
-    key: result.id,
-    entityName: result.entityName ?? "(legacy)",
-    done: evt?.recordsDone ?? result.recordsInserted ?? 0,
-    total: evt?.recordsTotal ?? (result.status === "SUCCESS" ? result.recordsInserted ?? 1 : 1),
-    status: result.status,
+    key: entityName,
+    entityName,
+    done,
+    total: total > 0 ? total : Math.max(done, 1),
+    status: resolveEntityStatus(evt, dbStatus, done, total),
   }
+}
+
+function resolveEntityStatus(
+  evt: BatchProgressEvent | undefined,
+  dbStatus: InsertStatus,
+  done: number,
+  total: number,
+): InsertStatus {
+  if (dbStatus === "FAILED") return "FAILED"
+  if (dbStatus === "SKIPPED") return "SKIPPED"
+  if (!evt) return dbStatus === "SUCCESS" ? "SUCCESS" : "PENDING"
+  if (total > 0 && done >= total) return "SUCCESS"
+  if (done > 0) return "RUNNING"
+  return "PENDING"
 }
 
 function ProgressRow({ row }: { row: ProgressRowData }) {
@@ -178,4 +223,21 @@ function ProgressRow({ row }: { row: ProgressRowData }) {
 
 export function progressKey(databaseId: string, entityName: string): string {
   return `${databaseId}::${entityName.toLowerCase()}`
+}
+
+function parseCascadeEntityNames(cascadeJson: string | null | undefined): string[] {
+  if (!cascadeJson) return []
+  try {
+    const parsed = JSON.parse(cascadeJson) as { nodesInInsertOrder?: Array<{ entityName?: string }> }
+    const nodes = parsed?.nodesInInsertOrder
+    if (!Array.isArray(nodes)) return []
+    const names: string[] = []
+    for (const node of nodes) {
+      const name = node?.entityName
+      if (typeof name === "string" && !names.includes(name)) names.push(name)
+    }
+    return names
+  } catch {
+    return []
+  }
 }

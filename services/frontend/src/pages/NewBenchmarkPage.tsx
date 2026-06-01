@@ -26,7 +26,7 @@ const FALLBACK_CATALOG: SupportedDatabases = {
     ],
     VECTOR: [
       { name: "milvus", displayName: "Milvus", versions: ["2.4", "2.3"] },
-      { name: "qdrant", displayName: "Qdrant", versions: ["1.12", "1.11"] },
+      { name: "qdrant", displayName: "Qdrant", versions: ["1.12.6", "1.11.5"] },
       { name: "weaviate", displayName: "Weaviate", versions: ["1.27", "1.26"] },
     ],
     DOCUMENT: [

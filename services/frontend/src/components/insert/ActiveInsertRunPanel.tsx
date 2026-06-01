@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock, Loader2, MinusCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useInsertRunEvents } from "@/hooks/useInsertRunEvents"
 import { ProgressPerDb, progressKey } from "@/components/insert/ProgressPerDb"
@@ -13,8 +13,8 @@ import type {
 } from "@/types/insert"
 
 interface Props {
+  benchmarkId: string
   run: InsertRunResponse
-  /** Delta callbacks for the parent's optimistic store. */
   onRunStatusChange: (runId: string, status: InsertStatus) => void
   onResultUpdate: (runId: string, result: InsertResultResponse) => void
 }
@@ -26,13 +26,17 @@ const STATUS_CONFIG: Record<
   PENDING: { label: "Pending", bg: "bg-status-info-bg", text: "text-status-info-text", Icon: Clock },
   RUNNING: { label: "Running", bg: "bg-status-info-bg", text: "text-status-info-text", Icon: Loader2, spin: true },
   SUCCESS: { label: "Success", bg: "bg-status-success-bg", text: "text-status-success-text", Icon: CheckCircle2 },
+  PARTIAL: { label: "Partial", bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300", Icon: AlertTriangle },
   FAILED: { label: "Failed", bg: "bg-destructive/10", text: "text-destructive", Icon: XCircle },
+  SKIPPED: { label: "Skipped", bg: "bg-muted", text: "text-muted-foreground", Icon: MinusCircle },
 }
 
-export function ActiveInsertRunPanel({ run, onRunStatusChange, onResultUpdate }: Props) {
+const FALLBACK_STATUS_CFG = STATUS_CONFIG.PENDING
+
+export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [progress, setProgress] = useState<Map<string, BatchProgressEvent>>(new Map())
 
-  useInsertRunEvents(run.id, {
+  useInsertRunEvents(benchmarkId, run.id, {
     onRunStatus: (status) => onRunStatusChange(run.id, status),
     onResultUpdate: (result) => onResultUpdate(run.id, result),
     onBatchProgress: (evt) => {
@@ -44,7 +48,7 @@ export function ActiveInsertRunPanel({ run, onRunStatusChange, onResultUpdate }:
     },
   })
 
-  const cfg = STATUS_CONFIG[run.status]
+  const cfg = STATUS_CONFIG[run.status] ?? FALLBACK_STATUS_CFG
 
   return (
     <Card>

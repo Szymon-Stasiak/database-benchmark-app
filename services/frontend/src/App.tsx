@@ -8,6 +8,9 @@ import NewBenchmarkPage from "@/pages/NewBenchmarkPage"
 import BenchmarkDetailPage from "@/pages/BenchmarkDetailPage"
 import BenchmarkTestsPage from "@/pages/BenchmarkTestsPage"
 import BenchmarkInsertsPage from "@/pages/BenchmarkInsertsPage"
+import BenchmarkReadsPage from "@/pages/BenchmarkReadsPage"
+import BenchmarkDeletesPage from "@/pages/BenchmarkDeletesPage"
+import BenchmarkComparisonPage from "@/pages/BenchmarkComparisonPage"
 import { AnimatePresence, motion } from "framer-motion"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
@@ -62,6 +65,30 @@ function AnimatedRoutes() {
             element={
               <ProtectedRoute>
                 <BenchmarkInsertsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/benchmarks/:id/reads"
+            element={
+              <ProtectedRoute>
+                <BenchmarkReadsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/benchmarks/:id/deletes"
+            element={
+              <ProtectedRoute>
+                <BenchmarkDeletesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/benchmarks/:id/comparison"
+            element={
+              <ProtectedRoute>
+                <BenchmarkComparisonPage />
               </ProtectedRoute>
             }
           />

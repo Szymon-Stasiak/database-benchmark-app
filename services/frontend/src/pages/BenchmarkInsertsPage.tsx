@@ -44,7 +44,8 @@ export default function BenchmarkInsertsPage() {
         setBenchmark(b)
         setEntities(e)
         setRuns(r)
-        if (r.length > 0) setPinnedRunIds([r[0].id])
+        const active = r.filter((run) => run.status === "RUNNING" || run.status === "PENDING")
+        if (active.length > 0) setPinnedRunIds(active.map((run) => run.id))
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 404) {
@@ -161,9 +162,10 @@ export default function BenchmarkInsertsPage() {
           />
         )}
 
-        {pinnedRuns.map((run) => (
+        {benchmark && pinnedRuns.map((run) => (
           <ActiveInsertRunPanel
             key={run.id}
+            benchmarkId={benchmark.id}
             run={run}
             onRunStatusChange={handleRunStatusChange}
             onResultUpdate={handleResultUpdate}

@@ -8,49 +8,48 @@ interface Handlers {
   onBatchProgress?: (event: BatchProgressEvent) => void
 }
 
-/**
- * Subscribes to the per-run SSE stream and dispatches typed events to the supplied callbacks.
- *
- * <p>Three event types flow over the channel:
- * <ul>
- *   <li>{@code insert_run_status} — the overall run moved between RUNNING / SUCCESS / FAILED.</li>
- *   <li>{@code insert_result_status} — one (entity × DB) phase updated.</li>
- *   <li>{@code insert_batch_progress} — one batch within a phase finished (emitted by JDBC /
- *       native strategies that have a worker-pool implementation).</li>
- * </ul>
- *
- * <p>Two overloads keep callers tidy:
- * <ul>
- *   <li>{@code useInsertRunEvents(runId, onEvent)} — legacy: receives raw SSE events.</li>
- *   <li>{@code useInsertRunEvents(runId, handlers)} — preferred: typed callbacks per event kind.</li>
- * </ul>
- */
 export function useInsertRunEvents(
+  benchmarkId: string | null,
   runId: string | null,
-  handlersOrCallback: Handlers | ((event: SseEvent) => void),
+  handlers: Handlers,
 ) {
-  const ref = useRef(handlersOrCallback)
-  ref.current = handlersOrCallback
+  const ref = useRef(handlers)
+  ref.current = handlers
 
   useEffect(() => {
-    if (!runId) return
+    if (!benchmarkId || !runId) return
     const controller = new AbortController()
-    connectSse(`/api/insert-runs/${runId}/events`, (e) => dispatch(ref.current, e), controller.signal)
+    connectSse(
+      `/api/benchmarks/${benchmarkId}/events`,
+      (e) => {
+        if (!matchesRun(e, runId)) return
+        dispatch(ref.current, e)
+      },
+      controller.signal,
+    )
     return () => controller.abort()
-  }, [runId])
+  }, [benchmarkId, runId])
 }
 
-function dispatch(target: Handlers | ((event: SseEvent) => void), event: SseEvent) {
-  if (typeof target === "function") {
-    target(event)
-    return
+function matchesRun(event: SseEvent, runId: string): boolean {
+  if (
+    event.type !== "insert_run_status" &&
+    event.type !== "insert_result_status" &&
+    event.type !== "insert_batch_progress"
+  ) {
+    return false
   }
+  const data = event.data as { runId?: string }
+  return data?.runId === runId
+}
+
+function dispatch(target: Handlers, event: SseEvent) {
   switch (event.type) {
     case "insert_run_status":
       target.onRunStatus?.((event.data as { status: InsertStatus }).status)
       break
     case "insert_result_status":
-      target.onResultUpdate?.(event.data as InsertResultResponse)
+      target.onResultUpdate?.((event.data as { result: InsertResultResponse }).result)
       break
     case "insert_batch_progress":
       target.onBatchProgress?.(event.data as BatchProgressEvent)

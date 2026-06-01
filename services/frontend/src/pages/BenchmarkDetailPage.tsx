@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser } from "lucide-react"
+import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser, Search, BarChart3 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
@@ -349,14 +349,42 @@ export default function BenchmarkDetailPage() {
         <h3 className="text-lg font-semibold">
           Databases ({benchmark.databases.length})
         </h3>
-        <Button
-          onClick={() => navigate(`/benchmarks/${benchmark.id}/inserts`)}
-          disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
-          className="h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <FlaskConical className="h-5 w-5 mr-2" />
-          Run Insert Benchmark
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => navigate(`/benchmarks/${benchmark.id}/comparison`)}
+            variant="outline"
+            className="h-10 px-6 text-sm font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200"
+          >
+            <BarChart3 className="h-5 w-5 mr-2" />
+            View Comparison
+          </Button>
+          <Button
+            onClick={() => navigate(`/benchmarks/${benchmark.id}/deletes`)}
+            disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
+            variant="outline"
+            className="h-10 px-6 text-sm font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-destructive hover:text-destructive"
+          >
+            <Eraser className="h-5 w-5 mr-2" />
+            Run Delete Benchmark
+          </Button>
+          <Button
+            onClick={() => navigate(`/benchmarks/${benchmark.id}/reads`)}
+            disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
+            variant="outline"
+            className="h-10 px-6 text-sm font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Search className="h-5 w-5 mr-2" />
+            Run Read Benchmark
+          </Button>
+          <Button
+            onClick={() => navigate(`/benchmarks/${benchmark.id}/inserts`)}
+            disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
+            className="h-10 px-6 text-sm font-semibold bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FlaskConical className="h-5 w-5 mr-2" />
+            Run Insert Benchmark
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">

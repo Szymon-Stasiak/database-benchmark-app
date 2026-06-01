@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, XCircle, Clock, Loader2, History } from "lucide-react"
+import { AlertTriangle, CheckCircle2, XCircle, Clock, History, Loader2, MinusCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { InsertRunResponse, InsertStatus } from "@/types/insert"
 
@@ -15,8 +15,12 @@ const STATUS_ICON: Record<InsertStatus, React.ComponentType<{ className?: string
   PENDING: Clock,
   RUNNING: Loader2,
   SUCCESS: CheckCircle2,
+  PARTIAL: AlertTriangle,
   FAILED: XCircle,
+  SKIPPED: MinusCircle,
 }
+
+const FALLBACK_ICON = Clock
 
 export function InsertRunHistory({ runs, selectedRunId, onSelect }: Props) {
   if (runs.length === 0) {

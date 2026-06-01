@@ -13,6 +13,12 @@ public interface SseEvents {
     String EVENT_INSERT_RUN_STATUS = "insert_run_status";
     String EVENT_INSERT_RESULT_STATUS = "insert_result_status";
     String EVENT_INSERT_BATCH_PROGRESS = "insert_batch_progress";
+    String EVENT_READ_RUN_STATUS = "read_run_status";
+    String EVENT_READ_RESULT_STATUS = "read_result_status";
+    String EVENT_DELETE_RUN_STATUS = "delete_run_status";
+    String EVENT_DELETE_RESULT_STATUS = "delete_result_status";
+    String EVENT_RUN_CONFLICT = "run_conflict";
+    String EVENT_RUN_RESULT_UPDATE = "run_result_update";
 
     String EVENT_HEARTBEAT = "heartbeat";
     String EVENT_LOG = "log";

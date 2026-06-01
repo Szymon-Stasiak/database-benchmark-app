@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import { GoogleLogin } from "@react-oauth/google"
 import { useAuth } from "@/lib/auth"
 import {
@@ -14,8 +14,7 @@ export function LoginPage() {
   const navigate = useNavigate()
 
   if (isAuthenticated) {
-    navigate("/dashboard", { replace: true })
-    return null
+    return <Navigate to="/dashboard" replace />
   }
 
   return (
