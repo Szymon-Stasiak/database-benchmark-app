@@ -7,6 +7,7 @@ import time
 from dbagnets.models import PipelineResult, ScriptLoopState
 from dbagnets.models.config import PipelineConfig, TargetConfig
 from dbagnets.models.schema import LogicalSchema
+from dbagnets.orchestrators.fk_reconciler import reconcile_fk_columns
 from dbagnets.orchestrators.schema import SchemaOrchestrator
 from dbagnets.orchestrators.script import ScriptOrchestrator
 
@@ -55,6 +56,9 @@ class PipelineOrchestrator:
             )
 
         schema = LogicalSchema.model_validate_json(schema_result.final_schema_json)
+        schema = reconcile_fk_columns(schema)
+        schema_result.final_schema_json = schema.model_dump_json()
+
         logger.info("")
         logger.info("=" * 60)
         logger.info("  Phase 2: Parallel Script Generation (%d targets)", len(config.targets))

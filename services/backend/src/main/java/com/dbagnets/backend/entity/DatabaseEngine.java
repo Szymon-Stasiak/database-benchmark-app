@@ -28,7 +28,7 @@ public enum DatabaseEngine {
         Map.of("discovery.type", "single-node", "xpack.security.enabled", "false", "ES_JAVA_OPTS", "-Xms256m -Xmx256m")),
     COUCHDB("couchdb", 5984, v -> "couchdb:" + v,
         Map.of("COUCHDB_USER", "admin", "COUCHDB_PASSWORD", "benchmark")),
-    MILVUS("milvus", 19530, v -> "milvusdb/milvus:v" + v + "-latest", Map.of()),
+    MILVUS("milvus", 19530, DatabaseEngine::milvusImage, Map.of()),
     QDRANT("qdrant", 6333, v -> "qdrant/qdrant:v" + v, Map.of()),
     WEAVIATE("weaviate", 8080, v -> "semitechnologies/weaviate:" + v,
         Map.of("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true", "PERSISTENCE_DATA_PATH", "/var/lib/weaviate")),
@@ -75,5 +75,14 @@ public enum DatabaseEngine {
             .filter(e -> e.dbName.equalsIgnoreCase(dbName))
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Unknown database engine: " + dbName));
+    }
+
+    private static final Map<String, String> MILVUS_TAGS = Map.of(
+        "2.4", "milvusdb/milvus:v2.4.24",
+        "2.3", "milvusdb/milvus:v2.3.22"
+    );
+
+    private static String milvusImage(String version) {
+        return MILVUS_TAGS.getOrDefault(version, "milvusdb/milvus:v" + version);
     }
 }

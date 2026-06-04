@@ -100,10 +100,16 @@ public class BenchmarkService {
                 startContainers(benchmarkId);
                 initializeDatabases(benchmarkId);
                 finalizeBenchmark(benchmarkId);
+            } catch (ObjectOptimisticLockingFailureException e) {
+                log.info("Benchmark {} modified concurrently during redeploy, aborting silently", benchmarkId);
             } catch (Exception e) {
                 log.error("Redeploy failed for benchmark {}", benchmarkId, e);
-                failRemainingDatabases(benchmarkId, e.getMessage());
-                updateBenchmarkStatus(benchmarkId, BenchmarkStatus.FAILED);
+                try {
+                    failRemainingDatabases(benchmarkId, e.getMessage());
+                    updateBenchmarkStatus(benchmarkId, BenchmarkStatus.FAILED);
+                } catch (ObjectOptimisticLockingFailureException raceWithCancel) {
+                    log.info("Benchmark {} cancelled while marking as FAILED, skipping", benchmarkId);
+                }
             }
         });
     }
@@ -133,13 +139,22 @@ public class BenchmarkService {
                     initializeSingleDatabase(benchmarkId, databaseId);
                 }
                 finalizeBenchmark(benchmarkId);
+            } catch (ObjectOptimisticLockingFailureException e) {
+                log.info("Database {} modified concurrently during redeploy, aborting silently", databaseId);
             } catch (Exception e) {
                 log.error("Redeploy failed for database {} in benchmark {}", databaseId, benchmarkId, e);
-                var failedDb = databaseRepository.findById(databaseId).orElseThrow();
-                failedDb.setStatus(DatabaseStatus.FAILED);
-                failedDb.setErrorMessage(e.getMessage());
-                databaseRepository.save(failedDb);
-                finalizeBenchmark(benchmarkId);
+                try {
+                    Optional<BenchmarkDatabase> failedOpt = databaseRepository.findById(databaseId);
+                    if (failedOpt.isPresent()) {
+                        BenchmarkDatabase failedDb = failedOpt.get();
+                        failedDb.setStatus(DatabaseStatus.FAILED);
+                        failedDb.setErrorMessage(e.getMessage());
+                        databaseRepository.save(failedDb);
+                    }
+                    finalizeBenchmark(benchmarkId);
+                } catch (ObjectOptimisticLockingFailureException raceWithCancel) {
+                    log.info("Database {} cancelled while marking as FAILED, skipping", databaseId);
+                }
             }
         });
     }
@@ -527,16 +542,36 @@ public class BenchmarkService {
     }
 
     private void updateBenchmarkStatus(String benchmarkId, BenchmarkStatus status) {
-        Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
+        Optional<Benchmark> opt = benchmarkRepository.findById(benchmarkId);
+        if (opt.isEmpty()) {
+            log.info("Benchmark {} no longer exists, skipping status update to {}", benchmarkId, status);
+            return;
+        }
+        Benchmark benchmark = opt.get();
         benchmark.setStatus(status);
-        benchmarkRepository.save(benchmark);
+        try {
+            benchmarkRepository.save(benchmark);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("Benchmark {} modified concurrently, skipping status update to {}", benchmarkId, status);
+            return;
+        }
         sseEmitterService.broadcastBenchmarkStatus(benchmarkId, status);
     }
 
     private void updateDatabaseStatus(String databaseId, DatabaseStatus status) {
-        BenchmarkDatabase db = databaseRepository.findById(databaseId).orElseThrow();
+        Optional<BenchmarkDatabase> opt = databaseRepository.findById(databaseId);
+        if (opt.isEmpty()) {
+            log.info("Database {} no longer exists, skipping status update to {}", databaseId, status);
+            return;
+        }
+        BenchmarkDatabase db = opt.get();
         db.setStatus(status);
-        databaseRepository.save(db);
+        try {
+            databaseRepository.save(db);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("Database {} modified concurrently, skipping status update to {}", databaseId, status);
+            return;
+        }
         String benchmarkId = db.getBenchmark().getId();
         sseEmitterService.broadcastDatabaseStatus(benchmarkId, databaseId, status);
     }

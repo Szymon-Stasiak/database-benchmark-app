@@ -26,8 +26,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RedisDriver implements EngineDriver {
 
-    private static final int PING_SAMPLES = 16;
-
     private final RedisPoolCache poolCache;
     private final ObjectMapper objectMapper;
 
@@ -40,11 +38,6 @@ public class RedisDriver implements EngineDriver {
     public TimedOperation insert(InsertContext ctx) throws Exception {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
 
-        long pingBaselineNs;
-        try (Jedis jedis = pool.getResource()) {
-            pingBaselineNs = measurePingBaselinePerCommand(jedis);
-        }
-
         long totalDbTimeNs = 0L;
         long totalRowsAffected = 0L;
         List<RecordedId> recordedIds = new ArrayList<>();
@@ -54,8 +47,7 @@ public class RedisDriver implements EngineDriver {
             for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
                 List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
                 if (rows == null || rows.isEmpty()) continue;
-                long opNs = writeEntity(jedis, ctx, node, rows, recordedIds);
-                totalDbTimeNs += Math.max(0L, opNs - pingBaselineNs * rows.size());
+                totalDbTimeNs += writeEntity(jedis, ctx, node, rows, recordedIds);
                 totalRowsAffected += rows.size();
                 ctx.progress().onEntityFinished(node.entityName());
             }
@@ -74,10 +66,6 @@ public class RedisDriver implements EngineDriver {
     @Override
     public TimedOperation read(ReadContext ctx) {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        long pingBaselineNs;
-        try (Jedis jedis = pool.getResource()) {
-            pingBaselineNs = measurePingBaselinePerCommand(jedis);
-        }
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
@@ -93,7 +81,7 @@ public class RedisDriver implements EngineDriver {
                         : prefix + entry.logicalId();
                 long start = System.nanoTime();
                 String value = jedis.get(key);
-                long sampleNs = Math.max(0L, System.nanoTime() - start - pingBaselineNs);
+                long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
                 if (value != null) rowsRead++;
@@ -112,10 +100,6 @@ public class RedisDriver implements EngineDriver {
     @Override
     public TimedOperation delete(DeleteContext ctx) {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        long pingBaselineNs;
-        try (Jedis jedis = pool.getResource()) {
-            pingBaselineNs = measurePingBaselinePerCommand(jedis);
-        }
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
@@ -131,7 +115,7 @@ public class RedisDriver implements EngineDriver {
                         : prefix + entry.logicalId();
                 long start = System.nanoTime();
                 long deleted = jedis.del(key);
-                long sampleNs = Math.max(0L, System.nanoTime() - start - pingBaselineNs);
+                long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
                 rowsAffected += deleted;
@@ -154,37 +138,33 @@ public class RedisDriver implements EngineDriver {
                               List<RecordedId> recordedIds) throws Exception {
         int batchSize = effectiveBatchSize(ctx);
         int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
-        long opNs = 0L;
+        long dbTimeNs = 0L;
         int batchIndex = 0;
         String entityLowerName = node.entityName().toLowerCase();
 
         for (int from = 0; from < rows.size(); from += batchSize) {
             int to = Math.min(from + batchSize, rows.size());
             List<GeneratedRow> slice = rows.subList(from, to);
+            List<String> keys = new ArrayList<>(slice.size());
+            List<String> payloads = new ArrayList<>(slice.size());
+            for (GeneratedRow row : slice) {
+                String key = entityLowerName + ":" + row.logicalId();
+                keys.add(key);
+                payloads.add(objectMapper.writeValueAsString(row.values()));
+                recordedIds.add(new RecordedId(node.entityName(), row.logicalId(), key));
+            }
             long start = System.nanoTime();
             try (Pipeline pipeline = jedis.pipelined()) {
-                for (GeneratedRow row : slice) {
-                    String key = entityLowerName + ":" + row.logicalId();
-                    pipeline.set(key, objectMapper.writeValueAsString(row.values()));
-                    recordedIds.add(new RecordedId(node.entityName(), row.logicalId(), key));
+                for (int i = 0; i < keys.size(); i++) {
+                    pipeline.set(keys.get(i), payloads.get(i));
                 }
                 pipeline.sync();
             }
-            opNs += System.nanoTime() - start;
+            dbTimeNs += System.nanoTime() - start;
             batchIndex++;
             ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
         }
-        return opNs;
-    }
-
-    private long measurePingBaselinePerCommand(Jedis jedis) {
-        long total = 0L;
-        for (int i = 0; i < PING_SAMPLES; i++) {
-            long start = System.nanoTime();
-            jedis.ping();
-            total += System.nanoTime() - start;
-        }
-        return total / PING_SAMPLES;
+        return dbTimeNs;
     }
 
     private int effectiveBatchSize(InsertContext ctx) {

@@ -16,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
-import org.neo4j.driver.summary.ResultSummary;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -92,15 +91,15 @@ public class Neo4jDriver implements EngineDriver {
         try (Session session = neo.session()) {
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
+                long start = System.nanoTime();
                 Result result = session.run(cypher, Map.of("id", entry.physicalId()));
                 long rowsForThis = 0L;
                 while (result.hasNext()) {
                     result.next();
                     rowsForThis++;
                 }
-                ResultSummary summary = result.consume();
-                long sampleNs = summary.resultAvailableAfter(java.util.concurrent.TimeUnit.NANOSECONDS)
-                        + summary.resultConsumedAfter(java.util.concurrent.TimeUnit.NANOSECONDS);
+                result.consume();
+                long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
                 rowsRead += rowsForThis;
@@ -133,9 +132,9 @@ public class Neo4jDriver implements EngineDriver {
         try (Session session = neo.session()) {
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
-                ResultSummary summary = session.run(cypher, Map.of("id", entry.physicalId())).consume();
-                long sampleNs = summary.resultAvailableAfter(java.util.concurrent.TimeUnit.NANOSECONDS)
-                        + summary.resultConsumedAfter(java.util.concurrent.TimeUnit.NANOSECONDS);
+                long start = System.nanoTime();
+                var summary = session.run(cypher, Map.of("id", entry.physicalId())).consume();
+                long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
                 rowsAffected += summary.counters().nodesDeleted();
@@ -170,10 +169,10 @@ public class Neo4jDriver implements EngineDriver {
                 batch.add(toMap(row));
             }
             try {
+                long start = System.nanoTime();
                 Result result = session.run(cypher, Map.of("batch", batch));
-                ResultSummary summary = result.consume();
-                outcome.dbTimeNs += summary.resultAvailableAfter(java.util.concurrent.TimeUnit.NANOSECONDS)
-                        + summary.resultConsumedAfter(java.util.concurrent.TimeUnit.NANOSECONDS);
+                var summary = result.consume();
+                outcome.dbTimeNs += System.nanoTime() - start;
                 outcome.rowsAffected += summary.counters().nodesCreated();
                 slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
             } catch (Exception ex) {
@@ -224,9 +223,9 @@ public class Neo4jDriver implements EngineDriver {
             int to = Math.min(from + chunkSize, pairs.size());
             List<Map<String, Object>> chunk = pairs.subList(from, to);
             try {
-                ResultSummary summary = session.run(cypher, Map.of("pairs", chunk)).consume();
-                totalDbTimeNs += summary.resultAvailableAfter(java.util.concurrent.TimeUnit.NANOSECONDS)
-                        + summary.resultConsumedAfter(java.util.concurrent.TimeUnit.NANOSECONDS);
+                long start = System.nanoTime();
+                session.run(cypher, Map.of("pairs", chunk)).consume();
+                totalDbTimeNs += System.nanoTime() - start;
             } catch (Exception ex) {
                 log.warn("Neo4j relationship MERGE failed {} -> {} chunk [{}, {}): {}",
                         parentLabel, childLabel, from, to, ex.getMessage());

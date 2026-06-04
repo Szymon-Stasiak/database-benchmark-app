@@ -45,6 +45,7 @@ class Relationship(BaseModel):
     cardinality: RelationshipCardinality
     description: str = ""
     attributes: list[Attribute] = []
+    fk_column_in_child: str | None = None
 
 
 class DocumentEmbeddingMapping(BaseModel):

@@ -303,6 +303,20 @@ RULES:
    Do NOT rename, abbreviate, or translate any name from the schema.
    The script will be used for automated benchmarking where queries are generated
    programmatically from the schema — any name mismatch will break the pipeline.
+12b. FOREIGN KEY COLUMN NAMES (CRITICAL — single source of truth):
+   Every non-M:N relationship in the LogicalSchema carries `fk_column_in_child`
+   — the EXACT column name that implements the FK on the child entity. The
+   matching UUID attribute is ALREADY declared on the child entity. You MUST:
+   - Use EXACTLY that column name in the child table / collection / node.
+   - NEVER invent a different FK column name (no `owner_ref`, no `fk_owner`,
+     no `ownerId` if the schema says `owner_id`).
+   - NEVER add an extra FK column the schema does not list as an attribute.
+   For relational targets, the FK clause MUST read:
+     `FOREIGN KEY (<fk_column_in_child>) REFERENCES <parent> (<parent_pk>)`.
+   For graph targets, treat `fk_column_in_child` as the relationship hint and
+   OMIT it from node properties (the edge encodes the link, as already stated).
+   For document/key-value/vector/time-series, use `fk_column_in_child` as the
+   reference field name on the child collection/key.
 13. PRODUCTION SCALE DESIGN:
    - Choose index strategies optimized for large datasets (millions of rows).
    - Apply sharding where data_size_hints suggest high volume (relational: no partitioning).

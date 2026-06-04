@@ -14,8 +14,6 @@ import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
 import com.dbagnets.backend.entity.DatabaseEngine;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,7 +23,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,7 +32,6 @@ import java.util.List;
 public class PgDriver implements EngineDriver {
 
     private final PgDataSourceCache dataSources;
-    private final ObjectMapper objectMapper;
 
     @Override
     public DatabaseEngine engine() {
@@ -88,22 +84,25 @@ public class PgDriver implements EngineDriver {
                 .orElseThrow(() -> new IllegalStateException("Entity " + entity.name() + " has no primary key"));
         String table = "\"" + entity.name().toLowerCase() + "\"";
         String pkCol = "\"" + pk.name().toLowerCase() + "\"";
-        String baseSelect = "SELECT * FROM " + table + " WHERE " + pkCol + " = ?";
-        String explainSql = "EXPLAIN (ANALYZE, FORMAT JSON, BUFFERS) " + baseSelect;
+        String selectSql = "SELECT * FROM " + table + " WHERE " + pkCol + " = ?";
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsRead = 0L;
 
         long wireStart = System.nanoTime();
-        try (Connection conn = ds.getConnection()) {
+        try (Connection conn = ds.getConnection();
+             PreparedStatement ps = conn.prepareStatement(selectSql)) {
             conn.setReadOnly(true);
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
-                long sampleNs = explainSelect(conn, explainSql, pk, entry.physicalId());
+                PgValueBinder.bind(ps, 1, pk, entry.physicalId());
+                long start = System.nanoTime();
+                long n = executeSelect(ps);
+                long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
-                rowsRead += executeSelect(conn, baseSelect, pk, entry.physicalId());
+                rowsRead += n;
             }
         }
         long wireTimeNs = System.nanoTime() - wireStart;
@@ -125,22 +124,25 @@ public class PgDriver implements EngineDriver {
                 .orElseThrow(() -> new IllegalStateException("Entity " + entity.name() + " has no primary key"));
         String table = "\"" + entity.name().toLowerCase() + "\"";
         String pkCol = "\"" + pk.name().toLowerCase() + "\"";
-        String baseDelete = "DELETE FROM " + table + " WHERE " + pkCol + " = ?";
-        String explainSql = "EXPLAIN (ANALYZE, FORMAT JSON, BUFFERS) " + baseDelete;
+        String deleteSql = "DELETE FROM " + table + " WHERE " + pkCol + " = ?";
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsAffected = 0L;
 
         long wireStart = System.nanoTime();
-        try (Connection conn = ds.getConnection()) {
+        try (Connection conn = ds.getConnection();
+             PreparedStatement ps = conn.prepareStatement(deleteSql)) {
             conn.setAutoCommit(false);
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
-                ExplainDeleteOutcome outcome = explainDelete(conn, explainSql, pk, entry.physicalId());
-                samples[i] = outcome.dbTimeNs;
-                totalDbTimeNs += outcome.dbTimeNs;
-                rowsAffected += outcome.rowsAffected;
+                PgValueBinder.bind(ps, 1, pk, entry.physicalId());
+                long start = System.nanoTime();
+                int affected = ps.executeUpdate();
+                long sampleNs = System.nanoTime() - start;
+                samples[i] = sampleNs;
+                totalDbTimeNs += sampleNs;
+                if (affected > 0) rowsAffected += affected;
             }
             conn.commit();
         }
@@ -154,56 +156,11 @@ public class PgDriver implements EngineDriver {
                 .build();
     }
 
-    private ExplainDeleteOutcome explainDelete(Connection conn, String explainSql, LogicalAttribute pk, String physicalId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(explainSql)) {
-            PgValueBinder.bind(ps, 1, pk, physicalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return new ExplainDeleteOutcome(0L, 0L);
-                String json = rs.getString(1);
-                JsonNode root = objectMapper.readTree(json);
-                if (root.isArray() && root.size() > 0) {
-                    JsonNode plan = root.get(0);
-                    JsonNode execTime = plan.path("Execution Time");
-                    long dbTimeNs = execTime.isNumber() ? (long) (execTime.asDouble() * 1_000_000.0) : 0L;
-                    long affected = plan.path("Plan").path("Actual Rows").asLong(0L);
-                    return new ExplainDeleteOutcome(dbTimeNs, affected);
-                }
-            } catch (Exception e) {
-                log.debug("PG EXPLAIN DELETE parse failed: {}", e.getMessage());
-            }
-        }
-        return new ExplainDeleteOutcome(0L, 0L);
-    }
-
-    private record ExplainDeleteOutcome(long dbTimeNs, long rowsAffected) {
-    }
-
-    private long explainSelect(Connection conn, String explainSql, LogicalAttribute pk, String physicalId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(explainSql)) {
-            PgValueBinder.bind(ps, 1, pk, physicalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return 0L;
-                String json = rs.getString(1);
-                JsonNode root = objectMapper.readTree(json);
-                if (root.isArray() && root.size() > 0) {
-                    JsonNode execTime = root.get(0).path("Execution Time");
-                    if (execTime.isNumber()) return (long) (execTime.asDouble() * 1_000_000.0);
-                }
-            } catch (Exception e) {
-                log.debug("PG EXPLAIN parse failed: {}", e.getMessage());
-            }
-        }
-        return 0L;
-    }
-
-    private long executeSelect(Connection conn, String sql, LogicalAttribute pk, String physicalId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            PgValueBinder.bind(ps, 1, pk, physicalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                long n = 0L;
-                while (rs.next()) n++;
-                return n;
-            }
+    private long executeSelect(PreparedStatement ps) throws SQLException {
+        try (ResultSet rs = ps.executeQuery()) {
+            long n = 0L;
+            while (rs.next()) n++;
+            return n;
         }
     }
 
@@ -252,71 +209,47 @@ public class PgDriver implements EngineDriver {
     }
 
     private BatchOutcome singleTimed(Connection conn, PgInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
-        String sql = "EXPLAIN (ANALYZE, FORMAT JSON, BUFFERS) " + stmt.singleRowSql() + " RETURNING 1";
         long dbTimeNs = 0L;
         long affected = 0L;
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(stmt.singleRowSql())) {
             for (GeneratedRow row : slice) {
                 bindRow(ps, stmt.orderedColumns(), row, 0);
-                ExplainOutcome parsed = runExplain(ps);
-                dbTimeNs += parsed.dbTimeNs();
-                affected += parsed.rowsAffected();
+                long start = System.nanoTime();
+                int count = ps.executeUpdate();
+                dbTimeNs += System.nanoTime() - start;
+                if (count > 0) affected += count;
             }
         }
         return new BatchOutcome(dbTimeNs, affected);
     }
 
     private BatchOutcome batchTimed(Connection conn, PgInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
-        long t0Ns = serverClockNanos(conn);
         long affected = 0L;
         try (PreparedStatement ps = conn.prepareStatement(stmt.singleRowSql())) {
             for (GeneratedRow row : slice) {
                 bindRow(ps, stmt.orderedColumns(), row, 0);
                 ps.addBatch();
             }
+            long start = System.nanoTime();
             int[] counts = ps.executeBatch();
+            long dbTimeNs = System.nanoTime() - start;
             for (int c : counts) {
                 if (c > 0) affected += c;
             }
+            return new BatchOutcome(dbTimeNs, affected);
         }
-        long t1Ns = serverClockNanos(conn);
-        return new BatchOutcome(Math.max(0L, t1Ns - t0Ns), affected);
     }
 
     private BatchOutcome bulkTimed(Connection conn, PgInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
-        String sql = "EXPLAIN (ANALYZE, FORMAT JSON, BUFFERS) " + stmt.multiRowSql(slice.size()) + " RETURNING 1";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (PreparedStatement ps = conn.prepareStatement(stmt.multiRowSql(slice.size()))) {
             int colCount = stmt.orderedColumns().size();
             for (int i = 0; i < slice.size(); i++) {
                 bindRow(ps, stmt.orderedColumns(), slice.get(i), i * colCount);
             }
-            ExplainOutcome parsed = runExplain(ps);
-            return new BatchOutcome(parsed.dbTimeNs(), parsed.rowsAffected());
-        }
-    }
-
-    private ExplainOutcome runExplain(PreparedStatement ps) {
-        try (ResultSet rs = ps.executeQuery()) {
-            if (!rs.next()) return new ExplainOutcome(0L, 0L);
-            String json = rs.getString(1);
-            JsonNode root = objectMapper.readTree(json);
-            if (root.isArray() && root.size() > 0) {
-                JsonNode plan = root.get(0);
-                JsonNode execTime = plan.path("Execution Time");
-                long dbTimeNs = execTime.isNumber() ? (long) (execTime.asDouble() * 1_000_000.0) : 0L;
-                long affected = plan.path("Plan").path("Actual Rows").asLong(0L);
-                return new ExplainOutcome(dbTimeNs, affected);
-            }
-        } catch (Exception e) {
-            log.debug("PG EXPLAIN run/parse failed: {}", e.getMessage());
-        }
-        return new ExplainOutcome(0L, 0L);
-    }
-
-    private long serverClockNanos(Connection conn) throws SQLException {
-        try (Statement s = conn.createStatement();
-             ResultSet rs = s.executeQuery("SELECT EXTRACT(EPOCH FROM clock_timestamp())")) {
-            return rs.next() ? (long) (rs.getDouble(1) * 1_000_000_000.0) : 0L;
+            long start = System.nanoTime();
+            int count = ps.executeUpdate();
+            long dbTimeNs = System.nanoTime() - start;
+            return new BatchOutcome(dbTimeNs, Math.max(0, count));
         }
     }
 
@@ -328,8 +261,6 @@ public class PgDriver implements EngineDriver {
     }
 
     private record BatchOutcome(long dbTimeNs, long rowsAffected) {}
-
-    private record ExplainOutcome(long dbTimeNs, long rowsAffected) {}
 
     private int effectiveBatchSize(InsertContext ctx) {
         return switch (ctx.mode()) {

@@ -6,7 +6,6 @@ import com.dbagnets.backend.benchmark.driver.ConflictDetector;
 import com.dbagnets.backend.benchmark.driver.DeleteContext;
 import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.InsertContext;
-import com.dbagnets.backend.benchmark.driver.InsertMode;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
@@ -39,7 +38,6 @@ import java.util.Optional;
 public class MongoDriver implements EngineDriver {
 
     private static final String DATABASE_NAME = "benchmark";
-    private static final String PROFILE_COLLECTION = "system.profile";
 
     private final MongoClientCache clientCache;
 
@@ -58,21 +56,16 @@ public class MongoDriver implements EngineDriver {
         int totalConflicts = 0;
         List<RecordedId> recordedIds = new ArrayList<>();
 
-        prepareProfiler(db);
         long wireStart = System.nanoTime();
-        try {
-            for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
-                List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
-                if (rows == null || rows.isEmpty()) continue;
-                EntityWriteOutcome outcome = writeEntity(db, ctx, node, rows);
-                totalDbTimeNs += outcome.dbTimeNs;
-                totalRowsAffected += outcome.rowsAffected;
-                totalConflicts += outcome.conflicts;
-                recordedIds.addAll(outcome.recordedIds);
-                ctx.progress().onEntityFinished(node.entityName());
-            }
-        } finally {
-            stopProfiler(db);
+        for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
+            List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
+            if (rows == null || rows.isEmpty()) continue;
+            EntityWriteOutcome outcome = writeEntity(db, ctx, node, rows);
+            totalDbTimeNs += outcome.dbTimeNs;
+            totalRowsAffected += outcome.rowsAffected;
+            totalConflicts += outcome.conflicts;
+            recordedIds.addAll(outcome.recordedIds);
+            ctx.progress().onEntityFinished(node.entityName());
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
@@ -106,10 +99,11 @@ public class MongoDriver implements EngineDriver {
             Document filter = embedded
                     ? new Document(fieldName + "._id", entry.physicalId())
                     : new Document("_id", entry.physicalId());
-            long sampleNs = explainFind(collection, filter);
+            long start = System.nanoTime();
+            Document found = collection.find(filter).first();
+            long sampleNs = System.nanoTime() - start;
             samples[i] = sampleNs;
             totalDbTimeNs += sampleNs;
-            Document found = collection.find(filter).first();
             if (found != null) rowsRead++;
         }
         long wireTimeNs = System.nanoTime() - wireStart;
@@ -130,44 +124,39 @@ public class MongoDriver implements EngineDriver {
         Optional<EmbeddingMapping> mapping = embeddings.lookup(ctx.entityName());
         boolean embedded = mapping.isPresent() && mapping.get().isEmbedded();
 
+        long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsAffected = 0L;
-        long[] samples = new long[ctx.targets().size()];
 
-        prepareProfiler(db);
         long wireStart = System.nanoTime();
-        try {
-            if (embedded) {
-                String parentCollection = mapping.get().parentEntity().toLowerCase();
-                String arrayField = mapping.get().fieldName();
-                MongoCollection<Document> parentCol = db.getCollection(parentCollection);
-                for (int i = 0; i < ctx.targets().size(); i++) {
-                    RegistryEntry entry = ctx.targets().get(i);
-                    long before = drainProfilerForCollection(db, parentCollection);
-                    totalDbTimeNs += before;
-                    long updated = parentCol.updateMany(
-                            new Document(arrayField + "._id", entry.physicalId()),
-                            Updates.pull(arrayField, new Document("_id", entry.physicalId()))
-                    ).getModifiedCount();
-                    long sample = drainProfilerForCollection(db, parentCollection);
-                    samples[i] = sample;
-                    totalDbTimeNs += sample;
-                    if (updated > 0) rowsAffected += updated;
-                }
-            } else {
-                String collectionName = ctx.entityName().toLowerCase();
-                MongoCollection<Document> collection = db.getCollection(collectionName);
-                for (int i = 0; i < ctx.targets().size(); i++) {
-                    RegistryEntry entry = ctx.targets().get(i);
-                    long deleted = collection.deleteOne(new Document("_id", entry.physicalId())).getDeletedCount();
-                    long sample = drainProfilerForCollection(db, collectionName);
-                    samples[i] = sample;
-                    totalDbTimeNs += sample;
-                    if (deleted > 0) rowsAffected += deleted;
-                }
+        if (embedded) {
+            String parentCollection = mapping.get().parentEntity().toLowerCase();
+            String arrayField = mapping.get().fieldName();
+            MongoCollection<Document> parentCol = db.getCollection(parentCollection);
+            for (int i = 0; i < ctx.targets().size(); i++) {
+                RegistryEntry entry = ctx.targets().get(i);
+                long start = System.nanoTime();
+                long updated = parentCol.updateMany(
+                        new Document(arrayField + "._id", entry.physicalId()),
+                        Updates.pull(arrayField, new Document("_id", entry.physicalId()))
+                ).getModifiedCount();
+                long sampleNs = System.nanoTime() - start;
+                samples[i] = sampleNs;
+                totalDbTimeNs += sampleNs;
+                if (updated > 0) rowsAffected += updated;
             }
-        } finally {
-            stopProfiler(db);
+        } else {
+            String collectionName = ctx.entityName().toLowerCase();
+            MongoCollection<Document> collection = db.getCollection(collectionName);
+            for (int i = 0; i < ctx.targets().size(); i++) {
+                RegistryEntry entry = ctx.targets().get(i);
+                long start = System.nanoTime();
+                long deleted = collection.deleteOne(new Document("_id", entry.physicalId())).getDeletedCount();
+                long sampleNs = System.nanoTime() - start;
+                samples[i] = sampleNs;
+                totalDbTimeNs += sampleNs;
+                if (deleted > 0) rowsAffected += deleted;
+            }
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
@@ -177,26 +166,6 @@ public class MongoDriver implements EngineDriver {
                 .rowsAffected(rowsAffected)
                 .sampleDbTimeNs(samples)
                 .build();
-    }
-
-    private long explainFind(MongoCollection<Document> collection, Document filter) {
-        try {
-            Document explainResult = collection.find(filter).explain();
-            Document execStats = explainResult.get("executionStats", Document.class);
-            if (execStats != null) {
-                Number millis = execStats.get("executionTimeMillis", Number.class);
-                Number micros = execStats.get("executionTimeMillisEstimate", Number.class);
-                if (millis != null && millis.longValue() > 0) {
-                    return millis.longValue() * 1_000_000L;
-                }
-                if (micros != null) {
-                    return micros.longValue() * 1_000_000L;
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Mongo explain failed: {}", e.getMessage());
-        }
-        return 0L;
     }
 
     private EntityWriteOutcome writeEntity(MongoDatabase db,
@@ -233,7 +202,9 @@ public class MongoDriver implements EngineDriver {
                 docs.add(toDocument(entity, row));
             }
             try {
+                long start = System.nanoTime();
                 collection.insertMany(docs, options);
+                outcome.dbTimeNs += System.nanoTime() - start;
                 outcome.rowsAffected += slice.size();
                 slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
             } catch (Exception ex) {
@@ -247,7 +218,6 @@ public class MongoDriver implements EngineDriver {
             batchIndex++;
             ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
         }
-        outcome.dbTimeNs += drainProfilerForCollection(db, collectionName);
         return outcome;
     }
 
@@ -273,7 +243,9 @@ public class MongoDriver implements EngineDriver {
                     Updates.pushEach(arrayField, entry.getValue())));
         }
         try {
+            long start = System.nanoTime();
             parentCol.bulkWrite(updates);
+            outcome.dbTimeNs += System.nanoTime() - start;
             outcome.rowsAffected += rows.size();
             rows.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
         } catch (Exception ex) {
@@ -284,7 +256,6 @@ public class MongoDriver implements EngineDriver {
                 throw ex;
             }
         }
-        outcome.dbTimeNs += drainProfilerForCollection(db, parentCollection);
         ctx.progress().onBatch(node.entityName(), 1, 1, rows.size(), rows.size());
         return outcome;
     }
@@ -321,43 +292,6 @@ public class MongoDriver implements EngineDriver {
             }
         }
         return doc;
-    }
-
-    private void prepareProfiler(MongoDatabase db) {
-        try {
-            db.runCommand(new Document("profile", 0));
-            db.getCollection(PROFILE_COLLECTION).drop();
-            db.runCommand(new Document("profile", 2).append("slowms", 0));
-        } catch (Exception e) {
-            log.debug("Mongo profiler setup failed: {}", e.getMessage());
-        }
-    }
-
-    private void stopProfiler(MongoDatabase db) {
-        try {
-            db.runCommand(new Document("profile", 0));
-        } catch (Exception e) {
-            log.debug("Mongo profiler shutdown failed: {}", e.getMessage());
-        }
-    }
-
-    private long drainProfilerForCollection(MongoDatabase db, String collectionName) {
-        try {
-            String ns = DATABASE_NAME + "." + collectionName;
-            long totalNanos = 0L;
-            MongoCollection<Document> profile = db.getCollection(PROFILE_COLLECTION);
-            for (Document doc : profile.find(new Document("ns", ns))) {
-                Number millis = doc.get("durationMillis", Number.class);
-                if (millis != null) {
-                    totalNanos += millis.longValue() * 1_000_000L;
-                }
-            }
-            profile.deleteMany(new Document("ns", ns));
-            return totalNanos;
-        } catch (Exception e) {
-            log.debug("Mongo profiler drain failed: {}", e.getMessage());
-            return 0L;
-        }
     }
 
     private int effectiveBatchSize(InsertContext ctx) {

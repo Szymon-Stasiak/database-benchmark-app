@@ -89,6 +89,7 @@ public class QdrantDriver implements EngineDriver {
             RegistryEntry entry = ctx.targets().get(i);
             Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
             try {
+                long start = System.nanoTime();
                 JsonNode response = client.post()
                         .uri("/collections/{c}/points", collection)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,11 +98,10 @@ public class QdrantDriver implements EngineDriver {
                         .bodyToMono(JsonNode.class)
                         .timeout(Duration.ofSeconds(15))
                         .block();
+                long sampleNs = System.nanoTime() - start;
+                samples[i] = sampleNs;
+                totalDbTimeNs += sampleNs;
                 if (response != null) {
-                    double seconds = response.path("time").asDouble(0.0);
-                    long sampleNs = (long) (seconds * 1_000_000_000.0);
-                    samples[i] = sampleNs;
-                    totalDbTimeNs += sampleNs;
                     JsonNode result = response.path("result");
                     if (result.isArray() && result.size() > 0) rowsRead++;
                 }
@@ -135,6 +135,7 @@ public class QdrantDriver implements EngineDriver {
             RegistryEntry entry = ctx.targets().get(i);
             Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
             try {
+                long start = System.nanoTime();
                 JsonNode response = client.post()
                         .uri("/collections/{c}/points/delete?wait=true", collection)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -143,11 +144,10 @@ public class QdrantDriver implements EngineDriver {
                         .bodyToMono(JsonNode.class)
                         .timeout(Duration.ofSeconds(15))
                         .block();
+                long sampleNs = System.nanoTime() - start;
+                samples[i] = sampleNs;
+                totalDbTimeNs += sampleNs;
                 if (response != null) {
-                    double seconds = response.path("time").asDouble(0.0);
-                    long sampleNs = (long) (seconds * 1_000_000_000.0);
-                    samples[i] = sampleNs;
-                    totalDbTimeNs += sampleNs;
                     String status = response.path("result").path("status").asText("");
                     if ("completed".equalsIgnoreCase(status) || "acknowledged".equalsIgnoreCase(status)) {
                         rowsAffected++;
@@ -194,7 +194,8 @@ public class QdrantDriver implements EngineDriver {
             }
             if (points.isEmpty()) continue;
             try {
-                JsonNode response = client.put()
+                long start = System.nanoTime();
+                client.put()
                         .uri("/collections/{c}/points?wait=true", collection)
                         .contentType(MediaType.APPLICATION_JSON)
                         .bodyValue(Map.of("points", points))
@@ -202,10 +203,7 @@ public class QdrantDriver implements EngineDriver {
                         .bodyToMono(JsonNode.class)
                         .timeout(Duration.ofSeconds(30))
                         .block();
-                if (response != null) {
-                    double seconds = response.path("time").asDouble(0.0);
-                    outcome.dbTimeNs += (long) (seconds * 1_000_000_000.0);
-                }
+                outcome.dbTimeNs += System.nanoTime() - start;
                 outcome.rowsAffected += slice.size();
                 slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
             } catch (Exception ex) {

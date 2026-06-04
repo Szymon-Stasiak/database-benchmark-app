@@ -88,13 +88,15 @@ class BestPracticesCheckerAgent(BaseAgent):
      is the source of truth and cannot be changed. This is non-negotiable.
    - Properties are on the correct entity (node vs relationship)
    - Rich relationship properties where applicable (role, weight, timestamp on edges)
-   - FOREIGN KEY vs PRIMARY KEY distinction (CRITICAL):
-     A PRIMARY KEY is an entity's OWN identifier on its OWN node
-     (e.g. director_id on Director, movie_id on Movie). PKs MUST be kept.
-     A FOREIGN KEY is ANOTHER entity's ID stored on THIS node to encode
-     a reference (e.g. director_id on Movie, user_id on Review).
-     FKs MUST NOT appear as node properties — the graph relationship
-     encodes the link. Only remove FK attributes, NEVER remove PKs.
+   - FOREIGN KEY HANDLING (CRITICAL — do NOT flag as a problem):
+     Every attribute defined in the LogicalSchema MUST exist as a node property
+     with the EXACT same name — including FK-shaped attributes (e.g. director_id
+     on Movie, user_id on Review, veterinarian_id on HealthRecord). FK columns
+     are part of the schema contract; downstream tooling depends on 1:1 field
+     coverage. A graph relationship (e.g. DIRECTED, WROTE) SHOULD additionally
+     encode the same link, but it complements the FK property — it does not
+     replace it. Do NOT request removal of any *_id property and do NOT FAIL
+     the script for having FK properties on nodes.
 
 3. INDEXES & CONSTRAINTS (random benchmark data is inserted later):
    - Unique constraints ONLY on primary-key properties.
