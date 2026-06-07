@@ -17,7 +17,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
 
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,31 @@ public class BenchmarkController {
     public ResponseEntity<BenchmarkResponse> createBenchmark(@Valid @RequestBody CreateBenchmarkRequest request, @CurrentUser User user) {
         BenchmarkResponse response = benchmarkService.createBenchmark(request, user);
         return ResponseEntity.status(201).body(response);
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<BenchmarkResponse> importBenchmark(@RequestParam("file") MultipartFile file, @CurrentUser User user) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Bundle file is required");
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to read uploaded bundle: " + e.getMessage(), e);
+        }
+        BenchmarkResponse response = benchmarkService.createFromBundle(bytes, user);
+        return ResponseEntity.status(201).body(response);
+    }
+
+    @GetMapping("/{id}/bundle")
+    public ResponseEntity<byte[]> downloadBundle(@PathVariable String id) {
+        byte[] bundle = benchmarkService.downloadBundle(id);
+        String filename = "benchmark-" + id + ".zip";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .body(bundle);
     }
 
     @GetMapping

@@ -73,6 +73,41 @@ export const benchmarkApi = {
       body: JSON.stringify(req),
     }),
 
+  createFromBundle: async (file: File): Promise<BenchmarkResponse> => {
+    const token = localStorage.getItem("auth_token")
+    const formData = new FormData()
+    formData.append("file", file)
+    const res = await fetch("/api/benchmarks/import", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem("auth_token")
+        window.location.reload()
+      }
+      const text = await res.text()
+      throw new ApiError(res.status, text)
+    }
+    return res.json()
+  },
+
+  downloadBundle: async (benchmarkId: string) => {
+    const token = localStorage.getItem("auth_token")
+    const res = await fetch(`/api/benchmarks/${benchmarkId}/bundle`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new ApiError(res.status, await res.text())
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `benchmark-${benchmarkId}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
   list: () => apiFetch<BenchmarkResponse[]>("/api/benchmarks"),
 
   get: (id: string) => apiFetch<BenchmarkResponse>(`/api/benchmarks/${id}`),

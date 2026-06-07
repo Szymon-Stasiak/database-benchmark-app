@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser, Search, BarChart3 } from "lucide-react"
+import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser, Search, BarChart3, Package } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
@@ -49,6 +49,7 @@ export default function BenchmarkDetailPage() {
   const [redeployLoading, setRedeployLoading] = useState(false)
   const [hardResetLoading, setHardResetLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [bundleLoading, setBundleLoading] = useState(false)
   const [scriptPreviews, setScriptPreviews] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -169,7 +170,22 @@ export default function BenchmarkDetailPage() {
     }
   }
 
+  const handleDownloadBundle = async () => {
+    if (!id) return
+    setBundleLoading(true)
+    try {
+      await benchmarkApi.downloadBundle(id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to download bundle")
+    } finally {
+      setBundleLoading(false)
+    }
+  }
+
   const hasInactiveDatabases = benchmark?.databases.some((db) => db.status !== "RUNNING") ?? false
+  const hasReadyScripts = benchmark?.databases.some(
+    (db) => db.status !== "PENDING" && db.status !== "SCRIPT_GENERATING" && db.status !== "FAILED",
+  ) ?? false
 
   if (error) {
     return (
@@ -263,6 +279,18 @@ export default function BenchmarkDetailPage() {
                 {hardResetLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Eraser className="h-4 w-4 mr-1" />}
                 Restart (wipe data)
               </Button>
+              {hasReadyScripts && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDownloadBundle}
+                  disabled={bundleLoading}
+                  title="Download a ZIP with logical schema, embedding mappings and all init scripts"
+                >
+                  {bundleLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Package className="h-4 w-4 mr-1" />}
+                  Download Bundle
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={handleDelete} disabled={deleteLoading} className="text-destructive hover:text-destructive">
                 {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
                 Delete

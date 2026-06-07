@@ -1,5 +1,8 @@
 package com.dbagnets.backend.service;
 
+import com.dbagnets.backend.benchmark.bundle.BenchmarkBundleService;
+import com.dbagnets.backend.benchmark.bundle.BenchmarkBundleService.ParsedBundle;
+import com.dbagnets.backend.benchmark.bundle.BundleManifest;
 import com.dbagnets.backend.benchmark.driver.ConnectionCacheRegistry;
 import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.client.ScriptCreatorClient;
@@ -48,6 +51,7 @@ public class BenchmarkService {
     private final ObjectMapper objectMapper;
     private final DataSizeProbe dataSizeProbe;
     private final ConnectionCacheRegistry connectionCacheRegistry;
+    private final BenchmarkBundleService bundleService;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     private static final String HOST_ADDRESS = "127.0.0.1";
@@ -278,6 +282,48 @@ public class BenchmarkService {
         return db.getScript().getBytes(StandardCharsets.UTF_8);
     }
 
+    @Transactional(readOnly = true)
+    public byte[] downloadBundle(String benchmarkId) {
+        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
+                .orElseThrow(() -> new RuntimeException("Benchmark not found: " + benchmarkId));
+        return bundleService.pack(benchmark);
+    }
+
+    @Transactional
+    public BenchmarkResponse createFromBundle(byte[] zipBytes, User user) {
+        ParsedBundle parsed = bundleService.parse(zipBytes);
+        BundleManifest manifest = parsed.manifest();
+
+        Benchmark benchmark = new Benchmark(manifest.topic(), user, manifest.depth());
+        if (parsed.logicalSchemaJson() != null) {
+            benchmark.setLogicalSchema(parsed.logicalSchemaJson());
+        }
+
+        for (BundleManifest.DatabaseEntry entry : manifest.databases()) {
+            DatabaseType dbType = DatabaseType.valueOf(entry.dbType().toUpperCase());
+            BenchmarkDatabase db = new BenchmarkDatabase(dbType, entry.dbName(), entry.dbVersion());
+            String key = BenchmarkBundleService.dbKey(entry.dbName(), entry.dbVersion());
+            db.setScript(parsed.scripts().get(key));
+            String embeddingMappingsJson = parsed.embeddingMappings().get(key);
+            if (embeddingMappingsJson != null) {
+                db.setEmbeddingMappings(embeddingMappingsJson);
+            }
+            if (entry.dockerImage() != null) {
+                db.setDockerImage(entry.dockerImage());
+            }
+            db.setStatus(DatabaseStatus.SCRIPT_READY);
+            benchmark.addDatabase(db);
+        }
+        benchmark.setStatus(BenchmarkStatus.STARTING_CONTAINERS);
+        benchmarkRepository.save(benchmark);
+        log.info("Imported benchmark {} from bundle with {} databases", benchmark.getId(), manifest.databases().size());
+
+        String benchmarkId = benchmark.getId();
+        executor.submit(() -> orchestrateFromBundle(benchmarkId));
+
+        return BenchmarkResponse.from(benchmark);
+    }
+
     public String getScriptPreview(String databaseId) {
         BenchmarkDatabase db = databaseRepository.findById(databaseId).orElseThrow();
         if (db.getScript() == null) return null;
@@ -305,6 +351,24 @@ public class BenchmarkService {
             log.info("Benchmark {} modified concurrently during orchestration, aborting silently", benchmarkId);
         } catch (Exception e) {
             log.error("Benchmark orchestration failed for {}", benchmarkId, e);
+            try {
+                failRemainingDatabases(benchmarkId, e.getMessage());
+                updateBenchmarkStatus(benchmarkId, BenchmarkStatus.FAILED);
+            } catch (ObjectOptimisticLockingFailureException raceWithCancel) {
+                log.info("Benchmark {} cancelled while marking as FAILED, skipping", benchmarkId);
+            }
+        }
+    }
+
+    private void orchestrateFromBundle(String benchmarkId) {
+        try {
+            startContainers(benchmarkId);
+            initializeDatabases(benchmarkId);
+            finalizeBenchmark(benchmarkId);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("Benchmark {} modified concurrently during bundle import, aborting silently", benchmarkId);
+        } catch (Exception e) {
+            log.error("Bundle import orchestration failed for {}", benchmarkId, e);
             try {
                 failRemainingDatabases(benchmarkId, e.getMessage());
                 updateBenchmarkStatus(benchmarkId, BenchmarkStatus.FAILED);

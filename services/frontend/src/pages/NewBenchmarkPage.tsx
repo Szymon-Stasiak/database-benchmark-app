@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Info, Loader2 } from "lucide-react"
+import { Info, Loader2, Package, Upload, X } from "lucide-react"
 import { DatabaseSetupPanel } from "@/components/benchmark/DatabaseSetupPanel"
 import { DatabaseTargetList } from "@/components/benchmark/DatabaseTargetList"
 import { AppLayout } from "@/components/AppLayout"
@@ -56,6 +56,9 @@ export default function NewBenchmarkPage() {
   const [catalog, setCatalog] = useState<SupportedDatabases | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bundleFile, setBundleFile] = useState<File | null>(null)
+  const [bundleLoading, setBundleLoading] = useState(false)
+  const bundleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     benchmarkApi
@@ -91,10 +94,101 @@ export default function NewBenchmarkPage() {
     }
   }
 
+  const handleBundleSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null
+    setBundleFile(file)
+    setError(null)
+  }
+
+  const handleClearBundle = () => {
+    setBundleFile(null)
+    if (bundleInputRef.current) bundleInputRef.current.value = ""
+  }
+
+  const handleImportBundle = async () => {
+    if (!bundleFile) return
+    setBundleLoading(true)
+    setError(null)
+    try {
+      const response = await benchmarkApi.createFromBundle(bundleFile)
+      navigate(`/benchmarks/${response.id}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to import bundle")
+    } finally {
+      setBundleLoading(false)
+    }
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+
   return (
     <AppLayout maxWidth="narrow">
       <h1 className="text-2xl font-bold mb-6">New Benchmark</h1>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Import from Bundle
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Have a previously exported benchmark bundle (.zip)? Upload it to skip script generation and go straight to launching containers.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              ref={bundleInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleBundleSelected}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={() => bundleInputRef.current?.click()}
+              disabled={bundleLoading}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {bundleFile ? "Change file" : "Choose bundle"}
+            </Button>
+            {bundleFile && (
+              <>
+                <span className="text-sm text-muted-foreground truncate">
+                  {bundleFile.name} ({formatBytes(bundleFile.size)})
+                </span>
+                <Button variant="ghost" size="icon" onClick={handleClearBundle} disabled={bundleLoading} title="Remove file">
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+          {bundleFile && (
+            <Button
+              onClick={handleImportBundle}
+              disabled={bundleLoading}
+              className="w-full mt-4"
+              size="lg"
+            >
+              {bundleLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Importing...
+                </>
+              ) : (
+                "Create from Bundle"
+              )}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {bundleFile ? null : (
+      <>
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Topic</CardTitle>
@@ -167,12 +261,6 @@ export default function NewBenchmarkPage() {
         </div>
       )}
 
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       <Button onClick={handleSubmit} disabled={!canSubmit} className="w-full" size="lg">
         {loading ? (
           <>
@@ -183,6 +271,14 @@ export default function NewBenchmarkPage() {
           "Host Benchmark"
         )}
       </Button>
+      </>
+      )}
+
+      {error && (
+        <Alert variant="destructive" className="mt-6">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </AppLayout>
   )
 }
