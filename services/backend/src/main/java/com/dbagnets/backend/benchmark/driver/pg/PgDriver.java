@@ -38,9 +38,17 @@ public class PgDriver implements EngineDriver {
         return DatabaseEngine.POSTGRESQL;
     }
 
+    protected PgConnectionInfo connectionInfo(String databaseId, String host, int port) {
+        return PgConnectionInfo.defaultLocal(databaseId, host, port);
+    }
+
+    protected PgInsertStatement buildInsertStatement(LogicalEntity entity) {
+        return PgInsertStatement.of(entity);
+    }
+
     @Override
     public TimedOperation insert(InsertContext ctx) throws Exception {
-        PgConnectionInfo info = PgConnectionInfo.defaultLocal(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        PgConnectionInfo info = connectionInfo(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         DataSource ds = dataSources.get(info);
 
         long totalDbTimeNs = 0L;
@@ -77,7 +85,7 @@ public class PgDriver implements EngineDriver {
 
     @Override
     public TimedOperation read(ReadContext ctx) throws Exception {
-        PgConnectionInfo info = PgConnectionInfo.defaultLocal(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        PgConnectionInfo info = connectionInfo(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         DataSource ds = dataSources.get(info);
         LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
         LogicalAttribute pk = entity.primaryKey()
@@ -117,7 +125,7 @@ public class PgDriver implements EngineDriver {
 
     @Override
     public TimedOperation delete(DeleteContext ctx) throws Exception {
-        PgConnectionInfo info = PgConnectionInfo.defaultLocal(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        PgConnectionInfo info = connectionInfo(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         DataSource ds = dataSources.get(info);
         LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
         LogicalAttribute pk = entity.primaryKey()
@@ -168,7 +176,7 @@ public class PgDriver implements EngineDriver {
                                               LogicalEntity entity,
                                               List<GeneratedRow> rows,
                                               InsertContext ctx) throws SQLException {
-        PgInsertStatement stmt = PgInsertStatement.of(entity);
+        PgInsertStatement stmt = buildInsertStatement(entity);
         EntityInsertOutcome outcome = new EntityInsertOutcome();
 
         int batchSize = effectiveBatchSize(ctx);

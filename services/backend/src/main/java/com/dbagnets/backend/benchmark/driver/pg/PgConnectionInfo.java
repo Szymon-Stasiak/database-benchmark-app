@@ -15,4 +15,13 @@ public record PgConnectionInfo(
                 "benchmark",
                 4);
     }
+
+    public static PgConnectionInfo forQuestdb(String databaseId, String host, int port) {
+        return new PgConnectionInfo(
+                databaseId,
+                "jdbc:postgresql://" + host + ":" + port + "/qdb?preferQueryMode=simple",
+                "admin",
+                "quest",
+                4);
+    }
 }

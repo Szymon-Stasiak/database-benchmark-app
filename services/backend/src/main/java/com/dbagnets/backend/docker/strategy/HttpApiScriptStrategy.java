@@ -15,11 +15,9 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
         String healthPath = switch (dbName) {
             case "elasticsearch" -> "/_cluster/health";
             case "couchdb" -> "/";
-            case "milvus" -> "/healthz";
             case "qdrant" -> "/healthz";
             case "weaviate" -> "/v1/.well-known/ready";
             case "influxdb" -> "/health";
-            case "questdb" -> "/";
             case "dynamodb" -> "/";
             default -> "/";
         };
@@ -45,7 +43,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
 
         switch (dbName) {
             case "elasticsearch" -> executeElasticsearch(client, script);
-            case "questdb" -> executeQuestDb(client, script);
             default -> executeGeneric(client, script);
         }
     }
@@ -72,24 +69,6 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
             }
         }
         log.info("Elasticsearch script executed");
-    }
-
-    private void executeQuestDb(WebClient client, String script) {
-        for (String line : script.split(";")) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("--")) continue;
-            try {
-                client.get().uri(uriBuilder -> uriBuilder
-                        .path("/exec")
-                        .queryParam("query", trimmed)
-                        .build())
-                    .retrieve().bodyToMono(String.class)
-                    .block(java.time.Duration.ofSeconds(10));
-            } catch (Exception e) {
-                log.warn("QuestDB query failed: {}", trimmed);
-            }
-        }
-        log.info("QuestDB script executed");
     }
 
     private void executeGeneric(WebClient client, String script) {

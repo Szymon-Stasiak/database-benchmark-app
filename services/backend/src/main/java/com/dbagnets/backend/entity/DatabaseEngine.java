@@ -40,7 +40,7 @@ public enum DatabaseEngine {
             "DOCKER_INFLUXDB_INIT_BUCKET", "benchmark",
             "DOCKER_INFLUXDB_INIT_ADMIN_TOKEN", "benchmark-admin-token"
         )),
-    QUESTDB("questdb", 9000, v -> "questdb/questdb:" + v,
+    QUESTDB("questdb", 8812, v -> "questdb/questdb:" + v,
         Map.of("QDB_CAIRO_COMMIT_LAG", "1000")),
     DYNAMODB("dynamodb", 8000, v -> "amazon/dynamodb-local:latest", Map.of()),
     ETCD("etcd", 2379, v -> "quay.io/coreos/etcd:v" + v,
