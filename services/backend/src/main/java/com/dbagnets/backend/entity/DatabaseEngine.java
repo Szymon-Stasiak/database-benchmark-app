@@ -19,7 +19,7 @@ public enum DatabaseEngine {
             "NEO4J_server_memory_pagecache_size", "128m"
         )),
     MEMGRAPH("memgraph", 7687, v -> "memgraph/memgraph:" + v,
-        Map.of("MEMGRAPH_USER", "memgraph", "MEMGRAPH_PASSWORD", "memgraph")),
+        Map.of()),
     MONGODB("mongodb", 27017, v -> "mongo:" + v, Map.of()),
     REDIS("redis", 6379, v -> "redis:" + v, Map.of()),
     ARANGODB("arangodb", 8529, v -> "arangodb:" + v,
@@ -28,7 +28,6 @@ public enum DatabaseEngine {
         Map.of("discovery.type", "single-node", "xpack.security.enabled", "false", "ES_JAVA_OPTS", "-Xms256m -Xmx256m")),
     COUCHDB("couchdb", 5984, v -> "couchdb:" + v,
         Map.of("COUCHDB_USER", "admin", "COUCHDB_PASSWORD", "benchmark")),
-    MILVUS("milvus", 19530, DatabaseEngine::milvusImage, Map.of()),
     QDRANT("qdrant", 6333, v -> "qdrant/qdrant:v" + v, Map.of()),
     WEAVIATE("weaviate", 8080, v -> "semitechnologies/weaviate:" + v,
         Map.of("AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED", "true", "PERSISTENCE_DATA_PATH", "/var/lib/weaviate")),
@@ -36,15 +35,20 @@ public enum DatabaseEngine {
         Map.of(
             "DOCKER_INFLUXDB_INIT_MODE", "setup",
             "DOCKER_INFLUXDB_INIT_USERNAME", "admin",
-            "DOCKER_INFLUXDB_INIT_PASSWORD", "benchmark",
+            "DOCKER_INFLUXDB_INIT_PASSWORD", "benchmarkpw",
             "DOCKER_INFLUXDB_INIT_ORG", "benchmark",
-            "DOCKER_INFLUXDB_INIT_BUCKET", "benchmark"
+            "DOCKER_INFLUXDB_INIT_BUCKET", "benchmark",
+            "DOCKER_INFLUXDB_INIT_ADMIN_TOKEN", "benchmark-admin-token"
         )),
     QUESTDB("questdb", 9000, v -> "questdb/questdb:" + v,
         Map.of("QDB_CAIRO_COMMIT_LAG", "1000")),
     DYNAMODB("dynamodb", 8000, v -> "amazon/dynamodb-local:latest", Map.of()),
-    ETCD("etcd", 2379, v -> "bitnami/etcd:" + v,
-        Map.of("ETCD_ADVERTISE_CLIENT_URLS", "http://0.0.0.0:2379", "ETCD_LISTEN_CLIENT_URLS", "http://0.0.0.0:2379"));
+    ETCD("etcd", 2379, v -> "quay.io/coreos/etcd:v" + v,
+        Map.of(
+            "ETCD_ADVERTISE_CLIENT_URLS", "http://0.0.0.0:2379",
+            "ETCD_LISTEN_CLIENT_URLS", "http://0.0.0.0:2379",
+            "ALLOW_NONE_AUTHENTICATION", "yes"
+        ));
 
     private final String dbName;
     private final int port;
@@ -77,12 +81,4 @@ public enum DatabaseEngine {
             .orElseThrow(() -> new IllegalArgumentException("Unknown database engine: " + dbName));
     }
 
-    private static final Map<String, String> MILVUS_TAGS = Map.of(
-        "2.4", "milvusdb/milvus:v2.4.24",
-        "2.3", "milvusdb/milvus:v2.3.22"
-    );
-
-    private static String milvusImage(String version) {
-        return MILVUS_TAGS.getOrDefault(version, "milvusdb/milvus:v" + version);
-    }
 }

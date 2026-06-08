@@ -30,7 +30,7 @@ public class ScriptExecutor {
             case "redis" -> new RedisScriptStrategy();
             case "arangodb" -> new ArangoScriptStrategy();
             case "etcd" -> new EtcdScriptStrategy();
-            case "elasticsearch", "couchdb", "milvus", "qdrant", "weaviate",
+            case "elasticsearch", "couchdb", "qdrant", "weaviate",
                  "influxdb", "questdb", "dynamodb" -> new HttpApiScriptStrategy(dbName);
             default -> throw new IllegalArgumentException("Unsupported database: " + dbName);
         };

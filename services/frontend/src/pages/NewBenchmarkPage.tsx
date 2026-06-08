@@ -17,17 +17,15 @@ const FALLBACK_CATALOG: SupportedDatabases = {
     RELATIONAL: [
       { name: "postgresql", displayName: "PostgreSQL", versions: ["17", "16", "15"] },
       { name: "mysql", displayName: "MySQL", versions: ["9.0", "8.4", "8.0"] },
-      { name: "sqlite", displayName: "SQLite", versions: ["3"] },
     ],
     GRAPH: [
       { name: "neo4j", displayName: "Neo4j", versions: ["5.26", "5.25", "5.24"] },
       { name: "arangodb", displayName: "ArangoDB", versions: ["3.12", "3.11"] },
-      { name: "memgraph", displayName: "Memgraph", versions: ["2.21", "2.20"] },
+      { name: "memgraph", displayName: "Memgraph", versions: ["2.22.0", "2.21.0"] },
     ],
     VECTOR: [
-      { name: "milvus", displayName: "Milvus", versions: ["2.4", "2.3"] },
       { name: "qdrant", displayName: "Qdrant", versions: ["1.12.6", "1.11.5"] },
-      { name: "weaviate", displayName: "Weaviate", versions: ["1.27", "1.26"] },
+      { name: "weaviate", displayName: "Weaviate", versions: ["1.27.10", "1.26.0"] },
     ],
     DOCUMENT: [
       { name: "mongodb", displayName: "MongoDB", versions: ["8.0", "7.0", "6.0"] },
@@ -37,12 +35,12 @@ const FALLBACK_CATALOG: SupportedDatabases = {
     KEY_VALUE: [
       { name: "redis", displayName: "Redis", versions: ["7.4", "7.2"] },
       { name: "dynamodb", displayName: "DynamoDB Local", versions: ["2.5", "2.4"] },
-      { name: "etcd", displayName: "etcd", versions: ["3.5", "3.4"] },
+      { name: "etcd", displayName: "etcd", versions: ["3.5.16", "3.5.0"] },
     ],
     TIME_SERIES: [
       { name: "timescaledb", displayName: "TimescaleDB", versions: ["2.17", "2.16"] },
       { name: "influxdb", displayName: "InfluxDB", versions: ["2.7", "2.6"] },
-      { name: "questdb", displayName: "QuestDB", versions: ["8.2", "8.1"] },
+      { name: "questdb", displayName: "QuestDB", versions: ["8.2.3", "8.1.4"] },
     ],
   },
 }
