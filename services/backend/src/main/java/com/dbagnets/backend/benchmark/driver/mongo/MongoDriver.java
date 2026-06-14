@@ -127,6 +127,7 @@ public class MongoDriver implements EngineDriver {
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsAffected = 0L;
+        java.util.Map<String, java.util.List<String>> cascadeAccumulator = new java.util.LinkedHashMap<>();
 
         long wireStart = System.nanoTime();
         if (embedded) {
@@ -151,6 +152,9 @@ public class MongoDriver implements EngineDriver {
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
                 long start = System.nanoTime();
+                if (ctx.includeChildren()) {
+                    cascadeChildrenBfs(db, ctx.schema(), ctx.entityName(), entry.physicalId(), cascadeAccumulator);
+                }
                 long deleted = collection.deleteOne(new Document("_id", entry.physicalId())).getDeletedCount();
                 long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
@@ -165,7 +169,84 @@ public class MongoDriver implements EngineDriver {
                 .wireTimeNs(wireTimeNs)
                 .rowsAffected(rowsAffected)
                 .sampleDbTimeNs(samples)
+                .cascadeDeletedByEntity(cascadeAccumulator)
                 .build();
+    }
+
+    private void cascadeChildrenBfs(MongoDatabase db,
+                                     com.dbagnets.backend.benchmark.schema.LogicalSchema schema,
+                                     String rootEntity,
+                                     Object rootId,
+                                     java.util.Map<String, java.util.List<String>> accumulator) {
+        java.util.Map<String, java.util.List<Object>> byEntity = new java.util.LinkedHashMap<>();
+        byEntity.put(rootEntity, new java.util.ArrayList<>(java.util.List.of(rootId)));
+        java.util.Set<String> visited = new java.util.HashSet<>();
+        java.util.Deque<String> queue = new java.util.ArrayDeque<>();
+        queue.add(rootEntity);
+
+        int safety = 0;
+        while (!queue.isEmpty() && safety++ < 16) {
+            String cur = queue.poll();
+            if (!visited.add(cur)) continue;
+            java.util.List<Object> curIds = byEntity.get(cur);
+            if (curIds == null || curIds.isEmpty()) continue;
+
+            for (var rel : schema.relationships()) {
+                if (!rel.parentEntity().equalsIgnoreCase(cur)) continue;
+                String childName = rel.childEntity();
+                if (childName.equalsIgnoreCase(cur)) continue;
+                String fkCol = resolveFkColumn(rel, schema);
+                if (fkCol == null) continue;
+                MongoCollection<Document> childCol = db.getCollection(childName.toLowerCase());
+                java.util.List<Object> childIds = new java.util.ArrayList<>();
+                try {
+                    var found = childCol.find(new Document(fkCol, new Document("$in", curIds)))
+                            .projection(new Document("_id", 1));
+                    for (Document d : found) {
+                        Object id = d.get("_id");
+                        if (id != null) childIds.add(id);
+                    }
+                } catch (Exception ex) {
+                    log.debug("Mongo cascade scan {} → {} failed: {}", cur, childName, ex.getMessage());
+                    continue;
+                }
+                if (childIds.isEmpty()) continue;
+                byEntity.computeIfAbsent(childName, k -> new java.util.ArrayList<>()).addAll(childIds);
+                if (!visited.contains(childName)) queue.add(childName);
+            }
+        }
+
+        java.util.List<String> deletionOrder = new java.util.ArrayList<>(byEntity.keySet());
+        java.util.Collections.reverse(deletionOrder);
+        for (String entityName : deletionOrder) {
+            if (entityName.equalsIgnoreCase(rootEntity)) continue;
+            java.util.List<Object> ids = byEntity.get(entityName);
+            if (ids == null || ids.isEmpty()) continue;
+            try {
+                MongoCollection<Document> col = db.getCollection(entityName.toLowerCase());
+                col.deleteMany(new Document("_id", new Document("$in", ids)));
+                accumulator.computeIfAbsent(entityName, k -> new java.util.ArrayList<>())
+                        .addAll(ids.stream().map(String::valueOf).toList());
+            } catch (Exception ex) {
+                log.warn("Mongo cascade delete failed for {}: {}", entityName, ex.getMessage());
+            }
+        }
+    }
+
+    private String resolveFkColumn(com.dbagnets.backend.benchmark.schema.LogicalRelationship rel,
+                                    com.dbagnets.backend.benchmark.schema.LogicalSchema schema) {
+        String declared = rel.fkColumnInChild();
+        if (declared != null && !declared.isBlank()) return declared;
+        var parent = schema.findEntity(rel.parentEntity()).orElse(null);
+        if (parent == null) return null;
+        var parentPk = parent.primaryKey().orElse(null);
+        if (parentPk == null) return null;
+        var child = schema.findEntity(rel.childEntity()).orElse(null);
+        if (child == null) return null;
+        return child.attributes().stream()
+                .anyMatch(a -> a.name().equalsIgnoreCase(parentPk.name()))
+                ? parentPk.name()
+                : null;
     }
 
     private EntityWriteOutcome writeEntity(MongoDatabase db,

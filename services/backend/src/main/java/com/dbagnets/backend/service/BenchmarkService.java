@@ -4,6 +4,7 @@ import com.dbagnets.backend.benchmark.bundle.BenchmarkBundleService;
 import com.dbagnets.backend.benchmark.bundle.BenchmarkBundleService.ParsedBundle;
 import com.dbagnets.backend.benchmark.bundle.BundleManifest;
 import com.dbagnets.backend.benchmark.driver.ConnectionCacheRegistry;
+import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.client.ScriptCreatorClient;
 import com.dbagnets.backend.client.ScriptCreatorRequest.TargetRequest;
@@ -51,6 +52,7 @@ public class BenchmarkService {
     private final ObjectMapper objectMapper;
     private final DataSizeProbe dataSizeProbe;
     private final ConnectionCacheRegistry connectionCacheRegistry;
+    private final EntityIdRegistry entityIdRegistry;
     private final BenchmarkBundleService bundleService;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -92,6 +94,7 @@ public class BenchmarkService {
 
         for (BenchmarkDatabase db : redeployableDbs) {
             cleanupContainer(db);
+            entityIdRegistry.evictAllForDatabase(db.getId());
             db.setStatus(DatabaseStatus.SCRIPT_READY);
             db.setErrorMessage(null);
             databaseRepository.save(db);
@@ -128,6 +131,7 @@ public class BenchmarkService {
         log.info("Redeploying database {} ({}) in benchmark {}", db.getDbName(), databaseId, benchmarkId);
 
         cleanupContainer(db);
+        entityIdRegistry.evictAllForDatabase(db.getId());
         db.setStatus(DatabaseStatus.SCRIPT_READY);
         db.setErrorMessage(null);
         databaseRepository.save(db);
@@ -182,6 +186,7 @@ public class BenchmarkService {
             dockerService.removeContainersByNamePrefix(benchmarkPrefix + db.getDbName());
             connectionCacheRegistry.evictAll(db.getId());
             dataSizeProbe.invalidate(db.getId());
+            entityIdRegistry.evictAllForDatabase(db.getId());
             db.setStatus(DatabaseStatus.SCRIPT_READY);
             db.setErrorMessage(null);
             db.setBaselineSizeBytes(null);
@@ -211,6 +216,7 @@ public class BenchmarkService {
         for (BenchmarkDatabase db : benchmark.getDatabases()) {
             cleanupContainer(db);
         }
+        entityIdRegistry.evictAllForBenchmark(benchmarkId);
 
         benchmarkRepository.delete(benchmark);
         log.info("Deleted benchmark {}", benchmarkId);
@@ -226,6 +232,7 @@ public class BenchmarkService {
                 .orElseThrow(() -> new RuntimeException("Database not found: " + databaseId));
 
         cleanupContainer(db);
+        entityIdRegistry.evictAllForDatabase(db.getId());
         benchmark.getDatabases().remove(db);
 
         if (benchmark.getDatabases().isEmpty()) {

@@ -17,6 +17,13 @@ public record ReadContext(
         EmbeddingMap embeddings,
         String entityName,
         List<RegistryEntry> targets,
-        boolean includeChildren
+        boolean includeChildren,
+        InsertMode mode
 ) {
+    public ReadContext(String benchmarkId, String databaseId, String dbName, String dbVersion,
+                       String hostAddress, int hostPort, LogicalSchema schema, EmbeddingMap embeddings,
+                       String entityName, List<RegistryEntry> targets, boolean includeChildren) {
+        this(benchmarkId, databaseId, dbName, dbVersion, hostAddress, hostPort, schema, embeddings,
+                entityName, targets, includeChildren, InsertMode.SINGLE);
+    }
 }

@@ -17,6 +17,19 @@ public record DeleteContext(
         EmbeddingMap embeddings,
         String entityName,
         List<RegistryEntry> targets,
-        boolean includeChildren
+        DeletionMode deletionMode,
+        InsertMode mode
 ) {
+    public DeleteContext(String benchmarkId, String databaseId, String dbName, String dbVersion,
+                         String hostAddress, int hostPort, LogicalSchema schema, EmbeddingMap embeddings,
+                         String entityName, List<RegistryEntry> targets, boolean includeChildren) {
+        this(benchmarkId, databaseId, dbName, dbVersion, hostAddress, hostPort, schema, embeddings,
+                entityName, targets,
+                includeChildren ? DeletionMode.WITH_CHILDREN : DeletionMode.NATIVE,
+                InsertMode.SINGLE);
+    }
+
+    public boolean includeChildren() {
+        return deletionMode == DeletionMode.WITH_CHILDREN;
+    }
 }

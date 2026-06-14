@@ -94,7 +94,9 @@ function ResultsTable({ results }: { results: DeleteResultResponse[] }) {
                   {r.status}
                 </Badge>
               </td>
-              <td className="py-1.5 px-2 text-right font-mono">{r.rowsDeleted ?? "—"}</td>
+              <td className="py-1.5 px-2 text-right font-mono">
+                <DeletedCell root={r.rowsDeleted} cascade={r.cascadeRowsDeleted} breakdown={r.cascadeBreakdown} />
+              </td>
               <td className="py-1.5 px-2 text-right font-mono">{r.samplesRecorded ?? "—"}</td>
               <td className="py-1.5 px-2 text-right font-mono">{fmtMs(r.p50DbTimeUs)}</td>
               <td className="py-1.5 px-2 text-right font-mono">{fmtMs(r.p95DbTimeUs)}</td>
@@ -109,6 +111,38 @@ function ResultsTable({ results }: { results: DeleteResultResponse[] }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+function DeletedCell({
+  root,
+  cascade,
+  breakdown,
+}: {
+  root: number | null
+  cascade: number | null
+  breakdown: Record<string, number> | null
+}) {
+  if (root == null) return <>—</>
+  const hasCascade = cascade != null && cascade > 0
+  const breakdownText =
+    breakdown && Object.keys(breakdown).length > 0
+      ? Object.entries(breakdown)
+          .map(([entity, n]) => `${entity}: ${n.toLocaleString()}`)
+          .join("\n")
+      : ""
+  return (
+    <span
+      title={hasCascade ? `Root: ${root}\nCascade total: ${cascade}\n${breakdownText}` : `Root: ${root}`}
+      className="inline-flex items-baseline gap-1"
+    >
+      <span>{root.toLocaleString()}</span>
+      {hasCascade && (
+        <span className="text-[10px] text-muted-foreground">
+          (+{cascade.toLocaleString()})
+        </span>
+      )}
+    </span>
   )
 }
 

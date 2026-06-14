@@ -69,6 +69,14 @@ public class BenchmarkResult {
     private Long rowsAffected;
 
     @Setter
+    @Column(name = "cascade_rows_affected")
+    private Long cascadeRowsAffected;
+
+    @Setter
+    @Column(name = "cascade_breakdown_json", columnDefinition = "TEXT")
+    private String cascadeBreakdownJson;
+
+    @Setter
     @Column(name = "data_size_before")
     private Long dataSizeBefore;
 

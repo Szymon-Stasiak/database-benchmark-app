@@ -7,16 +7,18 @@ import { Loader2, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DatabaseResponse } from "@/types/benchmark"
 import type { EntityChoice } from "@/types/insert"
-import type { StartDeleteRunRequest } from "@/types/delete"
+import type { DeletionMode, OperationMode, StartDeleteRunRequest } from "@/types/delete"
+import type { RegistrySummaryEntry } from "@/types/preview"
 
 interface Props {
   entities: EntityChoice[]
   databases: DatabaseResponse[]
   loading: boolean
+  registry?: RegistrySummaryEntry[]
   onPreview: (request: StartDeleteRunRequest) => void
 }
 
-export function DeleteRunForm({ entities, databases, loading, onPreview }: Props) {
+export function DeleteRunForm({ entities, databases, loading, registry, onPreview }: Props) {
   const runnableDatabases = useMemo(
     () => databases.filter((d) => d.status === "RUNNING"),
     [databases],
@@ -24,7 +26,8 @@ export function DeleteRunForm({ entities, databases, loading, onPreview }: Props
 
   const [entityName, setEntityName] = useState<string>(entities[0]?.name ?? "")
   const [sampleSize, setSampleSize] = useState<number>(50)
-  const [includeChildren, setIncludeChildren] = useState<boolean>(true)
+  const [deletionMode, setDeletionMode] = useState<DeletionMode>("WITH_CHILDREN")
+  const [mode, setMode] = useState<OperationMode>("SINGLE")
   const [selectedDbIds, setSelectedDbIds] = useState<Set<string>>(new Set())
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -68,7 +71,9 @@ export function DeleteRunForm({ entities, databases, loading, onPreview }: Props
     onPreview({
       entityName,
       sampleSize,
-      includeChildren,
+      includeChildren: deletionMode === "WITH_CHILDREN",
+      deletionMode,
+      mode,
       databaseIds: Array.from(selectedDbIds),
     })
   }
@@ -95,7 +100,11 @@ export function DeleteRunForm({ entities, databases, loading, onPreview }: Props
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground">
-              Random PKs sampled from the registry per database.
+              {(() => {
+                const pool = registry?.find((r) => r.entityName === entityName)?.availableIds
+                if (pool === undefined) return "Same logical IDs picked once, applied to every database."
+                return `Pool: ${pool.toLocaleString()} IDs · same set deleted on every DB.`
+              })()}
             </p>
           </div>
 
@@ -112,22 +121,75 @@ export function DeleteRunForm({ entities, databases, loading, onPreview }: Props
           </div>
 
           <div className="space-y-1.5">
-            <Label>Cascade children</Label>
-            <button
-              type="button"
-              onClick={() => setIncludeChildren((v) => !v)}
-              className={cn(
-                "w-full rounded-md border px-3 py-2 text-sm text-left transition-all",
-                includeChildren
-                  ? "border-primary bg-primary/5 ring-1 ring-primary"
-                  : "border-border hover:border-foreground/30",
-              )}
-            >
-              {includeChildren
-                ? "Cascade via FK / embedded refs"
-                : "Drop primary node only"}
-            </button>
+            <Label>Deletion strategy</Label>
+            <div className="grid grid-cols-1 gap-1.5">
+              {(
+                [
+                  {
+                    value: "NATIVE",
+                    title: "Native",
+                    desc: "Each engine does its own thing — PG may fail on FK, Mongo deletes only doc, Neo4j DETACH only edges",
+                  },
+                  {
+                    value: "WITH_CHILDREN",
+                    title: "Cascade children",
+                    desc: "Walk FK chain and delete all descendants (PG/MySQL/Mongo/Neo4j)",
+                  },
+                  {
+                    value: "ROOT_ONLY",
+                    title: "Root only (orphan)",
+                    desc: "Force delete root, leave children as orphans (PG: disable FK check, MySQL: SET FOREIGN_KEY_CHECKS=0)",
+                  },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setDeletionMode(opt.value)}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-sm text-left transition-all",
+                    deletionMode === opt.value
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:border-foreground/30",
+                  )}
+                >
+                  <div className="font-medium text-xs">{opt.title}</div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Execution mode</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {(["SINGLE", "BATCH", "BULK"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setMode(opt)}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-sm text-left transition-all",
+                  mode === opt
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:border-foreground/30",
+                )}
+              >
+                <div className="font-medium">{opt}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {opt === "SINGLE" && "1 stmt per row"}
+                  {opt === "BATCH" && "addBatch / executeBatch"}
+                  {opt === "BULK" && "1 stmt: WHERE pk IN (...)"}
+                </div>
+              </button>
+            ))}
+          </div>
+          {deletionMode === "WITH_CHILDREN" && mode !== "SINGLE" && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              Cascade is per-row by design — root delete uses {mode}, but child cleanup runs SINGLE.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

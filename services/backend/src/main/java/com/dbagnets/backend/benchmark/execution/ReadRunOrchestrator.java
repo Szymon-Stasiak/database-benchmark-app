@@ -3,14 +3,18 @@ package com.dbagnets.backend.benchmark.execution;
 import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.EngineDriverFactory;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
+import com.dbagnets.backend.benchmark.model.PreparedRunResponse;
 import com.dbagnets.backend.benchmark.model.ReadResultResponse;
 import com.dbagnets.backend.benchmark.model.StartReadRunRequest;
+import com.dbagnets.backend.benchmark.preview.CascadePreviewService;
+import com.dbagnets.backend.benchmark.preview.RunPreview;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMappingLoader;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
 import com.dbagnets.backend.benchmark.schema.LogicalSchemaLoader;
+import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.benchmark.timing.LatencyStats;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
 import com.dbagnets.backend.entity.Benchmark;
@@ -20,6 +24,7 @@ import com.dbagnets.backend.entity.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +56,8 @@ public class ReadRunOrchestrator {
     private final EngineDriverFactory driverFactory;
     private final LogicalSchemaLoader schemaLoader;
     private final EmbeddingMappingLoader embeddingLoader;
+    private final DataSizeProbe dataSizeProbe;
+    private final CascadePreviewService cascadePreviewService;
     private final SseEmitterService sse;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
@@ -58,16 +65,25 @@ public class ReadRunOrchestrator {
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
     @Transactional
-    public BenchmarkRun startRun(String benchmarkId, StartReadRunRequest request) {
+    public PreparedRunResponse prepareRun(String benchmarkId, StartReadRunRequest request) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
                 .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId));
         validateRequest(request);
+        LogicalSchema schema = loadSchema(benchmark);
+
+        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
+        List<String> selectedIds = registry.selectLogicalIds(
+                benchmarkId, request.entityName(), sampleSize, request.strategyOrDefault());
+        RunPreview preview = cascadePreviewService.build(
+                benchmarkId, schema, request.entityName(), selectedIds.size(),
+                Boolean.TRUE.equals(request.includeChildren()));
 
         BenchmarkRun run = new BenchmarkRun(benchmarkId, OperationType.READ);
         run.setEntityName(request.entityName());
-        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
-        run.setRecordCount((long) sampleSize);
+        run.setRecordCount((long) selectedIds.size());
         run.setConfigJson(serializeQuietly(request));
+        run.setSelectedIdsJson(serializeQuietly(selectedIds));
+        run.setCascadePreviewJson(serializeQuietly(preview));
 
         for (String databaseId : request.databaseIds()) {
             BenchmarkDatabase db = findDatabase(benchmark, databaseId);
@@ -77,16 +93,49 @@ public class ReadRunOrchestrator {
         }
         runRepository.save(run);
         broadcastRunStatus(benchmarkId, run);
+        sse.sendEvent(benchmarkId, SseEvents.EVENT_READ_RUN_PREPARED,
+                Map.of("runId", run.getId(), "preview", preview));
 
-        asyncExecutor.submit(() -> execute(benchmarkId, run.getId(), request));
-        return run;
+        return new PreparedRunResponse(
+                run.getId(),
+                benchmarkId,
+                OperationType.READ.name(),
+                request.entityName(),
+                run.getStatus().name(),
+                preview);
     }
 
-    private void execute(String benchmarkId, String runId, StartReadRunRequest request) {
+    public void confirmRun(String runId) {
+        BenchmarkRun run = runRepository.findById(runId)
+                .orElseThrow(() -> new NoSuchElementException("Read run not found: " + runId));
+        if (run.getStatus() != RunStatus.PENDING) {
+            throw new IllegalStateException("Run " + runId + " is not in PENDING state (status=" + run.getStatus() + ")");
+        }
+        if (run.getOperationType() != OperationType.READ) {
+            throw new IllegalArgumentException("Run " + runId + " is not a READ run");
+        }
+        if (run.getSelectedIdsJson() == null) {
+            throw new IllegalStateException("Run " + runId + " has no selected IDs — prepare first");
+        }
+        asyncExecutor.submit(() -> execute(run.getBenchmarkId(), runId));
+    }
+
+    public BenchmarkRun startRun(String benchmarkId, StartReadRunRequest request) {
+        PreparedRunResponse prepared = prepareRun(benchmarkId, request);
+        confirmRun(prepared.runId());
+        return runRepository.findById(prepared.runId()).orElseThrow();
+    }
+
+    private void execute(String benchmarkId, String runId) {
         try {
             BenchmarkRun run = runRepository.findById(runId).orElseThrow();
             Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
             LogicalSchema schema = loadSchema(benchmark);
+            List<String> selectedIds = parseSelectedIds(run.getSelectedIdsJson());
+            boolean includeChildren = parseIncludeChildren(run.getConfigJson());
+            com.dbagnets.backend.benchmark.driver.InsertMode mode = parseMode(run.getConfigJson());
+            String entityName = run.getEntityName();
+
             run.setStatus(RunStatus.RUNNING);
             runRepository.save(run);
             broadcastRunStatus(benchmarkId, run);
@@ -94,7 +143,8 @@ public class ReadRunOrchestrator {
             List<CompletableFuture<Void>> futures = new ArrayList<>();
             for (BenchmarkResult result : run.getResults()) {
                 futures.add(CompletableFuture.runAsync(
-                        () -> runForDatabase(benchmarkId, runId, result.getId(), request, schema),
+                        () -> runForDatabase(benchmarkId, runId, result.getId(),
+                                entityName, selectedIds, includeChildren, mode, schema),
                         asyncExecutor));
             }
             CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
@@ -115,7 +165,10 @@ public class ReadRunOrchestrator {
     private void runForDatabase(String benchmarkId,
                                  String runId,
                                  String resultId,
-                                 StartReadRunRequest request,
+                                 String entityName,
+                                 List<String> selectedLogicalIds,
+                                 boolean includeChildren,
+                                 com.dbagnets.backend.benchmark.driver.InsertMode mode,
                                  LogicalSchema schema) {
         BenchmarkDatabase db = transactionTemplate.execute(s ->
                 benchmarkRepository.findById(benchmarkId).orElseThrow()
@@ -134,16 +187,17 @@ public class ReadRunOrchestrator {
             markSkipped(benchmarkId, runId, resultId, "Engine not supported or container not running");
             return;
         }
-        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
-        List<RegistryEntry> targets = registry.sampleEntries(db.getId(), request.entityName(), sampleSize);
+        List<RegistryEntry> targets = registry.lookupEntries(db.getId(), entityName, selectedLogicalIds);
         if (targets.isEmpty()) {
-            markSkipped(benchmarkId, runId, resultId, "No registered IDs for entity " + request.entityName());
+            markSkipped(benchmarkId, runId, resultId, "No matching IDs in registry for " + db.getDbName());
             return;
         }
         EngineDriver driver = driverFactory.driverFor(engine).orElseThrow();
         EmbeddingMap embeddings = EmbeddingMap.from(embeddingLoader.parse(db.getEmbeddingMappings()));
 
-        markStarted(benchmarkId, runId, resultId);
+        warmup(driver, schema, embeddings, benchmarkId, db, entityName, targets);
+        Long sizeBefore = safeProbe(db);
+        markStarted(benchmarkId, runId, resultId, sizeBefore);
         try {
             ReadContext ctx = new ReadContext(
                     benchmarkId,
@@ -154,28 +208,68 @@ public class ReadRunOrchestrator {
                     db.getHostPort(),
                     schema,
                     embeddings,
-                    request.entityName(),
+                    entityName,
                     targets,
-                    Boolean.TRUE.equals(request.includeChildren()));
+                    includeChildren,
+                    mode);
             TimedOperation timed = driver.read(ctx);
-            persistSuccess(benchmarkId, runId, resultId, timed);
+            Long sizeAfter = safeProbe(db);
+            persistSuccess(benchmarkId, runId, resultId, timed, sizeAfter);
         } catch (Exception ex) {
             log.error("Read failed for db {} run {}: {}", db.getDbName(), runId, ex.getMessage(), ex);
             markFailed(benchmarkId, runId, resultId, ex.getMessage());
         }
     }
 
-    private void markStarted(String benchmarkId, String runId, String resultId) {
+    private void warmup(EngineDriver driver,
+                         LogicalSchema schema,
+                         EmbeddingMap embeddings,
+                         String benchmarkId,
+                         BenchmarkDatabase db,
+                         String entityName,
+                         List<RegistryEntry> targets) {
+        if (targets.isEmpty()) return;
+        try {
+            ReadContext warmCtx = new ReadContext(
+                    benchmarkId,
+                    db.getId(),
+                    db.getDbName(),
+                    db.getDbVersion(),
+                    HOST_ADDRESS,
+                    db.getHostPort(),
+                    schema,
+                    embeddings,
+                    entityName,
+                    targets.subList(0, 1),
+                    false,
+                    com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE);
+            driver.read(warmCtx);
+        } catch (Exception ignored) {
+            // warmup is best-effort
+        }
+    }
+
+    private Long safeProbe(BenchmarkDatabase db) {
+        try {
+            return dataSizeProbe.sizeOf(db, HOST_ADDRESS);
+        } catch (Exception ex) {
+            log.debug("Size probe failed for {}: {}", db.getDbName(), ex.getMessage());
+            return null;
+        }
+    }
+
+    private void markStarted(String benchmarkId, String runId, String resultId, Long sizeBefore) {
         transactionTemplate.executeWithoutResult(s -> {
             BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
             r.setStatus(RunStatus.RUNNING);
             r.setStartedAt(Instant.now());
+            r.setDataSizeBefore(sizeBefore);
             resultRepository.save(r);
             broadcastResult(benchmarkId, runId, r);
         });
     }
 
-    private void persistSuccess(String benchmarkId, String runId, String resultId, TimedOperation timed) {
+    private void persistSuccess(String benchmarkId, String runId, String resultId, TimedOperation timed, Long sizeAfter) {
         transactionTemplate.executeWithoutResult(s -> {
             BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
             LatencyStats stats = LatencyStats.from(timed.sampleDbTimeNs());
@@ -190,6 +284,7 @@ public class ReadRunOrchestrator {
             r.setP99DbTimeNs(stats.p99Ns());
             r.setMeanDbTimeNs(stats.meanNs());
             r.setSamplesRecorded(stats.sampleCount());
+            r.setDataSizeAfter(sizeAfter);
             resultRepository.save(r);
             broadcastResult(benchmarkId, runId, r);
         });
@@ -284,6 +379,36 @@ public class ReadRunOrchestrator {
             return objectMapper.writeValueAsString(payload);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private List<String> parseSelectedIds(String json) {
+        if (json == null) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Cannot parse selectedIdsJson: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private boolean parseIncludeChildren(String configJson) {
+        if (configJson == null) return false;
+        try {
+            StartReadRunRequest req = objectMapper.readValue(configJson, StartReadRunRequest.class);
+            return Boolean.TRUE.equals(req.includeChildren());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private com.dbagnets.backend.benchmark.driver.InsertMode parseMode(String configJson) {
+        if (configJson == null) return com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE;
+        try {
+            StartReadRunRequest req = objectMapper.readValue(configJson, StartReadRunRequest.class);
+            return req.modeOrDefault();
+        } catch (Exception e) {
+            return com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE;
         }
     }
 

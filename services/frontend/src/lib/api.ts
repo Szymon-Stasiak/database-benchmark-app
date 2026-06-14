@@ -21,6 +21,7 @@ import type {
   StartDeleteRunRequest,
 } from "@/types/delete"
 import type { ComparisonReportResponse } from "@/types/comparison"
+import type { PreparedRunResponse, RegistrySummaryEntry } from "@/types/preview"
 
 class ApiError extends Error {
   status: number
@@ -237,6 +238,15 @@ export const readApi = {
       body: JSON.stringify(req),
     }),
 
+  prepareRun: (benchmarkId: string, req: StartReadRunRequest) =>
+    apiFetch<PreparedRunResponse>(`/api/benchmarks/${benchmarkId}/read-runs/prepare`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  confirmRun: (runId: string) =>
+    apiFetch<void>(`/api/read-runs/${runId}/confirm`, { method: "POST" }),
+
   getRun: (runId: string) =>
     apiFetch<ReadRunResponse>(`/api/read-runs/${runId}`),
 }
@@ -258,8 +268,22 @@ export const deleteApi = {
       body: JSON.stringify(req),
     }),
 
+  prepareRun: (benchmarkId: string, req: StartDeleteRunRequest) =>
+    apiFetch<PreparedRunResponse>(`/api/benchmarks/${benchmarkId}/delete-runs/prepare`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  confirmRun: (runId: string) =>
+    apiFetch<void>(`/api/delete-runs/${runId}/confirm`, { method: "POST" }),
+
   getRun: (runId: string) =>
     apiFetch<DeleteRunResponse>(`/api/delete-runs/${runId}`),
+}
+
+export const registryApi = {
+  getSummary: (benchmarkId: string) =>
+    apiFetch<RegistrySummaryEntry[]>(`/api/benchmarks/${benchmarkId}/registry-summary`),
 }
 
 export { ApiError }

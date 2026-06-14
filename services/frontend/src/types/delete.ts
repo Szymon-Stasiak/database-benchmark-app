@@ -1,9 +1,16 @@
+import type { SelectionStrategy } from "./preview"
+
 export type DeleteStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
+export type OperationMode = "SINGLE" | "BATCH" | "BULK"
+export type DeletionMode = "NATIVE" | "WITH_CHILDREN" | "ROOT_ONLY"
 
 export interface StartDeleteRunRequest {
   entityName: string
   sampleSize?: number | null
   includeChildren?: boolean | null
+  deletionMode?: DeletionMode | null
+  selectionStrategy?: SelectionStrategy | null
+  mode?: OperationMode | null
   databaseIds: string[]
 }
 
@@ -17,6 +24,8 @@ export interface DeleteResultResponse {
   finishedAt: string | null
   durationMs: number | null
   rowsDeleted: number | null
+  cascadeRowsDeleted: number | null
+  cascadeBreakdown: Record<string, number> | null
   errorMessage: string | null
   meanDbTimeUs: number | null
   p50DbTimeUs: number | null

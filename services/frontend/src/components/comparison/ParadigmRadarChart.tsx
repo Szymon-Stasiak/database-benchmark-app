@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import {
   Legend,
   PolarAngleAxis,
@@ -10,6 +11,7 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Radar as RadarIcon } from "lucide-react"
+import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
 import type { RadarScore } from "@/types/comparison"
 
 interface Props {
@@ -60,16 +62,21 @@ export function ParadigmRadarChart({ scores }: Props) {
     return row
   })
 
+  const chartRef = useRef<HTMLDivElement | null>(null)
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base inline-flex items-center gap-2">
-          <RadarIcon className="h-4 w-4" />
-          Paradigm positioning (0..100 normalized)
-        </CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base inline-flex items-center gap-2">
+            <RadarIcon className="h-4 w-4" />
+            Paradigm positioning (0..100 normalized)
+          </CardTitle>
+          <DownloadChartButton containerRef={chartRef} chartName="paradigm-radar" />
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="h-96">
+        <div ref={chartRef} className="h-96">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={data}>
               <PolarGrid />

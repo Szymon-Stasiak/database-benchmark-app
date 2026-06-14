@@ -1,9 +1,14 @@
+import type { SelectionStrategy } from "./preview"
+import type { OperationMode } from "./delete"
+
 export type ReadStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
 
 export interface StartReadRunRequest {
   entityName: string
   sampleSize?: number | null
   includeChildren?: boolean | null
+  selectionStrategy?: SelectionStrategy | null
+  mode?: OperationMode | null
   databaseIds: string[]
 }
 

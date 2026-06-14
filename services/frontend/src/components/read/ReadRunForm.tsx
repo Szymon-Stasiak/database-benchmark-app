@@ -8,15 +8,18 @@ import { cn } from "@/lib/utils"
 import type { DatabaseResponse } from "@/types/benchmark"
 import type { EntityChoice } from "@/types/insert"
 import type { StartReadRunRequest } from "@/types/read"
+import type { OperationMode } from "@/types/delete"
+import type { RegistrySummaryEntry } from "@/types/preview"
 
 interface Props {
   entities: EntityChoice[]
   databases: DatabaseResponse[]
   loading: boolean
+  registry?: RegistrySummaryEntry[]
   onSubmit: (request: StartReadRunRequest) => Promise<void>
 }
 
-export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
+export function ReadRunForm({ entities, databases, loading, registry, onSubmit }: Props) {
   const runnableDatabases = useMemo(
     () => databases.filter((d) => d.status === "RUNNING"),
     [databases],
@@ -25,6 +28,7 @@ export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
   const [entityName, setEntityName] = useState<string>(entities[0]?.name ?? "")
   const [sampleSize, setSampleSize] = useState<number>(100)
   const [includeChildren, setIncludeChildren] = useState<boolean>(true)
+  const [mode, setMode] = useState<OperationMode>("SINGLE")
   const [selectedDbIds, setSelectedDbIds] = useState<Set<string>>(new Set())
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -69,6 +73,7 @@ export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
       entityName,
       sampleSize,
       includeChildren,
+      mode,
       databaseIds: Array.from(selectedDbIds),
     })
   }
@@ -95,7 +100,11 @@ export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground">
-              Random PKs sampled from the registry per database.
+              {(() => {
+                const pool = registry?.find((r) => r.entityName === entityName)?.availableIds
+                if (pool === undefined) return "Same logical IDs picked once, applied to every database."
+                return `Pool: ${pool.toLocaleString()} IDs · same set read on every DB.`
+              })()}
             </p>
           </div>
 
@@ -125,6 +134,32 @@ export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
             >
               {includeChildren ? "Children joined via 1 relationship hop" : "PK lookup only"}
             </button>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Execution mode</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {(["SINGLE", "BATCH", "BULK"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setMode(opt)}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-sm text-left transition-all",
+                  mode === opt
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:border-foreground/30",
+                )}
+              >
+                <div className="font-medium">{opt}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {opt === "SINGLE" && "1 SELECT per row"}
+                  {opt === "BATCH" && "1 SELECT per row, reused conn"}
+                  {opt === "BULK" && "1 SELECT: WHERE pk IN (...)"}
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -181,7 +216,7 @@ export function ReadRunForm({ entities, databases, loading, onSubmit }: Props) {
             ) : (
               <Search className="h-4 w-4 mr-2" />
             )}
-            Run read benchmark
+            Review read plan
           </Button>
         </div>
       </CardContent>

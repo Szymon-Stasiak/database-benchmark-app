@@ -4,7 +4,10 @@ import com.dbagnets.backend.benchmark.driver.DeleteContext;
 import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.EngineDriverFactory;
 import com.dbagnets.backend.benchmark.model.DeleteResultResponse;
+import com.dbagnets.backend.benchmark.model.PreparedRunResponse;
 import com.dbagnets.backend.benchmark.model.StartDeleteRunRequest;
+import com.dbagnets.backend.benchmark.preview.CascadePreviewService;
+import com.dbagnets.backend.benchmark.preview.RunPreview;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
@@ -21,6 +24,7 @@ import com.dbagnets.backend.entity.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +57,7 @@ public class DeleteRunOrchestrator {
     private final LogicalSchemaLoader schemaLoader;
     private final EmbeddingMappingLoader embeddingLoader;
     private final DataSizeProbe dataSizeProbe;
+    private final CascadePreviewService cascadePreviewService;
     private final SseEmitterService sse;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
@@ -60,16 +65,25 @@ public class DeleteRunOrchestrator {
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
     @Transactional
-    public BenchmarkRun startRun(String benchmarkId, StartDeleteRunRequest request) {
+    public PreparedRunResponse prepareRun(String benchmarkId, StartDeleteRunRequest request) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
                 .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId));
         validateRequest(request);
+        LogicalSchema schema = loadSchema(benchmark);
+
+        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
+        List<String> selectedIds = registry.selectLogicalIds(
+                benchmarkId, request.entityName(), sampleSize, request.strategyOrDefault());
+        RunPreview preview = cascadePreviewService.build(
+                benchmarkId, schema, request.entityName(), selectedIds.size(),
+                Boolean.TRUE.equals(request.includeChildren()));
 
         BenchmarkRun run = new BenchmarkRun(benchmarkId, OperationType.DELETE);
         run.setEntityName(request.entityName());
-        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
-        run.setRecordCount((long) sampleSize);
+        run.setRecordCount((long) selectedIds.size());
         run.setConfigJson(serializeQuietly(request));
+        run.setSelectedIdsJson(serializeQuietly(selectedIds));
+        run.setCascadePreviewJson(serializeQuietly(preview));
 
         for (String databaseId : request.databaseIds()) {
             BenchmarkDatabase db = findDatabase(benchmark, databaseId);
@@ -79,16 +93,49 @@ public class DeleteRunOrchestrator {
         }
         runRepository.save(run);
         broadcastRunStatus(benchmarkId, run);
+        sse.sendEvent(benchmarkId, SseEvents.EVENT_DELETE_RUN_PREPARED,
+                Map.of("runId", run.getId(), "preview", preview));
 
-        asyncExecutor.submit(() -> execute(benchmarkId, run.getId(), request));
-        return run;
+        return new PreparedRunResponse(
+                run.getId(),
+                benchmarkId,
+                OperationType.DELETE.name(),
+                request.entityName(),
+                run.getStatus().name(),
+                preview);
     }
 
-    private void execute(String benchmarkId, String runId, StartDeleteRunRequest request) {
+    public void confirmRun(String runId) {
+        BenchmarkRun run = runRepository.findById(runId)
+                .orElseThrow(() -> new NoSuchElementException("Delete run not found: " + runId));
+        if (run.getStatus() != RunStatus.PENDING) {
+            throw new IllegalStateException("Run " + runId + " is not in PENDING state (status=" + run.getStatus() + ")");
+        }
+        if (run.getOperationType() != OperationType.DELETE) {
+            throw new IllegalArgumentException("Run " + runId + " is not a DELETE run");
+        }
+        if (run.getSelectedIdsJson() == null) {
+            throw new IllegalStateException("Run " + runId + " has no selected IDs — prepare first");
+        }
+        asyncExecutor.submit(() -> execute(run.getBenchmarkId(), runId));
+    }
+
+    public BenchmarkRun startRun(String benchmarkId, StartDeleteRunRequest request) {
+        PreparedRunResponse prepared = prepareRun(benchmarkId, request);
+        confirmRun(prepared.runId());
+        return runRepository.findById(prepared.runId()).orElseThrow();
+    }
+
+    private void execute(String benchmarkId, String runId) {
         try {
             BenchmarkRun run = runRepository.findById(runId).orElseThrow();
             Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
             LogicalSchema schema = loadSchema(benchmark);
+            List<String> selectedIds = parseSelectedIds(run.getSelectedIdsJson());
+            com.dbagnets.backend.benchmark.driver.DeletionMode deletionMode = parseDeletionMode(run.getConfigJson());
+            com.dbagnets.backend.benchmark.driver.InsertMode mode = parseMode(run.getConfigJson());
+            String entityName = run.getEntityName();
+
             run.setStatus(RunStatus.RUNNING);
             runRepository.save(run);
             broadcastRunStatus(benchmarkId, run);
@@ -96,7 +143,8 @@ public class DeleteRunOrchestrator {
             List<CompletableFuture<Void>> futures = new ArrayList<>();
             for (BenchmarkResult result : run.getResults()) {
                 futures.add(CompletableFuture.runAsync(
-                        () -> runForDatabase(benchmarkId, runId, result.getId(), request, schema),
+                        () -> runForDatabase(benchmarkId, runId, result.getId(),
+                                entityName, selectedIds, deletionMode, mode, schema),
                         asyncExecutor));
             }
             CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
@@ -117,7 +165,10 @@ public class DeleteRunOrchestrator {
     private void runForDatabase(String benchmarkId,
                                  String runId,
                                  String resultId,
-                                 StartDeleteRunRequest request,
+                                 String entityName,
+                                 List<String> selectedLogicalIds,
+                                 com.dbagnets.backend.benchmark.driver.DeletionMode deletionMode,
+                                 com.dbagnets.backend.benchmark.driver.InsertMode mode,
                                  LogicalSchema schema) {
         BenchmarkDatabase db = transactionTemplate.execute(s ->
                 benchmarkRepository.findById(benchmarkId).orElseThrow()
@@ -136,15 +187,15 @@ public class DeleteRunOrchestrator {
             markSkipped(benchmarkId, runId, resultId, "Engine not supported or container not running");
             return;
         }
-        int sampleSize = orDefault(request.sampleSize(), DEFAULT_SAMPLE_SIZE);
-        List<RegistryEntry> targets = registry.sampleEntries(db.getId(), request.entityName(), sampleSize);
+        List<RegistryEntry> targets = registry.lookupEntries(db.getId(), entityName, selectedLogicalIds);
         if (targets.isEmpty()) {
-            markSkipped(benchmarkId, runId, resultId, "No registered IDs for entity " + request.entityName());
+            markSkipped(benchmarkId, runId, resultId, "No matching IDs in registry for " + db.getDbName());
             return;
         }
         EngineDriver driver = driverFactory.driverFor(engine).orElseThrow();
         EmbeddingMap embeddings = EmbeddingMap.from(embeddingLoader.parse(db.getEmbeddingMappings()));
 
+        warmup(driver, schema, embeddings, benchmarkId, db, entityName, targets);
         Long sizeBefore = safeProbe(db);
         markStarted(benchmarkId, runId, resultId, sizeBefore);
         try {
@@ -157,17 +208,54 @@ public class DeleteRunOrchestrator {
                     db.getHostPort(),
                     schema,
                     embeddings,
-                    request.entityName(),
+                    entityName,
                     targets,
-                    Boolean.TRUE.equals(request.includeChildren()));
+                    deletionMode,
+                    mode);
             TimedOperation timed = driver.delete(ctx);
             List<String> deletedLogicalIds = targets.stream().map(RegistryEntry::logicalId).toList();
-            registry.deleteByLogicalIds(db.getId(), request.entityName(), deletedLogicalIds);
+            registry.deleteByLogicalIds(db.getId(), entityName, deletedLogicalIds);
+            for (var cascadeEntry : timed.cascadeDeletedByEntity().entrySet()) {
+                if (!cascadeEntry.getValue().isEmpty()) {
+                    registry.deleteByPhysicalIds(db.getId(), cascadeEntry.getKey(), cascadeEntry.getValue());
+                }
+            }
+            dataSizeProbe.invalidate(db.getId());
+            sse.sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_SIZE_DIRTY,
+                    Map.of("databaseId", db.getId(), "entityName", entityName));
             Long sizeAfter = safeProbe(db);
             persistSuccess(benchmarkId, runId, resultId, timed, sizeAfter);
         } catch (Exception ex) {
             log.error("Delete failed for db {} run {}: {}", db.getDbName(), runId, ex.getMessage(), ex);
             markFailed(benchmarkId, runId, resultId, ex.getMessage());
+        }
+    }
+
+    private void warmup(EngineDriver driver,
+                         LogicalSchema schema,
+                         EmbeddingMap embeddings,
+                         String benchmarkId,
+                         BenchmarkDatabase db,
+                         String entityName,
+                         List<RegistryEntry> targets) {
+        if (targets.isEmpty()) return;
+        try {
+            com.dbagnets.backend.benchmark.driver.ReadContext warmCtx =
+                    new com.dbagnets.backend.benchmark.driver.ReadContext(
+                            benchmarkId,
+                            db.getId(),
+                            db.getDbName(),
+                            db.getDbVersion(),
+                            HOST_ADDRESS,
+                            db.getHostPort(),
+                            schema,
+                            embeddings,
+                            entityName,
+                            targets.subList(0, 1),
+                            false);
+            driver.read(warmCtx);
+        } catch (Exception ignored) {
+            // warmup is best-effort — first measurement may carry cold-cache overhead, that's OK
         }
     }
 
@@ -201,6 +289,15 @@ public class DeleteRunOrchestrator {
             r.setWireTimeNs(timed.wireTimeNs());
             r.setOverheadNs(timed.overheadNs());
             r.setRowsAffected(timed.rowsAffected());
+            var breakdown = new java.util.LinkedHashMap<String, Integer>();
+            long cascadeTotal = 0L;
+            for (var e : timed.cascadeDeletedByEntity().entrySet()) {
+                int n = e.getValue().size();
+                breakdown.put(e.getKey(), n);
+                cascadeTotal += n;
+            }
+            r.setCascadeRowsAffected(cascadeTotal);
+            r.setCascadeBreakdownJson(breakdown.isEmpty() ? null : serializeQuietly(breakdown));
             r.setP50DbTimeNs(stats.p50Ns());
             r.setP95DbTimeNs(stats.p95Ns());
             r.setP99DbTimeNs(stats.p99Ns());
@@ -301,6 +398,46 @@ public class DeleteRunOrchestrator {
             return objectMapper.writeValueAsString(payload);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private List<String> parseSelectedIds(String json) {
+        if (json == null) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Cannot parse selectedIdsJson: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private boolean parseIncludeChildren(String configJson) {
+        if (configJson == null) return false;
+        try {
+            StartDeleteRunRequest req = objectMapper.readValue(configJson, StartDeleteRunRequest.class);
+            return Boolean.TRUE.equals(req.includeChildren());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private com.dbagnets.backend.benchmark.driver.DeletionMode parseDeletionMode(String configJson) {
+        if (configJson == null) return com.dbagnets.backend.benchmark.driver.DeletionMode.NATIVE;
+        try {
+            StartDeleteRunRequest req = objectMapper.readValue(configJson, StartDeleteRunRequest.class);
+            return req.deletionModeOrDefault();
+        } catch (Exception e) {
+            return com.dbagnets.backend.benchmark.driver.DeletionMode.NATIVE;
+        }
+    }
+
+    private com.dbagnets.backend.benchmark.driver.InsertMode parseMode(String configJson) {
+        if (configJson == null) return com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE;
+        try {
+            StartDeleteRunRequest req = objectMapper.readValue(configJson, StartDeleteRunRequest.class);
+            return req.modeOrDefault();
+        } catch (Exception e) {
+            return com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE;
         }
     }
 

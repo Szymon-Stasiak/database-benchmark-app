@@ -1,8 +1,11 @@
 package com.dbagnets.backend.benchmark.model;
 
 import com.dbagnets.backend.benchmark.execution.BenchmarkResult;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.Map;
 
 public record DeleteResultResponse(
         String id,
@@ -14,6 +17,8 @@ public record DeleteResultResponse(
         Instant finishedAt,
         Long durationMs,
         Long rowsDeleted,
+        Long cascadeRowsDeleted,
+        Map<String, Integer> cascadeBreakdown,
         String errorMessage,
         Long meanDbTimeUs,
         Long p50DbTimeUs,
@@ -25,10 +30,14 @@ public record DeleteResultResponse(
         Long dataSizeAfter,
         Long dataSizeDelta
 ) {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Integer>> BREAKDOWN_TYPE = new TypeReference<>() {};
+
     public static DeleteResultResponse from(BenchmarkResult r) {
         Long delta = (r.getDataSizeBefore() != null && r.getDataSizeAfter() != null)
                 ? r.getDataSizeAfter() - r.getDataSizeBefore()
                 : null;
+        Map<String, Integer> breakdown = parseBreakdown(r.getCascadeBreakdownJson());
         return new DeleteResultResponse(
                 r.getId(),
                 r.getDatabaseId(),
@@ -39,6 +48,8 @@ public record DeleteResultResponse(
                 r.getFinishedAt(),
                 r.durationMs(),
                 r.getRowsAffected(),
+                r.getCascadeRowsAffected(),
+                breakdown,
                 r.getErrorMessage(),
                 toMicros(r.getMeanDbTimeNs()),
                 toMicros(r.getP50DbTimeNs()),
@@ -49,6 +60,15 @@ public record DeleteResultResponse(
                 r.getDataSizeBefore(),
                 r.getDataSizeAfter(),
                 delta);
+    }
+
+    private static Map<String, Integer> parseBreakdown(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            return MAPPER.readValue(json, BREAKDOWN_TYPE);
+        } catch (Exception e) {
+            return Map.of();
+        }
     }
 
     private static Long toMicros(Long ns) {

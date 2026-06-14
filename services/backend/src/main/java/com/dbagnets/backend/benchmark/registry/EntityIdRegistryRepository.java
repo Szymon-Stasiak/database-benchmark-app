@@ -30,4 +30,27 @@ public interface EntityIdRegistryRepository extends JpaRepository<EntityIdRecord
     int deleteByDatabaseIdAndEntityNameAndLogicalIdIn(@Param("databaseId") String databaseId,
                                                        @Param("entityName") String entityName,
                                                        @Param("logicalIds") List<String> logicalIds);
+
+    @Query("SELECT r FROM EntityIdRecord r " +
+            "WHERE r.databaseId = :databaseId AND r.entityName = :entityName " +
+            "AND r.logicalId IN :logicalIds")
+    List<EntityIdRecord> findByDatabaseAndEntityAndLogicalIds(@Param("databaseId") String databaseId,
+                                                               @Param("entityName") String entityName,
+                                                               @Param("logicalIds") List<String> logicalIds);
+
+    @Modifying
+    @Query("DELETE FROM EntityIdRecord r " +
+            "WHERE r.databaseId = :databaseId AND r.entityName = :entityName " +
+            "AND r.physicalId IN :physicalIds")
+    int deleteByDatabaseIdAndEntityNameAndPhysicalIdIn(@Param("databaseId") String databaseId,
+                                                        @Param("entityName") String entityName,
+                                                        @Param("physicalIds") List<String> physicalIds);
+
+    @Modifying
+    @Query("DELETE FROM EntityIdRecord r WHERE r.databaseId = :databaseId")
+    int deleteByDatabaseId(@Param("databaseId") String databaseId);
+
+    @Modifying
+    @Query("DELETE FROM EntityIdRecord r WHERE r.benchmarkId = :benchmarkId")
+    int deleteByBenchmarkId(@Param("benchmarkId") String benchmarkId);
 }

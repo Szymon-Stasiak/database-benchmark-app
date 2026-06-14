@@ -5,10 +5,12 @@ import { motion } from "framer-motion"
 import { AppLayout } from "@/components/AppLayout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { benchmarkApi, insertApi, readApi, ApiError } from "@/lib/api"
+import { benchmarkApi, insertApi, readApi, registryApi, ApiError } from "@/lib/api"
 import { ReadRunForm } from "@/components/read/ReadRunForm"
+import { RunPlanPreview } from "@/components/benchmark/RunPlanPreview"
 import { ActiveReadRunPanel } from "@/components/read/ActiveReadRunPanel"
 import { ReadRunHistory } from "@/components/read/ReadRunHistory"
+import { DatabaseSizeChart } from "@/components/insert/DatabaseSizeChart"
 import type { BenchmarkResponse } from "@/types/benchmark"
 import type { EntityChoice } from "@/types/insert"
 import type {
@@ -17,6 +19,7 @@ import type {
   ReadStatus,
   StartReadRunRequest,
 } from "@/types/read"
+import type { PreparedRunResponse, RegistrySummaryEntry } from "@/types/preview"
 
 export default function BenchmarkReadsPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,8 +28,12 @@ export default function BenchmarkReadsPage() {
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null)
   const [entities, setEntities] = useState<EntityChoice[]>([])
   const [runs, setRuns] = useState<ReadRunResponse[]>([])
+  const [registry, setRegistry] = useState<RegistrySummaryEntry[]>([])
   const [pinnedRunId, setPinnedRunId] = useState<string | null>(null)
+  const [prepared, setPrepared] = useState<PreparedRunResponse | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -35,11 +42,13 @@ export default function BenchmarkReadsPage() {
       benchmarkApi.get(id),
       insertApi.listEntities(id).catch(() => [] as EntityChoice[]),
       readApi.listRuns(id).catch(() => [] as ReadRunResponse[]),
+      registryApi.getSummary(id).catch(() => [] as RegistrySummaryEntry[]),
     ])
-      .then(([b, e, r]) => {
+      .then(([b, e, r, reg]) => {
         setBenchmark(b)
         setEntities(e)
         setRuns(r)
+        setRegistry(reg)
         if (r.length > 0) setPinnedRunId(r[0].id)
       })
       .catch((e: unknown) => {
@@ -51,24 +60,49 @@ export default function BenchmarkReadsPage() {
       })
   }, [id, navigate])
 
-  const handleSubmit = useCallback(
+  const handlePreview = useCallback(
     async (request: StartReadRunRequest) => {
       if (!id) return
-      setSubmitting(true)
+      setPreparing(true)
       setError(null)
+      setPreviewOpen(true)
       try {
-        const created = await readApi.startRun(id, request)
-        setRuns((prev) => [created, ...prev])
-        setPinnedRunId(created.id)
+        const prep = await readApi.prepareRun(id, request)
+        setPrepared(prep)
       } catch (e) {
         const msg = e instanceof ApiError ? e.message : (e as Error).message
-        setError(msg || "Failed to start read run")
+        setError(msg || "Failed to prepare read run")
+        setPreviewOpen(false)
       } finally {
-        setSubmitting(false)
+        setPreparing(false)
       }
     },
     [id],
   )
+
+  const handleConfirm = useCallback(async () => {
+    if (!id || !prepared) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await readApi.confirmRun(prepared.runId)
+      const fresh = await readApi.listRuns(id)
+      setRuns(fresh)
+      setPinnedRunId(prepared.runId)
+      setPreviewOpen(false)
+      setPrepared(null)
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : (e as Error).message
+      setError(msg || "Failed to confirm read run")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [id, prepared])
+
+  const handleCancel = useCallback(() => {
+    setPreviewOpen(false)
+    setPrepared(null)
+  }, [])
 
   const handleRunStatusChange = useCallback((runId: string, status: ReadStatus) => {
     setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, status } : r)))
@@ -121,7 +155,7 @@ export default function BenchmarkReadsPage() {
               {benchmark ? (
                 <>
                   Benchmark: <span className="font-medium">{benchmark.topic}</span> ·{" "}
-                  {benchmark.databases.length} database(s)
+                  {benchmark.databases.length} database(s) · same IDs read on every DB
                 </>
               ) : (
                 "Loading benchmark…"
@@ -148,10 +182,13 @@ export default function BenchmarkReadsPage() {
           <ReadRunForm
             entities={entities}
             databases={benchmark.databases}
-            loading={submitting}
-            onSubmit={handleSubmit}
+            loading={preparing || submitting}
+            registry={registry}
+            onSubmit={handlePreview}
           />
         )}
+
+        {benchmark && <DatabaseSizeChart benchmarkId={benchmark.id} />}
 
         {benchmark && pinnedRun && (
           <ActiveReadRunPanel
@@ -168,6 +205,17 @@ export default function BenchmarkReadsPage() {
           onSelect={handleSelectFromHistory}
         />
       </motion.div>
+
+      <RunPlanPreview
+        open={previewOpen}
+        operation="READ"
+        preview={prepared?.preview ?? null}
+        databaseCount={benchmark?.databases.length ?? 0}
+        submitting={submitting}
+        loadingPreview={preparing}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </AppLayout>
   )
 }

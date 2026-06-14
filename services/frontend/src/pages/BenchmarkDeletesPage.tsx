@@ -5,11 +5,12 @@ import { motion } from "framer-motion"
 import { AppLayout } from "@/components/AppLayout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { benchmarkApi, deleteApi, insertApi, ApiError } from "@/lib/api"
+import { benchmarkApi, deleteApi, insertApi, registryApi, ApiError } from "@/lib/api"
 import { DeleteRunForm } from "@/components/delete/DeleteRunForm"
-import { DeletePlanPreview } from "@/components/delete/DeletePlanPreview"
+import { RunPlanPreview } from "@/components/benchmark/RunPlanPreview"
 import { ActiveDeleteRunPanel } from "@/components/delete/ActiveDeleteRunPanel"
 import { DeleteRunHistory } from "@/components/delete/DeleteRunHistory"
+import { DatabaseSizeChart } from "@/components/insert/DatabaseSizeChart"
 import type { BenchmarkResponse } from "@/types/benchmark"
 import type { EntityChoice } from "@/types/insert"
 import type {
@@ -18,6 +19,7 @@ import type {
   DeleteStatus,
   StartDeleteRunRequest,
 } from "@/types/delete"
+import type { PreparedRunResponse, RegistrySummaryEntry } from "@/types/preview"
 
 export default function BenchmarkDeletesPage() {
   const { id } = useParams<{ id: string }>()
@@ -26,10 +28,12 @@ export default function BenchmarkDeletesPage() {
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null)
   const [entities, setEntities] = useState<EntityChoice[]>([])
   const [runs, setRuns] = useState<DeleteRunResponse[]>([])
+  const [registry, setRegistry] = useState<RegistrySummaryEntry[]>([])
   const [pinnedRunId, setPinnedRunId] = useState<string | null>(null)
-  const [pendingRequest, setPendingRequest] = useState<StartDeleteRunRequest | null>(null)
+  const [prepared, setPrepared] = useState<PreparedRunResponse | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -38,11 +42,13 @@ export default function BenchmarkDeletesPage() {
       benchmarkApi.get(id),
       insertApi.listEntities(id).catch(() => [] as EntityChoice[]),
       deleteApi.listRuns(id).catch(() => [] as DeleteRunResponse[]),
+      registryApi.getSummary(id).catch(() => [] as RegistrySummaryEntry[]),
     ])
-      .then(([b, e, r]) => {
+      .then(([b, e, r, reg]) => {
         setBenchmark(b)
         setEntities(e)
         setRuns(r)
+        setRegistry(reg)
         if (r.length > 0) setPinnedRunId(r[0].id)
       })
       .catch((e: unknown) => {
@@ -54,32 +60,48 @@ export default function BenchmarkDeletesPage() {
       })
   }, [id, navigate])
 
-  const handlePreview = useCallback((request: StartDeleteRunRequest) => {
-    setPendingRequest(request)
-    setPreviewOpen(true)
-  }, [])
+  const handlePreview = useCallback(
+    async (request: StartDeleteRunRequest) => {
+      if (!id) return
+      setPreparing(true)
+      setError(null)
+      setPreviewOpen(true)
+      try {
+        const prep = await deleteApi.prepareRun(id, request)
+        setPrepared(prep)
+      } catch (e) {
+        const msg = e instanceof ApiError ? e.message : (e as Error).message
+        setError(msg || "Failed to prepare delete run")
+        setPreviewOpen(false)
+      } finally {
+        setPreparing(false)
+      }
+    },
+    [id],
+  )
 
   const handleConfirm = useCallback(async () => {
-    if (!id || !pendingRequest) return
+    if (!id || !prepared) return
     setSubmitting(true)
     setError(null)
     try {
-      const created = await deleteApi.startRun(id, pendingRequest)
-      setRuns((prev) => [created, ...prev])
-      setPinnedRunId(created.id)
+      await deleteApi.confirmRun(prepared.runId)
+      const fresh = await deleteApi.listRuns(id)
+      setRuns(fresh)
+      setPinnedRunId(prepared.runId)
       setPreviewOpen(false)
-      setPendingRequest(null)
+      setPrepared(null)
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : (e as Error).message
-      setError(msg || "Failed to start delete run")
+      setError(msg || "Failed to confirm delete run")
     } finally {
       setSubmitting(false)
     }
-  }, [id, pendingRequest])
+  }, [id, prepared])
 
   const handleCancel = useCallback(() => {
     setPreviewOpen(false)
-    setPendingRequest(null)
+    setPrepared(null)
   }, [])
 
   const handleRunStatusChange = useCallback((runId: string, status: DeleteStatus) => {
@@ -133,7 +155,7 @@ export default function BenchmarkDeletesPage() {
               {benchmark ? (
                 <>
                   Benchmark: <span className="font-medium">{benchmark.topic}</span> ·{" "}
-                  {benchmark.databases.length} database(s)
+                  {benchmark.databases.length} database(s) · same IDs deleted on every DB
                 </>
               ) : (
                 "Loading benchmark…"
@@ -160,10 +182,13 @@ export default function BenchmarkDeletesPage() {
           <DeleteRunForm
             entities={entities}
             databases={benchmark.databases}
-            loading={submitting}
+            loading={preparing || submitting}
+            registry={registry}
             onPreview={handlePreview}
           />
         )}
+
+        {benchmark && <DatabaseSizeChart benchmarkId={benchmark.id} />}
 
         {benchmark && pinnedRun && (
           <ActiveDeleteRunPanel
@@ -181,11 +206,13 @@ export default function BenchmarkDeletesPage() {
         />
       </motion.div>
 
-      <DeletePlanPreview
+      <RunPlanPreview
         open={previewOpen}
-        request={pendingRequest}
-        databases={benchmark?.databases ?? []}
+        operation="DELETE"
+        preview={prepared?.preview ?? null}
+        databaseCount={benchmark?.databases.length ?? 0}
         submitting={submitting}
+        loadingPreview={preparing}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />

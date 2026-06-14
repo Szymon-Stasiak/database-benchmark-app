@@ -1,8 +1,9 @@
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
 import type { InsertResultResponse, InsertRunResponse } from "@/types/insert"
 
 interface Props {
@@ -43,6 +44,8 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
     }))
   }, [run])
 
+  const chartRef = useRef<HTMLDivElement | null>(null)
+
   if (!run) return null
 
   return (
@@ -66,10 +69,14 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
         <div className="space-y-4">
           {throughputData.length > 0 && (
             <div className="h-48 -mx-2">
-              <div className="text-xs font-medium mb-1 px-2 text-muted-foreground">
-                Throughput per database (records / second, summed across entities)
+              <div className="flex items-center justify-between mb-1 px-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Throughput per database (records / second, summed across entities)
+                </div>
+                <DownloadChartButton containerRef={chartRef} chartName="insert-throughput" />
               </div>
-              <ResponsiveContainer width="100%" height="90%">
+              <div ref={chartRef} className="h-[90%]">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={throughputData} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />
                   <XAxis dataKey="dbName" tick={{ fontSize: 11 }} />
@@ -78,6 +85,7 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
                   <Bar dataKey="throughput" name="r/s" fill="hsl(var(--primary, 217 91% 60%))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
           )}
 

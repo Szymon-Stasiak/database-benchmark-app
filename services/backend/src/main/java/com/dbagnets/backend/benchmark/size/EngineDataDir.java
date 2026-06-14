@@ -17,7 +17,14 @@ public final class EngineDataDir {
         DATA_DIRS.put(DatabaseEngine.NEO4J, "/data");
         DATA_DIRS.put(DatabaseEngine.MEMGRAPH, "/var/lib/memgraph");
         DATA_DIRS.put(DatabaseEngine.QDRANT, "/qdrant/storage");
+        DATA_DIRS.put(DatabaseEngine.WEAVIATE, "/var/lib/weaviate");
         DATA_DIRS.put(DatabaseEngine.ELASTICSEARCH, "/usr/share/elasticsearch/data");
+        DATA_DIRS.put(DatabaseEngine.COUCHDB, "/opt/couchdb/data");
+        DATA_DIRS.put(DatabaseEngine.ARANGODB, "/var/lib/arangodb3");
+        DATA_DIRS.put(DatabaseEngine.DYNAMODB, "/home/dynamodblocal");
+        DATA_DIRS.put(DatabaseEngine.ETCD, "/etcd-data");
+        DATA_DIRS.put(DatabaseEngine.INFLUXDB, "/var/lib/influxdb2");
+        DATA_DIRS.put(DatabaseEngine.QUESTDB, "/var/lib/questdb");
     }
 
     private EngineDataDir() {

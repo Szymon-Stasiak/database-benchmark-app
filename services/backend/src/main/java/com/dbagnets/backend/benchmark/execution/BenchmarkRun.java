@@ -70,6 +70,14 @@ public class BenchmarkRun {
     private String cascadeJson;
 
     @Setter
+    @Column(name = "selected_ids_json", columnDefinition = "TEXT")
+    private String selectedIdsJson;
+
+    @Setter
+    @Column(name = "cascade_preview_json", columnDefinition = "TEXT")
+    private String cascadePreviewJson;
+
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private RunStatus status;

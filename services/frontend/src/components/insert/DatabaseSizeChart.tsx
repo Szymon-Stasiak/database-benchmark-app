@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
 import {
   Bar,
   BarChart,
@@ -36,6 +37,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const stoppedRef = useRef(false)
+  const chartRef = useRef<HTMLDivElement | null>(null)
 
   const refresh = useCallback(async () => {
     if (stoppedRef.current) return
@@ -108,6 +110,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
           </CardTitle>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {lastRefreshed && <span>updated {formatRelative(lastRefreshed)}</span>}
+            <DownloadChartButton containerRef={chartRef} chartName="database-sizes" />
             <Button variant="ghost" size="sm" onClick={refresh} disabled={loading} className="h-7 px-2">
               {loading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -123,7 +126,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
         {chartData.length === 0 ? (
           <p className="text-sm text-muted-foreground">No databases yet.</p>
         ) : (
-          <div className="h-72">
+          <div ref={chartRef} className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />

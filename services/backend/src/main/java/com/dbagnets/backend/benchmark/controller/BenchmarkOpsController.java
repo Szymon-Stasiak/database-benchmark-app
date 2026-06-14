@@ -21,10 +21,12 @@ import com.dbagnets.backend.benchmark.model.EdgeRatioDto;
 import com.dbagnets.backend.benchmark.model.EntityCascadeChoiceDto;
 import com.dbagnets.backend.benchmark.model.EntityChoiceResponse;
 import com.dbagnets.backend.benchmark.model.InsertRunResponse;
+import com.dbagnets.backend.benchmark.model.PreparedRunResponse;
 import com.dbagnets.backend.benchmark.model.ReadRunResponse;
 import com.dbagnets.backend.benchmark.model.StartDeleteRunRequest;
 import com.dbagnets.backend.benchmark.model.StartInsertRunRequest;
 import com.dbagnets.backend.benchmark.model.StartReadRunRequest;
+import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.schema.LogicalRelationship;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
@@ -63,6 +65,7 @@ public class BenchmarkOpsController {
     private final DeleteRunOrchestrator deleteOrchestrator;
     private final DataSizeProbe dataSizeProbe;
     private final ComparisonReportService comparisonReportService;
+    private final EntityIdRegistry registryService;
 
     @GetMapping("/benchmarks/{benchmarkId}/entities")
     public List<EntityChoiceResponse> listEntities(@PathVariable String benchmarkId) {
@@ -118,6 +121,18 @@ public class BenchmarkOpsController {
         return ResponseEntity.ok(ReadRunResponse.from(run, request.sampleSize(), request.includeChildren()));
     }
 
+    @PostMapping("/benchmarks/{benchmarkId}/read-runs/prepare")
+    public PreparedRunResponse prepareReadRun(@PathVariable String benchmarkId,
+                                               @RequestBody StartReadRunRequest request) {
+        return readOrchestrator.prepareRun(benchmarkId, request);
+    }
+
+    @PostMapping("/read-runs/{runId}/confirm")
+    public ResponseEntity<Void> confirmReadRun(@PathVariable String runId) {
+        readOrchestrator.confirmRun(runId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/benchmarks/{benchmarkId}/read-runs")
     public List<ReadRunResponse> listReadRuns(@PathVariable String benchmarkId) {
         return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.READ)
@@ -138,6 +153,28 @@ public class BenchmarkOpsController {
                                                              @RequestBody StartDeleteRunRequest request) {
         BenchmarkRun run = deleteOrchestrator.startRun(benchmarkId, request);
         return ResponseEntity.ok(DeleteRunResponse.from(run, request.sampleSize(), request.includeChildren()));
+    }
+
+    @PostMapping("/benchmarks/{benchmarkId}/delete-runs/prepare")
+    public PreparedRunResponse prepareDeleteRun(@PathVariable String benchmarkId,
+                                                 @RequestBody StartDeleteRunRequest request) {
+        return deleteOrchestrator.prepareRun(benchmarkId, request);
+    }
+
+    @PostMapping("/delete-runs/{runId}/confirm")
+    public ResponseEntity<Void> confirmDeleteRun(@PathVariable String runId) {
+        deleteOrchestrator.confirmRun(runId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/benchmarks/{benchmarkId}/registry-summary")
+    public List<Map<String, Object>> getRegistrySummary(@PathVariable String benchmarkId) {
+        LogicalSchema schema = loadSchema(benchmarkId);
+        return schema.entities().stream()
+                .map(e -> Map.<String, Object>of(
+                        "entityName", e.name(),
+                        "availableIds", registryService.countLogicalIds(benchmarkId, e.name())))
+                .toList();
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/delete-runs")

@@ -116,18 +116,22 @@ public abstract class BoltDriverBase implements EngineDriver {
         String pk = ctx.schema().requireEntity(label).primaryKey()
                 .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + label))
                 .name();
-        String cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) DETACH DELETE n";
+        String rootCypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) DETACH DELETE n";
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsAffected = 0L;
+        java.util.Map<String, java.util.List<String>> cascadeAccumulator = new java.util.LinkedHashMap<>();
 
         long wireStart = System.nanoTime();
         try (Session session = neo.session()) {
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
                 long start = System.nanoTime();
-                var summary = session.run(cypher, Map.of("id", entry.physicalId())).consume();
+                if (ctx.includeChildren()) {
+                    cascadeChildrenBfs(session, ctx.schema(), label, entry.physicalId(), cascadeAccumulator);
+                }
+                var summary = session.run(rootCypher, Map.of("id", entry.physicalId())).consume();
                 long sampleNs = System.nanoTime() - start;
                 samples[i] = sampleNs;
                 totalDbTimeNs += sampleNs;
@@ -141,7 +145,84 @@ public abstract class BoltDriverBase implements EngineDriver {
                 .wireTimeNs(wireTimeNs)
                 .rowsAffected(rowsAffected)
                 .sampleDbTimeNs(samples)
+                .cascadeDeletedByEntity(cascadeAccumulator)
                 .build();
+    }
+
+    private void cascadeChildrenBfs(Session session,
+                                     com.dbagnets.backend.benchmark.schema.LogicalSchema schema,
+                                     String rootLabel,
+                                     Object rootId,
+                                     java.util.Map<String, java.util.List<String>> accumulator) {
+        java.util.Map<String, java.util.List<Object>> byEntity = new java.util.LinkedHashMap<>();
+        byEntity.put(rootLabel, new java.util.ArrayList<>(java.util.List.of(rootId)));
+        java.util.Set<String> visited = new java.util.HashSet<>();
+        java.util.Deque<String> queue = new java.util.ArrayDeque<>();
+        queue.add(rootLabel);
+
+        int safety = 0;
+        while (!queue.isEmpty() && safety++ < 16) {
+            String cur = queue.poll();
+            if (!visited.add(cur)) continue;
+            java.util.List<Object> curIds = byEntity.get(cur);
+            if (curIds == null || curIds.isEmpty()) continue;
+            String parentPk = schema.findEntity(cur)
+                    .flatMap(e -> e.primaryKey())
+                    .map(a -> a.name())
+                    .orElse(null);
+            if (parentPk == null) continue;
+
+            for (var rel : schema.relationships()) {
+                if (!rel.parentEntity().equalsIgnoreCase(cur)) continue;
+                String childLabel = rel.childEntity();
+                if (childLabel.equalsIgnoreCase(cur)) continue;
+                String childPk = schema.findEntity(childLabel)
+                        .flatMap(e -> e.primaryKey())
+                        .map(a -> a.name())
+                        .orElse(null);
+                if (childPk == null) continue;
+
+                String relType = (cur + "_" + childLabel).toUpperCase();
+                String cypher = "UNWIND $ids AS pid "
+                        + "MATCH (p:`" + cur + "` {" + parentPk + ": pid})-[:`" + relType + "`]->(c:`" + childLabel + "`) "
+                        + "RETURN DISTINCT c." + childPk + " AS id";
+                try {
+                    var result = session.run(cypher, Map.of("ids", curIds));
+                    java.util.List<Object> collected = new java.util.ArrayList<>();
+                    while (result.hasNext()) {
+                        Object v = result.next().get("id").asObject();
+                        if (v != null) collected.add(v);
+                    }
+                    if (!collected.isEmpty()) {
+                        byEntity.computeIfAbsent(childLabel, k -> new java.util.ArrayList<>()).addAll(collected);
+                        if (!visited.contains(childLabel)) queue.add(childLabel);
+                    }
+                } catch (Exception ex) {
+                    log.debug("Bolt cascade scan failed for {} → {}: {}", cur, childLabel, ex.getMessage());
+                }
+            }
+        }
+
+        java.util.List<String> deletionOrder = new java.util.ArrayList<>(byEntity.keySet());
+        java.util.Collections.reverse(deletionOrder);
+        for (String entityName : deletionOrder) {
+            if (entityName.equalsIgnoreCase(rootLabel)) continue;
+            java.util.List<Object> ids = byEntity.get(entityName);
+            if (ids == null || ids.isEmpty()) continue;
+            String childPk = schema.findEntity(entityName)
+                    .flatMap(e -> e.primaryKey())
+                    .map(a -> a.name())
+                    .orElse(null);
+            if (childPk == null) continue;
+            String cypher = "UNWIND $ids AS pid MATCH (n:`" + entityName + "` {" + childPk + ": pid}) DETACH DELETE n";
+            try {
+                session.run(cypher, Map.of("ids", ids)).consume();
+                accumulator.computeIfAbsent(entityName, k -> new java.util.ArrayList<>())
+                        .addAll(ids.stream().map(String::valueOf).toList());
+            } catch (Exception ex) {
+                log.warn("Bolt cascade delete failed for {}: {}", entityName, ex.getMessage());
+            }
+        }
     }
 
     private NodeOutcome createNodes(Session session,
