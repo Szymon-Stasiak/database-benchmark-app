@@ -45,7 +45,7 @@ export async function downloadChartAsPng(
     canvas.height = height * scale
     const ctx = canvas.getContext("2d")
     if (!ctx) throw new Error("Could not get 2D context")
-    ctx.fillStyle = readBgColor() ?? "#ffffff"
+    ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.scale(scale, scale)
     ctx.drawImage(img, 0, 0, width, height)
@@ -81,14 +81,6 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1_000)
 }
 
-function readBgColor(): string | null {
-  if (typeof window === "undefined") return null
-  const root = document.documentElement
-  const css = getComputedStyle(root).getPropertyValue("--background").trim()
-  if (!css) return null
-  if (css.startsWith("#") || css.startsWith("rgb") || css.startsWith("hsl")) return css
-  return `hsl(${css})`
-}
 
 function inlineComputedStyles(source: SVGSVGElement, target: SVGSVGElement): void {
   const sourceEls = source.querySelectorAll("*")

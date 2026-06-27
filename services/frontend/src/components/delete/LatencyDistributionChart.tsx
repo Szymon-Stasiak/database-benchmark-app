@@ -47,12 +47,12 @@ export function LatencyDistributionChart({ results }: Props) {
         {data.length === 0 ? (
           <p className="text-sm text-muted-foreground">No samples yet.</p>
         ) : (
-          <div ref={chartRef} className="h-72">
+          <div ref={chartRef} className="h-72 bg-white rounded-sm">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(v) => `${v.toFixed(2)}`} tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => `${v.toFixed(2)} ms`} tick={{ fontSize: 11 }} width={60} />
                 <Tooltip content={<LatencyTooltip />} cursor={{ fill: "var(--muted)", fillOpacity: 0.2 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="p50" name="p50" fill="#ef4444" radius={[3, 3, 0, 0]} />

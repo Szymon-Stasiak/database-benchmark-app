@@ -126,7 +126,7 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
         {chartData.length === 0 ? (
           <p className="text-sm text-muted-foreground">No databases yet.</p>
         ) : (
-          <div ref={chartRef} className="h-72">
+          <div ref={chartRef} className="h-72 bg-white rounded-sm">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />

@@ -76,7 +76,7 @@ export function ParadigmRadarChart({ scores }: Props) {
         </div>
       </CardHeader>
       <CardContent>
-        <div ref={chartRef} className="h-96">
+        <div ref={chartRef} className="h-96 bg-white rounded-sm">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart data={data}>
               <PolarGrid />
