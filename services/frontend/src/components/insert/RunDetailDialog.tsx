@@ -1,10 +1,14 @@
-import { useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
+import { ResourceMetricsChart } from "@/components/shared/ResourceMetricsChart"
+import { ResourceSummaryTable } from "@/components/shared/ResourceSummaryTable"
+import { insertApi } from "@/lib/api"
 import type { InsertResultResponse, InsertRunResponse } from "@/types/insert"
+import type { ContainerStatsEvent } from "@/types/resource"
 
 interface Props {
   run: InsertRunResponse | null
@@ -45,6 +49,7 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
   }, [run])
 
   const chartRef = useRef<HTMLDivElement | null>(null)
+  const resourceEvents = useResourceTimeline(run, open)
 
   if (!run) return null
 
@@ -89,6 +94,13 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
             </div>
           )}
 
+          {resourceEvents.length > 0 && (
+            <div className="space-y-3">
+              <ResourceMetricsChart events={resourceEvents} />
+              <ResourceSummaryTable results={run.results} />
+            </div>
+          )}
+
           <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
             {Array.from(byEntity.entries()).map(([entityName, rows]) => (
               <div key={entityName} className="rounded-lg border border-border">
@@ -128,6 +140,52 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
       </DialogContent>
     </Dialog>
   )
+}
+
+function useResourceTimeline(run: InsertRunResponse | null, open: boolean): ContainerStatsEvent[] {
+  const [events, setEvents] = useState<ContainerStatsEvent[]>([])
+
+  useEffect(() => {
+    if (!run || !open) {
+      setEvents([])
+      return
+    }
+    const resultsWithSamples = run.results.filter((r) => (r.resourceSampleCount ?? 0) > 0)
+    if (resultsWithSamples.length === 0) {
+      setEvents([])
+      return
+    }
+    let cancelled = false
+    Promise.all(
+      resultsWithSamples.map(async (result) => {
+        try {
+          const timeline = await insertApi.getResourceTimeline(run.id, result.id)
+          return timeline.map<ContainerStatsEvent>((sample) => ({
+            runId: run.id,
+            resultId: result.id,
+            databaseId: result.databaseId,
+            dbName: result.dbName,
+            operation: "insert",
+            timestamp: sample.tMs,
+            cpuPercent: sample.cpuPercent,
+            memoryBytes: sample.memoryBytes,
+            memoryLimitBytes: sample.memoryLimitBytes,
+          }))
+        } catch {
+          return []
+        }
+      }),
+    ).then((batches) => {
+      if (cancelled) return
+      const flattened = batches.flat().sort((a, b) => a.timestamp - b.timestamp)
+      setEvents(flattened)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [run, open])
+
+  return events
 }
 
 function formatMs(ms: number): string {

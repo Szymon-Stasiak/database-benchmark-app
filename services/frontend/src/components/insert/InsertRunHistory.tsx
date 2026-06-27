@@ -20,8 +20,6 @@ const STATUS_ICON: Record<InsertStatus, React.ComponentType<{ className?: string
   SKIPPED: MinusCircle,
 }
 
-const FALLBACK_ICON = Clock
-
 export function InsertRunHistory({ runs, selectedRunId, onSelect }: Props) {
   if (runs.length === 0) {
     return (

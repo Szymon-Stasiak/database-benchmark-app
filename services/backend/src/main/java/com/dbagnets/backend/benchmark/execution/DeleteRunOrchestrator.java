@@ -10,6 +10,8 @@ import com.dbagnets.backend.benchmark.preview.CascadePreviewService;
 import com.dbagnets.backend.benchmark.preview.RunPreview;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.resource.ContainerStatsCollector;
+import com.dbagnets.backend.benchmark.resource.ResourceMetricsSummary;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMappingLoader;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
@@ -61,6 +63,7 @@ public class DeleteRunOrchestrator {
     private final SseEmitterService sse;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final ContainerStatsCollector statsCollector;
 
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
@@ -198,6 +201,8 @@ public class DeleteRunOrchestrator {
         warmup(driver, schema, embeddings, benchmarkId, db, entityName, targets);
         Long sizeBefore = safeProbe(db);
         markStarted(benchmarkId, runId, resultId, sizeBefore);
+        ContainerStatsCollector.Handle statsHandle = statsCollector.start(
+                benchmarkId, runId, resultId, db.getId(), db.getDbName(), db.getContainerId(), "delete");
         try {
             DeleteContext ctx = new DeleteContext(
                     benchmarkId,
@@ -228,7 +233,27 @@ public class DeleteRunOrchestrator {
         } catch (Exception ex) {
             log.error("Delete failed for db {} run {}: {}", db.getDbName(), runId, ex.getMessage(), ex);
             markFailed(benchmarkId, runId, resultId, ex.getMessage());
+        } finally {
+            ResourceMetricsSummary summary = statsCollector.stop(statsHandle);
+            persistResourceSummary(benchmarkId, runId, resultId, summary);
         }
+    }
+
+    private void persistResourceSummary(String benchmarkId, String runId, String resultId, ResourceMetricsSummary summary) {
+        if (summary == null || summary.sampleCount() == null || summary.sampleCount() == 0) return;
+        transactionTemplate.executeWithoutResult(s -> {
+            BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
+            r.setCpuPercentMax(summary.cpuPercentMax());
+            r.setCpuPercentMean(summary.cpuPercentMean());
+            r.setCpuPercentP95(summary.cpuPercentP95());
+            r.setMemoryBytesMax(summary.memoryBytesMax());
+            r.setMemoryBytesMean(summary.memoryBytesMean());
+            r.setMemoryBytesP95(summary.memoryBytesP95());
+            r.setResourceSampleCount(summary.sampleCount());
+            r.setResourceSamplesJson(summary.samplesJson());
+            resultRepository.save(r);
+            broadcastResult(benchmarkId, runId, r);
+        });
     }
 
     private void warmup(EngineDriver driver,

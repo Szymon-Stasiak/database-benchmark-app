@@ -1,5 +1,6 @@
 import type { SelectionStrategy } from "./preview"
 import type { OperationMode } from "./delete"
+import type { ResourceMetricsFields } from "./resource"
 
 export type ReadStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
 
@@ -9,10 +10,11 @@ export interface StartReadRunRequest {
   includeChildren?: boolean | null
   selectionStrategy?: SelectionStrategy | null
   mode?: OperationMode | null
+  iterations?: number | null
   databaseIds: string[]
 }
 
-export interface ReadResultResponse {
+export interface ReadResultResponse extends ResourceMetricsFields {
   id: string
   databaseId: string
   dbName: string

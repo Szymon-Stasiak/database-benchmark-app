@@ -120,6 +120,54 @@ public class BenchmarkResult {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    @Setter
+    @Column(name = "cpu_percent_max")
+    private Double cpuPercentMax;
+
+    @Setter
+    @Column(name = "cpu_percent_mean")
+    private Double cpuPercentMean;
+
+    @Setter
+    @Column(name = "cpu_percent_p95")
+    private Double cpuPercentP95;
+
+    @Setter
+    @Column(name = "memory_bytes_max")
+    private Long memoryBytesMax;
+
+    @Setter
+    @Column(name = "memory_bytes_mean")
+    private Long memoryBytesMean;
+
+    @Setter
+    @Column(name = "memory_bytes_p95")
+    private Long memoryBytesP95;
+
+    @Setter
+    @Column(name = "resource_sample_count")
+    private Integer resourceSampleCount;
+
+    @Setter
+    @Column(name = "resource_samples_json", columnDefinition = "TEXT")
+    private String resourceSamplesJson;
+
+    @Setter
+    @Column(name = "scenario_type", columnDefinition = "TEXT")
+    private String scenarioType;
+
+    @Setter
+    @Column(name = "scenario_result_json", columnDefinition = "TEXT")
+    private String scenarioResultJson;
+
+    @Setter
+    @Column(name = "scenario_result_hash", columnDefinition = "TEXT")
+    private String scenarioResultHash;
+
+    @Setter
+    @Column(name = "scenario_rows_returned")
+    private Long scenarioRowsReturned;
+
     public BenchmarkResult(String databaseId, String dbName) {
         this.databaseId = databaseId;
         this.dbName = dbName;

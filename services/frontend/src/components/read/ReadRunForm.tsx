@@ -27,6 +27,7 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
 
   const [entityName, setEntityName] = useState<string>(entities[0]?.name ?? "")
   const [sampleSize, setSampleSize] = useState<number>(100)
+  const [iterations, setIterations] = useState<number>(1)
   const [includeChildren, setIncludeChildren] = useState<boolean>(true)
   const [mode, setMode] = useState<OperationMode>("SINGLE")
   const [selectedDbIds, setSelectedDbIds] = useState<Set<string>>(new Set())
@@ -56,8 +57,10 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
 
   const validate = (): string | null => {
     if (!entityName) return "Pick an entity to read."
-    if (sampleSize < 1 || sampleSize > 100_000)
-      return "Sample size must be between 1 and 100,000."
+    if (sampleSize < 1 || sampleSize > 1_000_000)
+      return "Sample size must be between 1 and 1,000,000."
+    if (iterations < 1 || iterations > 50)
+      return "Iterations must be between 1 and 50."
     if (selectedDbIds.size === 0) return "Select at least one running database."
     return null
   }
@@ -74,6 +77,7 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
       sampleSize,
       includeChildren,
       mode,
+      iterations,
       databaseIds: Array.from(selectedDbIds),
     })
   }
@@ -84,7 +88,7 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
         <CardTitle className="text-lg">Configure read run</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="entity-name">Entity</Label>
             <select
@@ -114,10 +118,30 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
               id="sample-size"
               type="number"
               min={1}
-              max={100_000}
+              max={1_000_000}
               value={sampleSize}
               onChange={(e) => setSampleSize(Math.max(1, Number(e.target.value)))}
             />
+            {iterations > 1 && (
+              <p className="text-[11px] text-muted-foreground">
+                Effective samples: {(sampleSize * iterations).toLocaleString()} ({iterations} × {sampleSize.toLocaleString()})
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="iterations">Iterations</Label>
+            <Input
+              id="iterations"
+              type="number"
+              min={1}
+              max={50}
+              value={iterations}
+              onChange={(e) => setIterations(Math.max(1, Math.min(50, Number(e.target.value))))}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Re-run the read N times. All samples merged → tighter percentiles.
+            </p>
           </div>
 
           <div className="space-y-1.5">

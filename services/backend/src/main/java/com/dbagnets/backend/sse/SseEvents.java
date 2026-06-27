@@ -22,6 +22,12 @@ public interface SseEvents {
     String EVENT_RUN_CONFLICT = "run_conflict";
     String EVENT_RUN_RESULT_UPDATE = "run_result_update";
 
+    String EVENT_CONTAINER_STATS = "container_stats";
+
+    String EVENT_SCENARIO_RUN_STATUS = "scenario_run_status";
+    String EVENT_SCENARIO_RUN_PREPARED = "scenario_run_prepared";
+    String EVENT_SCENARIO_RESULT_STATUS = "scenario_result_status";
+
     String EVENT_HEARTBEAT = "heartbeat";
     String EVENT_LOG = "log";
 

@@ -1,4 +1,5 @@
 import type { SelectionStrategy } from "./preview"
+import type { ResourceMetricsFields } from "./resource"
 
 export type DeleteStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
 export type OperationMode = "SINGLE" | "BATCH" | "BULK"
@@ -14,7 +15,7 @@ export interface StartDeleteRunRequest {
   databaseIds: string[]
 }
 
-export interface DeleteResultResponse {
+export interface DeleteResultResponse extends ResourceMetricsFields {
   id: string
   databaseId: string
   dbName: string

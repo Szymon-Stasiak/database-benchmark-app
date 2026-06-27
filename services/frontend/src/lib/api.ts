@@ -22,6 +22,14 @@ import type {
 } from "@/types/delete"
 import type { ComparisonReportResponse } from "@/types/comparison"
 import type { PreparedRunResponse, RegistrySummaryEntry } from "@/types/preview"
+import type { ResourceSample } from "@/types/resource"
+import type {
+  PreparedScenarioRunResponse,
+  ScenarioApplicabilityMap,
+  ScenarioRunResponse,
+  SchemaRelationship,
+  StartScenarioRunRequest,
+} from "@/types/scenario"
 
 class ApiError extends Error {
   status: number
@@ -226,6 +234,9 @@ export const insertApi = {
       method: "POST",
       body: JSON.stringify(req),
     }),
+
+  getResourceTimeline: (runId: string, resultId: string) =>
+    apiFetch<ResourceSample[]>(`/api/insert-runs/${runId}/results/${resultId}/resource-timeline`),
 }
 
 export const readApi = {
@@ -249,6 +260,9 @@ export const readApi = {
 
   getRun: (runId: string) =>
     apiFetch<ReadRunResponse>(`/api/read-runs/${runId}`),
+
+  getResourceTimeline: (runId: string, resultId: string) =>
+    apiFetch<ResourceSample[]>(`/api/read-runs/${runId}/results/${resultId}/resource-timeline`),
 }
 
 export const comparisonApi = {
@@ -279,6 +293,46 @@ export const deleteApi = {
 
   getRun: (runId: string) =>
     apiFetch<DeleteRunResponse>(`/api/delete-runs/${runId}`),
+
+  getResourceTimeline: (runId: string, resultId: string) =>
+    apiFetch<ResourceSample[]>(`/api/delete-runs/${runId}/results/${resultId}/resource-timeline`),
+}
+
+export const scenarioApi = {
+  getApplicability: (benchmarkId: string) =>
+    apiFetch<ScenarioApplicabilityMap>(`/api/benchmarks/${benchmarkId}/scenario-applicability`),
+
+  listRelationships: (benchmarkId: string) =>
+    apiFetch<SchemaRelationship[]>(`/api/benchmarks/${benchmarkId}/relationships`),
+
+  sampleEntityId: (benchmarkId: string, entityName: string, withChildren = false) =>
+    apiFetch<{ logicalId?: string }>(
+      `/api/benchmarks/${benchmarkId}/entities/${entityName}/sample-id${withChildren ? "?withChildren=true" : ""}`,
+    ),
+
+  listRuns: (benchmarkId: string) =>
+    apiFetch<ScenarioRunResponse[]>(`/api/benchmarks/${benchmarkId}/scenario-runs`),
+
+  prepareRun: (benchmarkId: string, req: StartScenarioRunRequest) =>
+    apiFetch<PreparedScenarioRunResponse>(`/api/benchmarks/${benchmarkId}/scenario-runs/prepare`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  confirmRun: (runId: string) =>
+    apiFetch<void>(`/api/scenario-runs/${runId}/confirm`, { method: "POST" }),
+
+  startRun: (benchmarkId: string, req: StartScenarioRunRequest) =>
+    apiFetch<ScenarioRunResponse>(`/api/benchmarks/${benchmarkId}/scenario-runs`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  getRun: (runId: string) =>
+    apiFetch<ScenarioRunResponse>(`/api/scenario-runs/${runId}`),
+
+  getResourceTimeline: (runId: string, resultId: string) =>
+    apiFetch<ResourceSample[]>(`/api/scenario-runs/${runId}/results/${resultId}/resource-timeline`),
 }
 
 export const registryApi = {

@@ -28,7 +28,14 @@ public record DeleteResultResponse(
         Integer samplesRecorded,
         Long dataSizeBefore,
         Long dataSizeAfter,
-        Long dataSizeDelta
+        Long dataSizeDelta,
+        Double cpuPercentMax,
+        Double cpuPercentMean,
+        Double cpuPercentP95,
+        Long memoryBytesMax,
+        Long memoryBytesMean,
+        Long memoryBytesP95,
+        Integer resourceSampleCount
 ) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Integer>> BREAKDOWN_TYPE = new TypeReference<>() {};
@@ -59,7 +66,14 @@ public record DeleteResultResponse(
                 r.getSamplesRecorded(),
                 r.getDataSizeBefore(),
                 r.getDataSizeAfter(),
-                delta);
+                delta,
+                r.getCpuPercentMax(),
+                r.getCpuPercentMean(),
+                r.getCpuPercentP95(),
+                r.getMemoryBytesMax(),
+                r.getMemoryBytesMean(),
+                r.getMemoryBytesP95(),
+                r.getResourceSampleCount());
     }
 
     private static Map<String, Integer> parseBreakdown(String json) {

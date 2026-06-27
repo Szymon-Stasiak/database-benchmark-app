@@ -20,7 +20,14 @@ public record ReadResultResponse(
         Long p95DbTimeUs,
         Long p99DbTimeUs,
         Long wireTimeMs,
-        Integer samplesRecorded
+        Integer samplesRecorded,
+        Double cpuPercentMax,
+        Double cpuPercentMean,
+        Double cpuPercentP95,
+        Long memoryBytesMax,
+        Long memoryBytesMean,
+        Long memoryBytesP95,
+        Integer resourceSampleCount
 ) {
     public static ReadResultResponse from(BenchmarkResult r) {
         return new ReadResultResponse(
@@ -39,7 +46,14 @@ public record ReadResultResponse(
                 toMicros(r.getP95DbTimeNs()),
                 toMicros(r.getP99DbTimeNs()),
                 r.getWireTimeNs() == null ? null : r.getWireTimeNs() / 1_000_000L,
-                r.getSamplesRecorded());
+                r.getSamplesRecorded(),
+                r.getCpuPercentMax(),
+                r.getCpuPercentMean(),
+                r.getCpuPercentP95(),
+                r.getMemoryBytesMax(),
+                r.getMemoryBytesMean(),
+                r.getMemoryBytesP95(),
+                r.getResourceSampleCount());
     }
 
     private static Long toMicros(Long ns) {

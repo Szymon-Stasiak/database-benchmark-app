@@ -5,13 +5,16 @@ import com.dbagnets.backend.benchmark.cascade.CascadeNode;
 import com.dbagnets.backend.benchmark.cascade.CascadePlan;
 import com.dbagnets.backend.benchmark.cascade.CascadePlanner;
 import com.dbagnets.backend.benchmark.cascade.LeafChoice;
+import com.dbagnets.backend.benchmark.execution.BenchmarkResult;
+import com.dbagnets.backend.benchmark.execution.BenchmarkResultRepository;
 import com.dbagnets.backend.benchmark.execution.BenchmarkRun;
 import com.dbagnets.backend.benchmark.execution.BenchmarkRunRepository;
 import com.dbagnets.backend.benchmark.execution.ComparisonReportService;
+import com.dbagnets.backend.benchmark.execution.OperationType;
 import com.dbagnets.backend.benchmark.execution.DeleteRunOrchestrator;
 import com.dbagnets.backend.benchmark.execution.InsertRunOrchestrator;
-import com.dbagnets.backend.benchmark.execution.OperationType;
 import com.dbagnets.backend.benchmark.execution.ReadRunOrchestrator;
+import com.dbagnets.backend.benchmark.execution.ScenarioRunOrchestrator;
 import com.dbagnets.backend.benchmark.model.CascadePreviewRequest;
 import com.dbagnets.backend.benchmark.model.CascadePreviewResponse;
 import com.dbagnets.backend.benchmark.model.ComparisonReportResponse;
@@ -26,7 +29,16 @@ import com.dbagnets.backend.benchmark.model.ReadRunResponse;
 import com.dbagnets.backend.benchmark.model.StartDeleteRunRequest;
 import com.dbagnets.backend.benchmark.model.StartInsertRunRequest;
 import com.dbagnets.backend.benchmark.model.StartReadRunRequest;
+import com.dbagnets.backend.benchmark.model.StartScenarioRunRequest;
+import com.dbagnets.backend.benchmark.model.PreparedScenarioRunResponse;
+import com.dbagnets.backend.benchmark.model.ScenarioRunResponse;
+import com.dbagnets.backend.benchmark.driver.pg.PgConnectionInfo;
+import com.dbagnets.backend.benchmark.driver.pg.PgDataSourceCache;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
+import com.dbagnets.backend.benchmark.resource.ResourceSample;
+import com.dbagnets.backend.benchmark.scenario.ScenarioApplicability;
+import com.dbagnets.backend.benchmark.scenario.ScenarioType;
+import com.dbagnets.backend.entity.DatabaseEngine;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.schema.LogicalRelationship;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
@@ -35,6 +47,8 @@ import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.entity.Benchmark;
 import com.dbagnets.backend.entity.BenchmarkDatabase;
 import com.dbagnets.backend.repository.BenchmarkRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -58,14 +72,21 @@ public class BenchmarkOpsController {
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkRunRepository runRepository;
+    private final BenchmarkResultRepository resultRepository;
     private final LogicalSchemaLoader schemaLoader;
     private final CascadePlanner planner;
     private final InsertRunOrchestrator insertOrchestrator;
     private final ReadRunOrchestrator readOrchestrator;
     private final DeleteRunOrchestrator deleteOrchestrator;
+    private final ScenarioRunOrchestrator scenarioOrchestrator;
     private final DataSizeProbe dataSizeProbe;
     private final ComparisonReportService comparisonReportService;
     private final EntityIdRegistry registryService;
+    private final PgDataSourceCache pgDataSourceCache;
+    private final ObjectMapper objectMapper;
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(BenchmarkOpsController.class);
+
+    private static final TypeReference<List<ResourceSample>> RESOURCE_SAMPLES_TYPE = new TypeReference<>() {};
 
     @GetMapping("/benchmarks/{benchmarkId}/entities")
     public List<EntityChoiceResponse> listEntities(@PathVariable String benchmarkId) {
@@ -195,6 +216,162 @@ public class BenchmarkOpsController {
     @GetMapping("/benchmarks/{benchmarkId}/comparison-report")
     public ComparisonReportResponse getComparisonReport(@PathVariable String benchmarkId) {
         return comparisonReportService.build(benchmarkId);
+    }
+
+    @PostMapping("/benchmarks/{benchmarkId}/scenario-runs/prepare")
+    public PreparedScenarioRunResponse prepareScenarioRun(@PathVariable String benchmarkId,
+                                                            @RequestBody StartScenarioRunRequest request) {
+        return scenarioOrchestrator.prepareRun(benchmarkId, request);
+    }
+
+    @PostMapping("/scenario-runs/{runId}/confirm")
+    public ResponseEntity<Void> confirmScenarioRun(@PathVariable String runId) {
+        scenarioOrchestrator.confirmRun(runId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/benchmarks/{benchmarkId}/scenario-runs")
+    public ResponseEntity<ScenarioRunResponse> startScenarioRun(@PathVariable String benchmarkId,
+                                                                  @RequestBody StartScenarioRunRequest request) {
+        BenchmarkRun run = scenarioOrchestrator.startRun(benchmarkId, request);
+        return ResponseEntity.ok(ScenarioRunResponse.from(run));
+    }
+
+    @GetMapping("/benchmarks/{benchmarkId}/scenario-runs")
+    public List<ScenarioRunResponse> listScenarioRuns(@PathVariable String benchmarkId) {
+        return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.SCENARIO)
+                .stream()
+                .map(ScenarioRunResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/scenario-runs/{runId}")
+    public ScenarioRunResponse getScenarioRun(@PathVariable String runId) {
+        BenchmarkRun run = runRepository.findById(runId)
+                .orElseThrow(() -> new NoSuchElementException("Scenario run not found: " + runId));
+        return ScenarioRunResponse.from(run);
+    }
+
+    @GetMapping("/benchmarks/{benchmarkId}/entities/{entityName}/sample-id")
+    public Map<String, String> sampleEntityId(
+            @PathVariable String benchmarkId,
+            @PathVariable String entityName,
+            @org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "false") boolean withChildren) {
+        if (withChildren) {
+            String id = sampleParentIdWithChildren(benchmarkId, entityName);
+            if (id != null) return Map.of("logicalId", id);
+        }
+        List<String> ids = registryService.sampleLogicalIds(benchmarkId, entityName, 1);
+        return ids.isEmpty() ? Map.of() : Map.of("logicalId", ids.get(0));
+    }
+
+    private String sampleParentIdWithChildren(String benchmarkId, String parentEntity) {
+        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
+                .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId));
+        LogicalSchema schema = loadSchema(benchmarkId);
+        LogicalRelationship rel = schema.relationships().stream()
+                .filter(r -> r.parentEntity().equalsIgnoreCase(parentEntity))
+                .findFirst()
+                .orElse(null);
+        if (rel == null) return null;
+        BenchmarkDatabase pgDb = benchmark.getDatabases().stream()
+                .filter(d -> "postgresql".equalsIgnoreCase(d.getDbName())
+                        && d.getStatus() == com.dbagnets.backend.entity.DatabaseStatus.RUNNING
+                        && d.getHostPort() != null)
+                .findFirst()
+                .orElse(null);
+        if (pgDb == null) return null;
+        String fk = rel.fkColumnInChild();
+        String childTable = "\"" + rel.childEntity().toLowerCase() + "\"";
+        String fkCol = "\"" + fk.toLowerCase() + "\"";
+        String sql = "SELECT " + fkCol + " FROM " + childTable
+                + " WHERE " + fkCol + " IS NOT NULL ORDER BY RANDOM() LIMIT 1";
+        try {
+            PgConnectionInfo info = PgConnectionInfo.defaultLocal(pgDb.getId(), HOST_ADDRESS, pgDb.getHostPort());
+            javax.sql.DataSource ds = pgDataSourceCache.get(info);
+            try (java.sql.Connection conn = ds.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement(sql);
+                 java.sql.ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getString(1);
+            }
+        } catch (Exception e) {
+            LOG.warn("sample-id-with-children fallback for {}: {}", parentEntity, e.getMessage());
+        }
+        return null;
+    }
+
+    @GetMapping("/benchmarks/{benchmarkId}/relationships")
+    public List<Map<String, Object>> listRelationships(@PathVariable String benchmarkId) {
+        LogicalSchema schema = loadSchema(benchmarkId);
+        return schema.relationships().stream()
+                .map(r -> Map.<String, Object>of(
+                        "name", r.name() == null ? "" : r.name(),
+                        "parentEntity", r.parentEntity(),
+                        "childEntity", r.childEntity(),
+                        "fkColumnInChild", r.fkColumnInChild() == null ? "" : r.fkColumnInChild(),
+                        "cardinality", r.cardinality() == null ? "" : r.cardinality().name()))
+                .toList();
+    }
+
+    @GetMapping("/benchmarks/{benchmarkId}/scenario-applicability")
+    public Map<String, List<String>> getScenarioApplicability(@PathVariable String benchmarkId) {
+        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
+                .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId));
+        Map<String, List<String>> result = new HashMap<>();
+        for (ScenarioType type : ScenarioType.values()) {
+            List<String> applicableDbIds = new java.util.ArrayList<>();
+            for (BenchmarkDatabase db : benchmark.getDatabases()) {
+                try {
+                    DatabaseEngine engine = DatabaseEngine.of(db.getDbName());
+                    if (ScenarioApplicability.isApplicable(type, engine)) {
+                        applicableDbIds.add(db.getId());
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            result.put(type.name(), applicableDbIds);
+        }
+        return result;
+    }
+
+    @GetMapping("/scenario-runs/{runId}/results/{resultId}/resource-timeline")
+    public List<ResourceSample> getScenarioResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+        return loadResourceTimeline(runId, resultId, OperationType.SCENARIO);
+    }
+
+    @GetMapping("/insert-runs/{runId}/results/{resultId}/resource-timeline")
+    public List<ResourceSample> getInsertResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+        return loadResourceTimeline(runId, resultId, OperationType.INSERT);
+    }
+
+    @GetMapping("/read-runs/{runId}/results/{resultId}/resource-timeline")
+    public List<ResourceSample> getReadResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+        return loadResourceTimeline(runId, resultId, OperationType.READ);
+    }
+
+    @GetMapping("/delete-runs/{runId}/results/{resultId}/resource-timeline")
+    public List<ResourceSample> getDeleteResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+        return loadResourceTimeline(runId, resultId, OperationType.DELETE);
+    }
+
+    private List<ResourceSample> loadResourceTimeline(String runId, String resultId, OperationType expected) {
+        BenchmarkRun run = runRepository.findById(runId)
+                .orElseThrow(() -> new NoSuchElementException("Run not found: " + runId));
+        if (run.getOperationType() != expected) {
+            throw new IllegalArgumentException("Run " + runId + " is not a " + expected.name() + " run");
+        }
+        BenchmarkResult result = resultRepository.findById(resultId)
+                .orElseThrow(() -> new NoSuchElementException("Result not found: " + resultId));
+        if (!result.getRun().getId().equals(runId)) {
+            throw new IllegalArgumentException("Result " + resultId + " does not belong to run " + runId);
+        }
+        String json = result.getResourceSamplesJson();
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, RESOURCE_SAMPLES_TYPE);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/database-sizes")

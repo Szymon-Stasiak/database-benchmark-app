@@ -4,13 +4,20 @@ import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, CheckCircle2, Clock, Loader2, MinusCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useInsertRunEvents } from "@/hooks/useInsertRunEvents"
+import { useArchivedResourceTimeline } from "@/hooks/useArchivedResourceTimeline"
 import { ProgressPerDb, progressKey } from "@/components/insert/ProgressPerDb"
+import { ResourceMetricsChart } from "@/components/shared/ResourceMetricsChart"
+import { ResourceSummaryTable } from "@/components/shared/ResourceSummaryTable"
+import { insertApi } from "@/lib/api"
 import type {
   BatchProgressEvent,
   InsertResultResponse,
   InsertRunResponse,
   InsertStatus,
 } from "@/types/insert"
+import type { ContainerStatsEvent } from "@/types/resource"
+
+const MAX_LIVE_SAMPLES = 4000
 
 interface Props {
   benchmarkId: string
@@ -35,6 +42,7 @@ const FALLBACK_STATUS_CFG = STATUS_CONFIG.PENDING
 
 export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [progress, setProgress] = useState<Map<string, BatchProgressEvent>>(new Map())
+  const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
 
   useInsertRunEvents(benchmarkId, run.id, {
     onRunStatus: (status) => onRunStatusChange(run.id, status),
@@ -46,9 +54,26 @@ export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onRe
         return next
       })
     },
+    onContainerStats: (evt) => {
+      setStatsEvents((prev) => {
+        const next = prev.length >= MAX_LIVE_SAMPLES ? prev.slice(prev.length - MAX_LIVE_SAMPLES + 1) : prev
+        return [...next, evt]
+      })
+    },
   })
 
+  const archivedEvents = useArchivedResourceTimeline({
+    runId: run.id,
+    status: run.status,
+    results: run.results,
+    operation: "insert",
+    loadTimeline: insertApi.getResourceTimeline,
+    enabled: statsEvents.length === 0,
+  })
+  const chartEvents = statsEvents.length > 0 ? statsEvents : archivedEvents
+
   const cfg = STATUS_CONFIG[run.status] ?? FALLBACK_STATUS_CFG
+  const isFinished = run.status === "SUCCESS" || run.status === "FAILED" || run.status === "PARTIAL"
 
   return (
     <Card>
@@ -68,8 +93,10 @@ export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onRe
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <ProgressPerDb run={run} progress={progress} />
+        <ResourceMetricsChart events={chartEvents} />
+        {isFinished && <ResourceSummaryTable results={run.results} />}
       </CardContent>
     </Card>
   )

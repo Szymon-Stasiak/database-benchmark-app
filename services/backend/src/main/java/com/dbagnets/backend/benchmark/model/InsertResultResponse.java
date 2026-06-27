@@ -19,7 +19,14 @@ public record InsertResultResponse(
         Long dbTimeMs,
         Long wireTimeMs,
         Long overheadMs,
-        Integer conflictsSkipped
+        Integer conflictsSkipped,
+        Double cpuPercentMax,
+        Double cpuPercentMean,
+        Double cpuPercentP95,
+        Long memoryBytesMax,
+        Long memoryBytesMean,
+        Long memoryBytesP95,
+        Integer resourceSampleCount
 ) {
     public static InsertResultResponse from(BenchmarkResult r) {
         Long duration = r.durationMs();
@@ -44,6 +51,13 @@ public record InsertResultResponse(
                 dbMs,
                 wireMs,
                 overheadMs,
-                r.getConflictsSkipped());
+                r.getConflictsSkipped(),
+                r.getCpuPercentMax(),
+                r.getCpuPercentMean(),
+                r.getCpuPercentP95(),
+                r.getMemoryBytesMax(),
+                r.getMemoryBytesMean(),
+                r.getMemoryBytesP95(),
+                r.getResourceSampleCount());
     }
 }

@@ -17,6 +17,8 @@ import com.dbagnets.backend.benchmark.model.EntityCascadeChoiceDto;
 import com.dbagnets.backend.benchmark.model.InsertResultResponse;
 import com.dbagnets.backend.benchmark.model.StartInsertRunRequest;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
+import com.dbagnets.backend.benchmark.resource.ContainerStatsCollector;
+import com.dbagnets.backend.benchmark.resource.ResourceMetricsSummary;
 import com.dbagnets.backend.benchmark.size.DataSizeProbe;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMappingLoader;
@@ -70,6 +72,7 @@ public class InsertRunOrchestrator {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
     private final DataSizeProbe dataSizeProbe;
+    private final ContainerStatsCollector statsCollector;
 
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
@@ -166,6 +169,8 @@ public class InsertRunOrchestrator {
         EmbeddingMap embeddings = EmbeddingMap.from(embeddingLoader.parse(db.getEmbeddingMappings()));
 
         markStarted(benchmarkId, runId, resultId);
+        ContainerStatsCollector.Handle statsHandle = statsCollector.start(
+                benchmarkId, runId, resultId, db.getId(), db.getDbName(), db.getContainerId(), "insert");
         BatchProgress progress = new BatchProgress() {
             @Override
             public void onBatch(String entityName, int idx, int total, long done, long all) {
@@ -204,7 +209,27 @@ public class InsertRunOrchestrator {
         } catch (Exception ex) {
             log.error("Insert failed for db {} run {}: {}", db.getDbName(), runId, ex.getMessage(), ex);
             markFailed(benchmarkId, runId, resultId, ex.getMessage());
+        } finally {
+            ResourceMetricsSummary summary = statsCollector.stop(statsHandle);
+            persistResourceSummary(benchmarkId, runId, resultId, summary);
         }
+    }
+
+    private void persistResourceSummary(String benchmarkId, String runId, String resultId, ResourceMetricsSummary summary) {
+        if (summary == null || summary.sampleCount() == null || summary.sampleCount() == 0) return;
+        transactionTemplate.executeWithoutResult(s -> {
+            BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
+            r.setCpuPercentMax(summary.cpuPercentMax());
+            r.setCpuPercentMean(summary.cpuPercentMean());
+            r.setCpuPercentP95(summary.cpuPercentP95());
+            r.setMemoryBytesMax(summary.memoryBytesMax());
+            r.setMemoryBytesMean(summary.memoryBytesMean());
+            r.setMemoryBytesP95(summary.memoryBytesP95());
+            r.setResourceSampleCount(summary.sampleCount());
+            r.setResourceSamplesJson(summary.samplesJson());
+            resultRepository.save(r);
+            broadcastResult(benchmarkId, runId, r);
+        });
     }
 
     private void markStarted(String benchmarkId, String runId, String resultId) {

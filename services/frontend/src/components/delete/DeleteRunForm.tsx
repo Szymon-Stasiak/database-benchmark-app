@@ -55,8 +55,8 @@ export function DeleteRunForm({ entities, databases, loading, registry, onPrevie
 
   const validate = (): string | null => {
     if (!entityName) return "Pick an entity to delete from."
-    if (sampleSize < 1 || sampleSize > 100_000)
-      return "Sample size must be between 1 and 100,000."
+    if (sampleSize < 1 || sampleSize > 1_000_000)
+      return "Sample size must be between 1 and 1,000,000."
     if (selectedDbIds.size === 0) return "Select at least one running database."
     return null
   }
@@ -114,7 +114,7 @@ export function DeleteRunForm({ entities, databases, loading, registry, onPrevie
               id="sample-size"
               type="number"
               min={1}
-              max={100_000}
+              max={1_000_000}
               value={sampleSize}
               onChange={(e) => setSampleSize(Math.max(1, Number(e.target.value)))}
             />

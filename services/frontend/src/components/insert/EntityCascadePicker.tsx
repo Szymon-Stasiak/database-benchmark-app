@@ -176,7 +176,7 @@ export function EntityCascadePicker({ entities, benchmarkId, onCascadeReady }: P
       return
     }
     const invalid = Array.from(selection.values()).some(
-      (c) => !Number.isFinite(c.recordCount) || c.recordCount < 1 || c.recordCount > 100_000,
+      (c) => !Number.isFinite(c.recordCount) || c.recordCount < 1 || c.recordCount > 1_000_000,
     )
     if (invalid) {
       onCascadeReady([])
@@ -199,7 +199,7 @@ export function EntityCascadePicker({ entities, benchmarkId, onCascadeReady }: P
   }, [preview, pickedNames])
 
   const MIN_RECORDS = 1
-  const MAX_RECORDS = 100_000
+  const MAX_RECORDS = 1_000_000
 
   const invalidEntries = useMemo(() => {
     const out: { name: string; reason: string }[] = []
@@ -300,7 +300,7 @@ function EntityCard({
       ? "Type a number"
       : config.recordCount < 1
         ? "Must be ≥ 1"
-        : config.recordCount > 100_000
+        : config.recordCount > 1_000_000
           ? "Max is 100 000"
           : null
   const invalid = invalidReason !== null
@@ -351,7 +351,7 @@ function EntityCard({
             <Input
               type="number"
               min={1}
-              max={100_000}
+              max={1_000_000}
               value={config.recordCount}
               onChange={(e) => onCountChange(Number(e.target.value))}
               className={cn(

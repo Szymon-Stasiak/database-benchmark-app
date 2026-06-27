@@ -69,8 +69,8 @@ export function InsertRunForm({ entities, databases, benchmarkId, loading, onSub
 
   const validate = (): string | null => {
     if (cascadeChoices.length === 0) return "Pick at least one leaf entity to insert."
-    if (mode === "BATCH" && (batchSize < 1 || batchSize > 100_000))
-      return "Batch size must be between 1 and 100,000."
+    if (mode === "BATCH" && (batchSize < 1 || batchSize > 1_000_000))
+      return "Batch size must be between 1 and 1,000,000."
     if (workerCount < 1 || workerCount > 64) return "Workers must be between 1 and 64."
     if (selectedDbIds.size === 0) return "Select at least one running database."
     return null
@@ -127,7 +127,7 @@ export function InsertRunForm({ entities, databases, benchmarkId, loading, onSub
                 id="batch-size"
                 type="number"
                 min={1}
-                max={100_000}
+                max={1_000_000}
                 value={batchSize}
                 onChange={(e) => setBatchSize(Math.max(1, Number(e.target.value)))}
               />

@@ -1,3 +1,5 @@
+import type { ResourceMetricsFields } from "./resource"
+
 export type InsertMode = "SINGLE" | "BATCH" | "BULK"
 
 export const INSERT_MODE_LABELS: Record<InsertMode, string> = {
@@ -67,7 +69,7 @@ export interface CascadePreviewResponse {
   edges: CascadePreviewEdge[]
 }
 
-export interface InsertResultResponse {
+export interface InsertResultResponse extends ResourceMetricsFields {
   id: string
   databaseId: string
   dbName: string

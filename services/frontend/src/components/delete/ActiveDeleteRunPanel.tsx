@@ -1,10 +1,18 @@
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, Clock, Loader2, XCircle, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useDeleteRunEvents } from "@/hooks/useDeleteRunEvents"
+import { useArchivedResourceTimeline } from "@/hooks/useArchivedResourceTimeline"
 import { LatencyDistributionChart } from "@/components/delete/LatencyDistributionChart"
+import { ResourceMetricsChart } from "@/components/shared/ResourceMetricsChart"
+import { ResourceSummaryTable } from "@/components/shared/ResourceSummaryTable"
+import { deleteApi } from "@/lib/api"
 import type { DeleteResultResponse, DeleteRunResponse, DeleteStatus } from "@/types/delete"
+import type { ContainerStatsEvent } from "@/types/resource"
+
+const MAX_LIVE_SAMPLES = 4000
 
 interface Props {
   benchmarkId: string
@@ -26,12 +34,31 @@ const STATUS_CONFIG: Record<
 }
 
 export function ActiveDeleteRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
+  const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
+
   useDeleteRunEvents(benchmarkId, run.id, {
     onRunStatus: (status) => onRunStatusChange(run.id, status),
     onResultUpdate: (result) => onResultUpdate(run.id, result),
+    onContainerStats: (evt) => {
+      setStatsEvents((prev) => {
+        const next = prev.length >= MAX_LIVE_SAMPLES ? prev.slice(prev.length - MAX_LIVE_SAMPLES + 1) : prev
+        return [...next, evt]
+      })
+    },
   })
 
+  const archivedEvents = useArchivedResourceTimeline({
+    runId: run.id,
+    status: run.status,
+    results: run.results,
+    operation: "delete",
+    loadTimeline: deleteApi.getResourceTimeline,
+    enabled: statsEvents.length === 0,
+  })
+  const chartEvents = statsEvents.length > 0 ? statsEvents : archivedEvents
+
   const cfg = STATUS_CONFIG[run.status]
+  const isFinished = run.status === "SUCCESS" || run.status === "FAILED" || run.status === "PARTIAL"
 
   return (
     <Card>
@@ -59,6 +86,8 @@ export function ActiveDeleteRunPanel({ benchmarkId, run, onRunStatusChange, onRe
       <CardContent className="space-y-4">
         <ResultsTable results={run.results} />
         <LatencyDistributionChart results={run.results} />
+        <ResourceMetricsChart events={chartEvents} />
+        {isFinished && <ResourceSummaryTable results={run.results} />}
       </CardContent>
     </Card>
   )

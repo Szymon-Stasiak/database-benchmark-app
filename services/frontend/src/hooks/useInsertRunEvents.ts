@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react"
 import { connectSse, type SseEvent } from "@/lib/sseClient"
 import type { BatchProgressEvent, InsertResultResponse, InsertStatus } from "@/types/insert"
+import type { ContainerStatsEvent } from "@/types/resource"
 
 interface Handlers {
   onRunStatus?: (status: InsertStatus) => void
   onResultUpdate?: (result: InsertResultResponse) => void
   onBatchProgress?: (event: BatchProgressEvent) => void
+  onContainerStats?: (event: ContainerStatsEvent) => void
 }
 
 export function useInsertRunEvents(
@@ -32,6 +34,10 @@ export function useInsertRunEvents(
 }
 
 function matchesRun(event: SseEvent, runId: string): boolean {
+  if (event.type === "container_stats") {
+    const data = event.data as { runId?: string; operation?: string }
+    return data?.runId === runId && data?.operation === "insert"
+  }
   if (
     event.type !== "insert_run_status" &&
     event.type !== "insert_result_status" &&
@@ -53,6 +59,9 @@ function dispatch(target: Handlers, event: SseEvent) {
       break
     case "insert_batch_progress":
       target.onBatchProgress?.(event.data as BatchProgressEvent)
+      break
+    case "container_stats":
+      target.onContainerStats?.(event.data as ContainerStatsEvent)
       break
   }
 }

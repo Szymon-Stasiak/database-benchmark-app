@@ -10,6 +10,8 @@ import com.dbagnets.backend.benchmark.preview.CascadePreviewService;
 import com.dbagnets.backend.benchmark.preview.RunPreview;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.resource.ContainerStatsCollector;
+import com.dbagnets.backend.benchmark.resource.ResourceMetricsSummary;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMappingLoader;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
@@ -61,6 +63,7 @@ public class ReadRunOrchestrator {
     private final SseEmitterService sse;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final ContainerStatsCollector statsCollector;
 
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
@@ -134,6 +137,7 @@ public class ReadRunOrchestrator {
             List<String> selectedIds = parseSelectedIds(run.getSelectedIdsJson());
             boolean includeChildren = parseIncludeChildren(run.getConfigJson());
             com.dbagnets.backend.benchmark.driver.InsertMode mode = parseMode(run.getConfigJson());
+            int iterations = parseIterations(run.getConfigJson());
             String entityName = run.getEntityName();
 
             run.setStatus(RunStatus.RUNNING);
@@ -144,7 +148,7 @@ public class ReadRunOrchestrator {
             for (BenchmarkResult result : run.getResults()) {
                 futures.add(CompletableFuture.runAsync(
                         () -> runForDatabase(benchmarkId, runId, result.getId(),
-                                entityName, selectedIds, includeChildren, mode, schema),
+                                entityName, selectedIds, includeChildren, mode, iterations, schema),
                         asyncExecutor));
             }
             CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
@@ -169,6 +173,7 @@ public class ReadRunOrchestrator {
                                  List<String> selectedLogicalIds,
                                  boolean includeChildren,
                                  com.dbagnets.backend.benchmark.driver.InsertMode mode,
+                                 int iterations,
                                  LogicalSchema schema) {
         BenchmarkDatabase db = transactionTemplate.execute(s ->
                 benchmarkRepository.findById(benchmarkId).orElseThrow()
@@ -198,6 +203,8 @@ public class ReadRunOrchestrator {
         warmup(driver, schema, embeddings, benchmarkId, db, entityName, targets);
         Long sizeBefore = safeProbe(db);
         markStarted(benchmarkId, runId, resultId, sizeBefore);
+        ContainerStatsCollector.Handle statsHandle = statsCollector.start(
+                benchmarkId, runId, resultId, db.getId(), db.getDbName(), db.getContainerId(), "read");
         try {
             ReadContext ctx = new ReadContext(
                     benchmarkId,
@@ -212,13 +219,37 @@ public class ReadRunOrchestrator {
                     targets,
                     includeChildren,
                     mode);
-            TimedOperation timed = driver.read(ctx);
+            List<TimedOperation> perIteration = new ArrayList<>(iterations);
+            for (int i = 0; i < iterations; i++) {
+                perIteration.add(driver.read(ctx));
+            }
+            TimedOperation timed = mergeTimedOps(perIteration);
             Long sizeAfter = safeProbe(db);
             persistSuccess(benchmarkId, runId, resultId, timed, sizeAfter);
         } catch (Exception ex) {
             log.error("Read failed for db {} run {}: {}", db.getDbName(), runId, ex.getMessage(), ex);
             markFailed(benchmarkId, runId, resultId, ex.getMessage());
+        } finally {
+            ResourceMetricsSummary summary = statsCollector.stop(statsHandle);
+            persistResourceSummary(benchmarkId, runId, resultId, summary);
         }
+    }
+
+    private void persistResourceSummary(String benchmarkId, String runId, String resultId, ResourceMetricsSummary summary) {
+        if (summary == null || summary.sampleCount() == null || summary.sampleCount() == 0) return;
+        transactionTemplate.executeWithoutResult(s -> {
+            BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
+            r.setCpuPercentMax(summary.cpuPercentMax());
+            r.setCpuPercentMean(summary.cpuPercentMean());
+            r.setCpuPercentP95(summary.cpuPercentP95());
+            r.setMemoryBytesMax(summary.memoryBytesMax());
+            r.setMemoryBytesMean(summary.memoryBytesMean());
+            r.setMemoryBytesP95(summary.memoryBytesP95());
+            r.setResourceSampleCount(summary.sampleCount());
+            r.setResourceSamplesJson(summary.samplesJson());
+            resultRepository.save(r);
+            broadcastResult(benchmarkId, runId, r);
+        });
     }
 
     private void warmup(EngineDriver driver,
@@ -410,6 +441,43 @@ public class ReadRunOrchestrator {
         } catch (Exception e) {
             return com.dbagnets.backend.benchmark.driver.InsertMode.SINGLE;
         }
+    }
+
+    private int parseIterations(String configJson) {
+        if (configJson == null) return 1;
+        try {
+            StartReadRunRequest req = objectMapper.readValue(configJson, StartReadRunRequest.class);
+            return req.iterationsOrDefault();
+        } catch (Exception e) {
+            return 1;
+        }
+    }
+
+    private TimedOperation mergeTimedOps(List<TimedOperation> ops) {
+        if (ops.size() == 1) return ops.get(0);
+        long dbTimeNs = 0;
+        long wireTimeNs = 0;
+        long rowsAffected = 0;
+        int totalSamples = 0;
+        for (TimedOperation op : ops) {
+            dbTimeNs += op.dbTimeNs();
+            wireTimeNs += op.wireTimeNs();
+            rowsAffected += op.rowsAffected();
+            totalSamples += op.sampleDbTimeNs().length;
+        }
+        long[] mergedSamples = new long[totalSamples];
+        int offset = 0;
+        for (TimedOperation op : ops) {
+            long[] samples = op.sampleDbTimeNs();
+            System.arraycopy(samples, 0, mergedSamples, offset, samples.length);
+            offset += samples.length;
+        }
+        return TimedOperation.builder()
+                .dbTimeNs(dbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(rowsAffected)
+                .sampleDbTimeNs(mergedSamples)
+                .build();
     }
 
     private int orDefault(Integer value, int fallback) {
