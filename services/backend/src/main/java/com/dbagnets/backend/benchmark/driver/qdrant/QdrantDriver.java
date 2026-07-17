@@ -7,12 +7,19 @@ import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.InsertContext;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.scenario.AggregateParams;
+import com.dbagnets.backend.benchmark.scenario.KnnParams;
+import com.dbagnets.backend.benchmark.scenario.RangeParams;
+import com.dbagnets.backend.benchmark.scenario.ResultCanonicalizer;
+import com.dbagnets.backend.benchmark.scenario.ScenarioContext;
+import com.dbagnets.backend.benchmark.scenario.ScenarioResult;
+import com.dbagnets.backend.benchmark.scenario.TraversalParams;
 import com.dbagnets.backend.benchmark.schema.LogicalAttribute;
 import com.dbagnets.backend.benchmark.schema.LogicalDataType;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -258,6 +265,65 @@ public class QdrantDriver implements EngineDriver {
             case BATCH -> Math.max(1, ctx.batchSize());
             case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 1_000);
         };
+    }
+
+    @Override
+    public ScenarioOutcome runScenario(ScenarioContext ctx) {
+        if (!(ctx.params() instanceof KnnParams knn)) {
+            throw new UnsupportedOperationException(engine() + " only supports VECTOR_KNN");
+        }
+        if (ctx.params() instanceof AggregateParams || ctx.params() instanceof RangeParams
+                || ctx.params() instanceof TraversalParams) {
+            throw new UnsupportedOperationException(engine() + " does not support " + ctx.type());
+        }
+        WebClient client = WebClient.builder()
+                .baseUrl("http://" + ctx.hostAddress() + ":" + ctx.hostPort())
+                .build();
+
+        String collection = knn.entityName().toLowerCase();
+        List<Float> queryVec = new ArrayList<>(knn.queryVector().length);
+        for (double v : knn.queryVector()) queryVec.add((float) v);
+
+        Map<String, Object> body = Map.of(
+                "vector", queryVec,
+                "limit", knn.topK(),
+                "with_payload", false
+        );
+
+        long wireStart = System.nanoTime();
+        long dbStart = System.nanoTime();
+        JsonNode response = client.post()
+                .uri("/collections/{c}/points/search", collection)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(30));
+        long dbTimeNs = System.nanoTime() - dbStart;
+        long wireTimeNs = System.nanoTime() - wireStart;
+
+        List<Map<String, Object>> hits = new ArrayList<>();
+        if (response != null && response.has("result") && response.get("result").isArray()) {
+            for (JsonNode hit : response.get("result")) {
+                String id = hit.has("id") ? hit.get("id").asText() : null;
+                double score = hit.has("score") ? hit.get("score").asDouble() : 0.0;
+                if (id != null) {
+                    Map<String, Object> entry = new LinkedHashMap<>();
+                    entry.put("id", id);
+                    entry.put("score", score);
+                    hits.add(entry);
+                }
+            }
+        }
+
+        ScenarioResult result = ResultCanonicalizer.build(hits, hits.size());
+        TimedOperation timed = TimedOperation.builder()
+                .dbTimeNs(dbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(hits.size())
+                .sampleDbTimeNs(new long[] { dbTimeNs })
+                .build();
+        return new ScenarioOutcome(timed, result);
     }
 
     private static final class EntityWriteOutcome {

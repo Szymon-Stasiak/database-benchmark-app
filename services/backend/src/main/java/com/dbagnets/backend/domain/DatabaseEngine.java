@@ -1,4 +1,4 @@
-package com.dbagnets.backend.entity;
+package com.dbagnets.backend.domain;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -80,5 +80,4 @@ public enum DatabaseEngine {
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Unknown database engine: " + dbName));
     }
-
 }

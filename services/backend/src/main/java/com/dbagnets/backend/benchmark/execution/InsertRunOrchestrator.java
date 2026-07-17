@@ -28,8 +28,8 @@ import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
 import com.dbagnets.backend.entity.Benchmark;
 import com.dbagnets.backend.entity.BenchmarkDatabase;
-import com.dbagnets.backend.entity.DatabaseEngine;
-import com.dbagnets.backend.entity.DatabaseStatus;
+import com.dbagnets.backend.domain.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
@@ -73,6 +73,7 @@ public class InsertRunOrchestrator {
     private final TransactionTemplate transactionTemplate;
     private final DataSizeProbe dataSizeProbe;
     private final ContainerStatsCollector statsCollector;
+    private final InsertProgressTracker progressTracker;
 
     private final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
@@ -174,10 +175,10 @@ public class InsertRunOrchestrator {
         BatchProgress progress = new BatchProgress() {
             @Override
             public void onBatch(String entityName, int idx, int total, long done, long all) {
-                sse.sendEvent(
-                        benchmarkId,
-                        SseEvents.EVENT_INSERT_BATCH_PROGRESS,
-                        new BatchProgressEvent(runId, resultId, db.getId(), entityName, idx, total, done, all));
+                BatchProgressEvent event = new BatchProgressEvent(
+                        runId, resultId, db.getId(), entityName, idx, total, done, all);
+                progressTracker.record(event);
+                sse.sendEvent(benchmarkId, SseEvents.EVENT_INSERT_BATCH_PROGRESS, event);
             }
 
             @Override

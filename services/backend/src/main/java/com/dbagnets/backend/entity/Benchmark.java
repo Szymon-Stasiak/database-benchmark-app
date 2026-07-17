@@ -1,5 +1,6 @@
 package com.dbagnets.backend.entity;
 
+import com.dbagnets.backend.domain.BenchmarkStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

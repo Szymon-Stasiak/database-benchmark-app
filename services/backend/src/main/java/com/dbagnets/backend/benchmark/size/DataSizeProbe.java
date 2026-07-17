@@ -3,7 +3,7 @@ package com.dbagnets.backend.benchmark.size;
 import com.dbagnets.backend.benchmark.driver.redis.RedisPoolCache;
 import com.dbagnets.backend.docker.DockerService;
 import com.dbagnets.backend.entity.BenchmarkDatabase;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

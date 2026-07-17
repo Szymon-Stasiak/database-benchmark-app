@@ -2,8 +2,8 @@ package com.dbagnets.backend.controller;
 
 import com.dbagnets.backend.config.SecurityConfig;
 import com.dbagnets.backend.entity.Benchmark;
-import com.dbagnets.backend.entity.BenchmarkStatus;
-import com.dbagnets.backend.entity.DatabaseStatus;
+import com.dbagnets.backend.domain.BenchmarkStatus;
+import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.entity.User;
 import com.dbagnets.backend.repository.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.repository.BenchmarkRepository;

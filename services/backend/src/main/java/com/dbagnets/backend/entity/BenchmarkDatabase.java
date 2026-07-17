@@ -1,5 +1,7 @@
 package com.dbagnets.backend.entity;
 
+import com.dbagnets.backend.domain.DatabaseStatus;
+import com.dbagnets.backend.domain.DatabaseType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

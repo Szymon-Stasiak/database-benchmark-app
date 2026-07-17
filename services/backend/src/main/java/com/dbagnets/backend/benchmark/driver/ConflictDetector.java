@@ -1,6 +1,6 @@
 package com.dbagnets.backend.benchmark.driver;
 
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 
 import java.sql.SQLException;
 import java.util.Locale;

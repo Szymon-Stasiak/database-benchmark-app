@@ -9,6 +9,13 @@ import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.InsertContext;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.scenario.AggregateParams;
+import com.dbagnets.backend.benchmark.scenario.KnnParams;
+import com.dbagnets.backend.benchmark.scenario.RangeParams;
+import com.dbagnets.backend.benchmark.scenario.ResultCanonicalizer;
+import com.dbagnets.backend.benchmark.scenario.ScenarioContext;
+import com.dbagnets.backend.benchmark.scenario.ScenarioResult;
+import com.dbagnets.backend.benchmark.scenario.TraversalParams;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
 import lombok.extern.slf4j.Slf4j;
@@ -73,13 +80,44 @@ public abstract class BoltDriverBase implements EngineDriver {
         String pk = ctx.schema().requireEntity(label).primaryKey()
                 .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + label))
                 .name();
-        String cypher = ctx.includeChildren()
-                ? "MATCH (n:`" + label + "` {" + pk + ": $id}) OPTIONAL MATCH (n)-[r]-(m) RETURN n, collect(m) AS neighbours"
-                : "MATCH (n:`" + label + "` {" + pk + ": $id}) RETURN n";
+        com.dbagnets.backend.benchmark.driver.ReadDepth depth = ctx.readDepth() == null
+                ? com.dbagnets.backend.benchmark.driver.ReadDepth.NONE : ctx.readDepth();
+        String cypher;
+        if (depth == com.dbagnets.backend.benchmark.driver.ReadDepth.NONE) {
+            cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) RETURN n";
+        } else {
+            int maxDepth = depth == com.dbagnets.backend.benchmark.driver.ReadDepth.ONE_HOP
+                    ? 1
+                    : com.dbagnets.backend.benchmark.driver.ReadDepth.FULL_CASCADE_MAX_DEPTH;
+            var chain = com.dbagnets.backend.benchmark.driver.pg.PgScenarios.resolveChain(
+                    ctx.schema(), label, maxDepth);
+            if (chain.isEmpty()) {
+                cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) RETURN n";
+            } else {
+                java.util.Set<String> relTypes = new java.util.LinkedHashSet<>();
+                java.util.Set<String> childLabels = new java.util.LinkedHashSet<>();
+                for (var level : chain) {
+                    relTypes.add((level.parentEntity() + "_" + level.childEntity()).toUpperCase());
+                    childLabels.add(level.childEntity());
+                }
+                String relPattern = relTypes.stream().map(t -> "`" + t + "`")
+                        .collect(java.util.stream.Collectors.joining("|"));
+                String labelFilter = childLabels.stream().map(l -> "'" + l + "'")
+                        .collect(java.util.stream.Collectors.joining(", "));
+                cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) "
+                        + "OPTIONAL MATCH (n)-[:" + relPattern + "*1.." + chain.size() + "]->(m) "
+                        + "WHERE m IS NULL OR any(lbl IN labels(m) WHERE lbl IN [" + labelFilter + "]) "
+                        + "RETURN n, collect(DISTINCT m) AS descendants";
+            }
+        }
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsRead = 0L;
+
+        boolean cascading = depth != com.dbagnets.backend.benchmark.driver.ReadDepth.NONE
+                && cypher.contains("collect(DISTINCT m)");
+        String collectKey = "descendants";
 
         long wireStart = System.nanoTime();
         try (Session session = neo.session()) {
@@ -89,8 +127,15 @@ public abstract class BoltDriverBase implements EngineDriver {
                 Result result = session.run(cypher, Map.of("id", entry.physicalId()));
                 long rowsForThis = 0L;
                 while (result.hasNext()) {
-                    result.next();
+                    var record = result.next();
                     rowsForThis++;
+                    if (cascading && record.containsKey(collectKey)) {
+                        var collected = record.get(collectKey);
+                        if (collected != null && !collected.isNull()) {
+                            int size = collected.size();
+                            if (size > 0) rowsForThis += size;
+                        }
+                    }
                 }
                 result.consume();
                 long sampleNs = System.nanoTime() - start;
@@ -336,6 +381,47 @@ public abstract class BoltDriverBase implements EngineDriver {
             case BATCH -> Math.max(1, ctx.batchSize());
             case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 10_000);
         };
+    }
+
+    @Override
+    public ScenarioOutcome runScenario(ScenarioContext ctx) {
+        org.neo4j.driver.Driver neo = driverCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+
+        long wireStart = System.nanoTime();
+        long dbTimeNs;
+        ScenarioResult result;
+        try (Session session = neo.session()) {
+            long start = System.nanoTime();
+            result = switch (ctx.params()) {
+                case AggregateParams p -> {
+                    Map<String, Long> grouped = BoltScenarios.executeAggregate(session, ctx.schema(),
+                            p.parentEntity(), p.childEntity());
+                    yield ResultCanonicalizer.build(grouped, grouped.size());
+                }
+                case RangeParams p -> {
+                    long count = BoltScenarios.executeRangeCount(session, ctx.schema(), p.entityName(),
+                            p.attribute(), p.min(), p.max());
+                    yield ResultCanonicalizer.build(Map.of("count", count), count);
+                }
+                case TraversalParams p -> {
+                    List<String> ids = BoltScenarios.executeTraversal(session, ctx.schema(),
+                            p.startEntity(), p.startLogicalId(), p.depth());
+                    yield ResultCanonicalizer.build(ids, ids.size());
+                }
+                case KnnParams ignored -> throw new UnsupportedOperationException(
+                        engine() + " does not support VECTOR_KNN");
+            };
+            dbTimeNs = System.nanoTime() - start;
+        }
+        long wireTimeNs = System.nanoTime() - wireStart;
+
+        TimedOperation timed = TimedOperation.builder()
+                .dbTimeNs(dbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(result.rowsReturned())
+                .sampleDbTimeNs(new long[] { dbTimeNs })
+                .build();
+        return new ScenarioOutcome(timed, result);
     }
 
     private static final class NodeOutcome {

@@ -1,6 +1,6 @@
 package com.dbagnets.backend.benchmark.driver.neo4j;
 
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import org.springframework.stereotype.Component;
 
 @Component

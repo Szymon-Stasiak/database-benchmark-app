@@ -1,7 +1,7 @@
 package com.dbagnets.backend.benchmark.driver.memgraph;
 
 import com.dbagnets.backend.benchmark.driver.neo4j.BoltDriverBase;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import org.springframework.stereotype.Component;
 
 @Component

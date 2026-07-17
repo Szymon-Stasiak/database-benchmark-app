@@ -78,6 +78,18 @@ public class BenchmarkRun {
     private String cascadePreviewJson;
 
     @Setter
+    @Column(name = "scenario_type", columnDefinition = "TEXT")
+    private String scenarioType;
+
+    @Setter
+    @Column(name = "scenario_consistency_status", columnDefinition = "TEXT")
+    private String scenarioConsistencyStatus;
+
+    @Setter
+    @Column(name = "iterations")
+    private Integer iterations;
+
+    @Setter
     @Column(nullable = false, columnDefinition = "TEXT")
     @Enumerated(EnumType.STRING)
     private RunStatus status;

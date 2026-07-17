@@ -3,7 +3,7 @@ package com.dbagnets.backend.benchmark.execution;
 import com.dbagnets.backend.benchmark.model.ComparisonReportResponse;
 import com.dbagnets.backend.entity.Benchmark;
 import com.dbagnets.backend.entity.BenchmarkDatabase;
-import com.dbagnets.backend.entity.DatabaseType;
+import com.dbagnets.backend.domain.DatabaseType;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

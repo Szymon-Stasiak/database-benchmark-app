@@ -1,6 +1,6 @@
 package com.dbagnets.backend.controller;
 
-import com.dbagnets.backend.entity.DatabaseStatus;
+import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.entity.User;
 import com.dbagnets.backend.model.DashboardResponse;
 import com.dbagnets.backend.model.DashboardResponse.RecentRun;

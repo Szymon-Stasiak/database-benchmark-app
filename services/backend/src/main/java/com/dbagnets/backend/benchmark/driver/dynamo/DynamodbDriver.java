@@ -11,7 +11,7 @@ import com.dbagnets.backend.benchmark.schema.LogicalAttribute;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

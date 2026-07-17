@@ -1,6 +1,6 @@
 package com.dbagnets.backend.benchmark.size;
 
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 
 import java.util.EnumMap;
 import java.util.Map;

@@ -7,13 +7,22 @@ import com.dbagnets.backend.benchmark.driver.DeleteContext;
 import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.InsertContext;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
+import com.dbagnets.backend.benchmark.driver.ReadDepth;
+import com.dbagnets.backend.benchmark.driver.pg.PgScenarios;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.scenario.AggregateParams;
+import com.dbagnets.backend.benchmark.scenario.KnnParams;
+import com.dbagnets.backend.benchmark.scenario.RangeParams;
+import com.dbagnets.backend.benchmark.scenario.ResultCanonicalizer;
+import com.dbagnets.backend.benchmark.scenario.ScenarioContext;
+import com.dbagnets.backend.benchmark.scenario.ScenarioResult;
+import com.dbagnets.backend.benchmark.scenario.TraversalParams;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMap;
 import com.dbagnets.backend.benchmark.schema.EmbeddingMapping;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -89,6 +98,8 @@ public class MongoDriver implements EngineDriver {
         MongoCollection<Document> collection = db.getCollection(collectionName);
         String fieldName = embedded ? mapping.get().fieldName() : null;
 
+        ReadDepth depth = ctx.readDepth() == null ? ReadDepth.NONE : ctx.readDepth();
+        List<PgScenarios.TraversalLevel> chain = chainForDepth(ctx.schema(), ctx.entityName(), depth);
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
         long rowsRead = 0L;
@@ -101,10 +112,14 @@ public class MongoDriver implements EngineDriver {
                     : new Document("_id", entry.physicalId());
             long start = System.nanoTime();
             Document found = collection.find(filter).first();
+            long innerRows = found == null ? 0 : 1;
+            if (!embedded && !chain.isEmpty() && found != null) {
+                innerRows += fetchMongoDescendants(db, entry.physicalId(), chain);
+            }
             long sampleNs = System.nanoTime() - start;
             samples[i] = sampleNs;
             totalDbTimeNs += sampleNs;
-            if (found != null) rowsRead++;
+            rowsRead += innerRows;
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
@@ -171,6 +186,74 @@ public class MongoDriver implements EngineDriver {
                 .sampleDbTimeNs(samples)
                 .cascadeDeletedByEntity(cascadeAccumulator)
                 .build();
+    }
+
+    @Override
+    public ScenarioOutcome runScenario(ScenarioContext ctx) {
+        MongoClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        MongoDatabase db = client.getDatabase(DATABASE_NAME);
+
+        long wireStart = System.nanoTime();
+        long start = System.nanoTime();
+        ScenarioResult result = switch (ctx.params()) {
+            case AggregateParams p -> {
+                Map<String, Long> grouped = MongoScenarios.executeAggregate(db, ctx.schema(),
+                        ctx.embeddings(), p.parentEntity(), p.childEntity());
+                yield ResultCanonicalizer.build(grouped, grouped.size());
+            }
+            case RangeParams p -> {
+                long count = MongoScenarios.executeRangeCount(db, ctx.schema(), ctx.embeddings(),
+                        p.entityName(), p.attribute(), p.min(), p.max());
+                yield ResultCanonicalizer.build(Map.of("count", count), count);
+            }
+            case TraversalParams p -> {
+                List<String> ids = MongoScenarios.executeTraversal(db, ctx.schema(),
+                        p.startEntity(), p.startLogicalId(), p.depth());
+                yield ResultCanonicalizer.build(ids, ids.size());
+            }
+            case KnnParams ignored -> throw new UnsupportedOperationException(
+                    engine() + " does not support VECTOR_KNN");
+        };
+        long dbTimeNs = System.nanoTime() - start;
+        long wireTimeNs = System.nanoTime() - wireStart;
+
+        TimedOperation timed = TimedOperation.builder()
+                .dbTimeNs(dbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(result.rowsReturned())
+                .sampleDbTimeNs(new long[] { dbTimeNs })
+                .build();
+        return new ScenarioOutcome(timed, result);
+    }
+
+    private List<PgScenarios.TraversalLevel> chainForDepth(com.dbagnets.backend.benchmark.schema.LogicalSchema schema,
+                                                            String entityName,
+                                                            ReadDepth depth) {
+        if (depth == ReadDepth.NONE) return List.of();
+        if (depth == ReadDepth.ONE_HOP) return PgScenarios.resolveChain(schema, entityName, 1);
+        return PgScenarios.resolveChain(schema, entityName, ReadDepth.FULL_CASCADE_MAX_DEPTH);
+    }
+
+    private long fetchMongoDescendants(MongoDatabase db,
+                                         Object rootId,
+                                         List<PgScenarios.TraversalLevel> chain) {
+        long total = 0L;
+        List<Object> frontier = List.of(rootId);
+        for (PgScenarios.TraversalLevel level : chain) {
+            if (frontier.isEmpty()) break;
+            MongoCollection<Document> collection = db.getCollection(level.childEntity().toLowerCase());
+            Document filter = new Document(level.fkColumn().toLowerCase(),
+                    new Document("$in", frontier));
+            List<Object> nextFrontier = new java.util.ArrayList<>();
+            for (Document doc : collection.find(filter).projection(new Document("_id", 1))) {
+                Object id = doc.get("_id");
+                if (id == null) continue;
+                total++;
+                nextFrontier.add(id);
+            }
+            frontier = nextFrontier;
+        }
+        return total;
     }
 
     private void cascadeChildrenBfs(MongoDatabase db,

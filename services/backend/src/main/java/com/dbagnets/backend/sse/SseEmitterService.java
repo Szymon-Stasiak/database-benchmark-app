@@ -33,17 +33,30 @@ public class SseEmitterService {
         var list = emitters.get(benchmarkId);
         if (list == null || list.isEmpty()) return;
 
+        String payload;
+        try {
+            payload = objectMapper.writeValueAsString(data);
+        } catch (IOException e) {
+            log.warn("Failed to serialize SSE payload for benchmark {} event {}: {}",
+                    benchmarkId, eventType, e.getMessage());
+            return;
+        }
+
         var deadEmitters = new ArrayList<SseEmitter>();
         for (var emitter : list) {
             try {
-                emitter.send(SseEmitter.event()
-                    .name(eventType)
-                    .data(objectMapper.writeValueAsString(data)));
-            } catch (IOException e) {
+                emitter.send(SseEmitter.event().name(eventType).data(payload));
+            } catch (IOException | IllegalStateException e) {
+                deadEmitters.add(emitter);
+            } catch (Exception e) {
+                log.debug("SSE send failed for benchmark {}: {}", benchmarkId, e.getMessage());
                 deadEmitters.add(emitter);
             }
         }
-        list.removeAll(deadEmitters);
+        if (!deadEmitters.isEmpty()) {
+            list.removeAll(deadEmitters);
+            if (list.isEmpty()) emitters.remove(benchmarkId);
+        }
     }
 
     public void broadcastBenchmarkStatus(String benchmarkId, Object status) {
@@ -72,7 +85,9 @@ public class SseEmitterService {
             for (var emitter : list) {
                 try {
                     emitter.send(SseEmitter.event().name(SseEvents.EVENT_HEARTBEAT).data("{}"));
-                } catch (IOException e) {
+                } catch (IOException | IllegalStateException e) {
+                    deadEmitters.add(emitter);
+                } catch (Exception e) {
                     deadEmitters.add(emitter);
                 }
             }

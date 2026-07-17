@@ -8,12 +8,20 @@ import com.dbagnets.backend.benchmark.driver.EngineDriver;
 import com.dbagnets.backend.benchmark.driver.InsertContext;
 import com.dbagnets.backend.benchmark.driver.InsertMode;
 import com.dbagnets.backend.benchmark.driver.ReadContext;
+import com.dbagnets.backend.benchmark.driver.ReadDepth;
 import com.dbagnets.backend.benchmark.registry.EntityIdRegistry.RegistryEntry;
+import com.dbagnets.backend.benchmark.scenario.AggregateParams;
+import com.dbagnets.backend.benchmark.scenario.KnnParams;
+import com.dbagnets.backend.benchmark.scenario.RangeParams;
+import com.dbagnets.backend.benchmark.scenario.ResultCanonicalizer;
+import com.dbagnets.backend.benchmark.scenario.ScenarioContext;
+import com.dbagnets.backend.benchmark.scenario.ScenarioResult;
+import com.dbagnets.backend.benchmark.scenario.TraversalParams;
 import com.dbagnets.backend.benchmark.schema.LogicalAttribute;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.timing.RecordedId;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -103,6 +111,7 @@ public class PgDriver implements EngineDriver {
                 .orElseThrow(() -> new IllegalStateException("Entity " + entity.name() + " has no primary key"));
 
         InsertMode mode = ctx.mode() == null ? InsertMode.SINGLE : ctx.mode();
+        ReadDepth depth = ctx.readDepth() == null ? ReadDepth.NONE : ctx.readDepth();
 
         long[] samples = new long[ctx.targets().size()];
         long totalDbTimeNs = 0L;
@@ -111,7 +120,7 @@ public class PgDriver implements EngineDriver {
         long wireStart = System.nanoTime();
         try (Connection conn = ds.getConnection()) {
             conn.setReadOnly(true);
-            if (mode == InsertMode.BULK && !ctx.targets().isEmpty()) {
+            if (depth == ReadDepth.NONE && mode == InsertMode.BULK && !ctx.targets().isEmpty()) {
                 List<Object> ids = ctx.targets().stream().map(t -> (Object) t.physicalId()).toList();
                 long start = System.nanoTime();
                 rowsRead = SqlCascadeDeleter.readBulk(conn, entity, pk, ids, DIALECT);
@@ -123,12 +132,16 @@ public class PgDriver implements EngineDriver {
                 String table = "\"" + entity.name().toLowerCase() + "\"";
                 String pkCol = "\"" + pk.name().toLowerCase() + "\"";
                 String selectSql = "SELECT * FROM " + table + " WHERE " + pkCol + " = ?";
+                List<PgScenarios.TraversalLevel> chain = childChainForRead(ctx.schema(), entity.name(), depth);
                 try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
                     for (int i = 0; i < ctx.targets().size(); i++) {
                         RegistryEntry entry = ctx.targets().get(i);
                         PgValueBinder.bind(ps, 1, pk, entry.physicalId());
                         long start = System.nanoTime();
                         long n = executeSelect(ps);
+                        if (!chain.isEmpty()) {
+                            n += fetchDescendants(conn, ctx.schema(), entry.physicalId(), chain);
+                        }
                         long sampleNs = System.nanoTime() - start;
                         samples[i] = sampleNs;
                         totalDbTimeNs += sampleNs;
@@ -232,12 +245,96 @@ public class PgDriver implements EngineDriver {
                 .build();
     }
 
+    @Override
+    public ScenarioOutcome runScenario(ScenarioContext ctx) throws Exception {
+        PgConnectionInfo info = connectionInfo(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        DataSource ds = dataSources.get(info);
+
+        long wireStart = System.nanoTime();
+        long dbTimeNs;
+        ScenarioResult result;
+        try (Connection conn = ds.getConnection()) {
+            conn.setReadOnly(true);
+            long start = System.nanoTime();
+            result = switch (ctx.params()) {
+                case AggregateParams p -> {
+                    var grouped = PgScenarios.executeAggregate(conn, ctx.schema(), p.parentEntity(), p.childEntity());
+                    yield ResultCanonicalizer.build(grouped, grouped.size());
+                }
+                case RangeParams p -> {
+                    long count = PgScenarios.executeRangeCount(conn, ctx.schema(), p.entityName(),
+                            p.attribute(), p.min(), p.max());
+                    yield ResultCanonicalizer.build(java.util.Map.of("count", count), count);
+                }
+                case TraversalParams p -> {
+                    var ids = PgScenarios.executeTraversal(conn, ctx.schema(), p.startEntity(),
+                            p.startLogicalId(), p.depth());
+                    yield ResultCanonicalizer.build(ids, ids.size());
+                }
+                case KnnParams ignored -> throw new UnsupportedOperationException(
+                        engine() + " does not support VECTOR_KNN");
+            };
+            dbTimeNs = System.nanoTime() - start;
+        }
+        long wireTimeNs = System.nanoTime() - wireStart;
+
+        TimedOperation timed = TimedOperation.builder()
+                .dbTimeNs(dbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(result.rowsReturned())
+                .sampleDbTimeNs(new long[] { dbTimeNs })
+                .build();
+        return new ScenarioOutcome(timed, result);
+    }
+
     private long executeSelect(PreparedStatement ps) throws SQLException {
         try (ResultSet rs = ps.executeQuery()) {
             long n = 0L;
             while (rs.next()) n++;
             return n;
         }
+    }
+
+    private List<PgScenarios.TraversalLevel> childChainForRead(com.dbagnets.backend.benchmark.schema.LogicalSchema schema,
+                                                                  String entityName,
+                                                                  ReadDepth depth) {
+        if (depth == ReadDepth.NONE) return List.of();
+        if (depth == ReadDepth.ONE_HOP) return PgScenarios.resolveChain(schema, entityName, 1);
+        return PgScenarios.resolveChain(schema, entityName, ReadDepth.FULL_CASCADE_MAX_DEPTH);
+    }
+
+    private long fetchDescendants(Connection conn,
+                                    com.dbagnets.backend.benchmark.schema.LogicalSchema schema,
+                                    Object rootId,
+                                    List<PgScenarios.TraversalLevel> chain) throws SQLException {
+        long total = 0L;
+        List<Object> frontier = List.of(rootId);
+        for (PgScenarios.TraversalLevel level : chain) {
+            if (frontier.isEmpty()) break;
+            LogicalEntity childEntity = schema.requireEntity(level.childEntity());
+            LogicalAttribute childPk = childEntity.primaryKey()
+                    .orElseThrow(() -> new IllegalStateException(level.childEntity() + " has no PK"));
+            String table = "\"" + childEntity.name().toLowerCase() + "\"";
+            String pkCol = "\"" + childPk.name().toLowerCase() + "\"";
+            String fkCol = "\"" + level.fkColumn().toLowerCase() + "\"";
+            String inList = String.join(",", java.util.Collections.nCopies(frontier.size(), "?"));
+            String sql = "SELECT " + pkCol + ", * FROM " + table + " WHERE " + fkCol + " IN (" + inList + ")";
+            List<Object> nextFrontier = new java.util.ArrayList<>();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                for (int i = 0; i < frontier.size(); i++) {
+                    PgValueBinder.bind(ps, i + 1, childPk, frontier.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        total++;
+                        Object id = rs.getObject(1);
+                        if (id != null) nextFrontier.add(id);
+                    }
+                }
+            }
+            frontier = nextFrontier;
+        }
+        return total;
     }
 
     private EntityInsertOutcome insertEntity(Connection conn,

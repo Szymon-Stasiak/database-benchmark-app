@@ -1,4 +1,4 @@
-package com.dbagnets.backend.entity;
+package com.dbagnets.backend.domain;
 
 public enum BenchmarkStatus {
     PENDING,

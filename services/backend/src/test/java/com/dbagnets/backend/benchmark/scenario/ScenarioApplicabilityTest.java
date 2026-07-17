@@ -1,6 +1,6 @@
 package com.dbagnets.backend.benchmark.scenario;
 
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;

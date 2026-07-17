@@ -21,8 +21,8 @@ import com.dbagnets.backend.benchmark.timing.LatencyStats;
 import com.dbagnets.backend.benchmark.timing.TimedOperation;
 import com.dbagnets.backend.entity.Benchmark;
 import com.dbagnets.backend.entity.BenchmarkDatabase;
-import com.dbagnets.backend.entity.DatabaseEngine;
-import com.dbagnets.backend.entity.DatabaseStatus;
+import com.dbagnets.backend.domain.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.repository.BenchmarkRepository;
 import com.dbagnets.backend.sse.SseEmitterService;
 import com.dbagnets.backend.sse.SseEvents;
@@ -135,7 +135,7 @@ public class ReadRunOrchestrator {
             Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
             LogicalSchema schema = loadSchema(benchmark);
             List<String> selectedIds = parseSelectedIds(run.getSelectedIdsJson());
-            boolean includeChildren = parseIncludeChildren(run.getConfigJson());
+            com.dbagnets.backend.benchmark.driver.ReadDepth readDepth = parseReadDepth(run.getConfigJson());
             com.dbagnets.backend.benchmark.driver.InsertMode mode = parseMode(run.getConfigJson());
             int iterations = parseIterations(run.getConfigJson());
             String entityName = run.getEntityName();
@@ -148,7 +148,7 @@ public class ReadRunOrchestrator {
             for (BenchmarkResult result : run.getResults()) {
                 futures.add(CompletableFuture.runAsync(
                         () -> runForDatabase(benchmarkId, runId, result.getId(),
-                                entityName, selectedIds, includeChildren, mode, iterations, schema),
+                                entityName, selectedIds, readDepth, mode, iterations, schema),
                         asyncExecutor));
             }
             CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
@@ -171,7 +171,7 @@ public class ReadRunOrchestrator {
                                  String resultId,
                                  String entityName,
                                  List<String> selectedLogicalIds,
-                                 boolean includeChildren,
+                                 com.dbagnets.backend.benchmark.driver.ReadDepth readDepth,
                                  com.dbagnets.backend.benchmark.driver.InsertMode mode,
                                  int iterations,
                                  LogicalSchema schema) {
@@ -217,7 +217,7 @@ public class ReadRunOrchestrator {
                     embeddings,
                     entityName,
                     targets,
-                    includeChildren,
+                    readDepth,
                     mode);
             List<TimedOperation> perIteration = new ArrayList<>(iterations);
             for (int i = 0; i < iterations; i++) {
@@ -430,6 +430,16 @@ public class ReadRunOrchestrator {
             return Boolean.TRUE.equals(req.includeChildren());
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private com.dbagnets.backend.benchmark.driver.ReadDepth parseReadDepth(String configJson) {
+        if (configJson == null) return com.dbagnets.backend.benchmark.driver.ReadDepth.NONE;
+        try {
+            StartReadRunRequest req = objectMapper.readValue(configJson, StartReadRunRequest.class);
+            return req.readDepthOrDefault();
+        } catch (Exception e) {
+            return com.dbagnets.backend.benchmark.driver.ReadDepth.NONE;
         }
     }
 

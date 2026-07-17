@@ -12,9 +12,11 @@ import com.dbagnets.backend.benchmark.execution.BenchmarkRunRepository;
 import com.dbagnets.backend.benchmark.execution.ComparisonReportService;
 import com.dbagnets.backend.benchmark.execution.OperationType;
 import com.dbagnets.backend.benchmark.execution.DeleteRunOrchestrator;
+import com.dbagnets.backend.benchmark.execution.InsertProgressTracker;
 import com.dbagnets.backend.benchmark.execution.InsertRunOrchestrator;
 import com.dbagnets.backend.benchmark.execution.ReadRunOrchestrator;
 import com.dbagnets.backend.benchmark.execution.ScenarioRunOrchestrator;
+import com.dbagnets.backend.benchmark.model.BatchProgressEvent;
 import com.dbagnets.backend.benchmark.model.CascadePreviewRequest;
 import com.dbagnets.backend.benchmark.model.CascadePreviewResponse;
 import com.dbagnets.backend.benchmark.model.ComparisonReportResponse;
@@ -38,7 +40,8 @@ import com.dbagnets.backend.benchmark.registry.EntityIdRegistry;
 import com.dbagnets.backend.benchmark.resource.ResourceSample;
 import com.dbagnets.backend.benchmark.scenario.ScenarioApplicability;
 import com.dbagnets.backend.benchmark.scenario.ScenarioType;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
 import com.dbagnets.backend.benchmark.schema.LogicalRelationship;
 import com.dbagnets.backend.benchmark.schema.LogicalSchema;
@@ -79,6 +82,7 @@ public class BenchmarkOpsController {
     private final ReadRunOrchestrator readOrchestrator;
     private final DeleteRunOrchestrator deleteOrchestrator;
     private final ScenarioRunOrchestrator scenarioOrchestrator;
+    private final InsertProgressTracker insertProgressTracker;
     private final DataSizeProbe dataSizeProbe;
     private final ComparisonReportService comparisonReportService;
     private final EntityIdRegistry registryService;
@@ -133,6 +137,11 @@ public class BenchmarkOpsController {
         BenchmarkRun run = runRepository.findById(runId)
                 .orElseThrow(() -> new NoSuchElementException("Insert run not found: " + runId));
         return InsertRunResponse.from(run);
+    }
+
+    @GetMapping("/insert-runs/{runId}/progress-snapshot")
+    public List<BatchProgressEvent> getInsertProgressSnapshot(@PathVariable String runId) {
+        return insertProgressTracker.snapshot(runId);
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/read-runs")
@@ -276,7 +285,7 @@ public class BenchmarkOpsController {
         if (rel == null) return null;
         BenchmarkDatabase pgDb = benchmark.getDatabases().stream()
                 .filter(d -> "postgresql".equalsIgnoreCase(d.getDbName())
-                        && d.getStatus() == com.dbagnets.backend.entity.DatabaseStatus.RUNNING
+                        && d.getStatus() == DatabaseStatus.RUNNING
                         && d.getHostPort() != null)
                 .findFirst()
                 .orElse(null);

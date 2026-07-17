@@ -1,6 +1,7 @@
 package com.dbagnets.backend.benchmark.model;
 
 import com.dbagnets.backend.benchmark.driver.InsertMode;
+import com.dbagnets.backend.benchmark.driver.ReadDepth;
 import com.dbagnets.backend.benchmark.registry.SelectionStrategy;
 
 import java.util.List;
@@ -9,6 +10,7 @@ public record StartReadRunRequest(
         String entityName,
         Integer sampleSize,
         Boolean includeChildren,
+        ReadDepth readDepth,
         SelectionStrategy selectionStrategy,
         InsertMode mode,
         Integer iterations,
@@ -28,5 +30,10 @@ public record StartReadRunRequest(
     public int iterationsOrDefault() {
         if (iterations == null || iterations < 1) return DEFAULT_ITERATIONS;
         return Math.min(iterations, MAX_ITERATIONS);
+    }
+
+    public ReadDepth readDepthOrDefault() {
+        if (readDepth != null) return readDepth;
+        return ReadDepth.fromIncludeChildren(includeChildren);
     }
 }

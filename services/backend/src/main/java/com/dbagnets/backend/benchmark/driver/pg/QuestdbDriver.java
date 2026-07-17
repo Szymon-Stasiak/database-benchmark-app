@@ -1,7 +1,7 @@
 package com.dbagnets.backend.benchmark.driver.pg;
 
 import com.dbagnets.backend.benchmark.schema.LogicalEntity;
-import com.dbagnets.backend.entity.DatabaseEngine;
+import com.dbagnets.backend.domain.DatabaseEngine;
 import org.springframework.stereotype.Component;
 
 @Component

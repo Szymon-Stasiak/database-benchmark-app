@@ -17,13 +17,25 @@ public record ReadContext(
         EmbeddingMap embeddings,
         String entityName,
         List<RegistryEntry> targets,
-        boolean includeChildren,
+        ReadDepth readDepth,
         InsertMode mode
 ) {
     public ReadContext(String benchmarkId, String databaseId, String dbName, String dbVersion,
                        String hostAddress, int hostPort, LogicalSchema schema, EmbeddingMap embeddings,
                        String entityName, List<RegistryEntry> targets, boolean includeChildren) {
         this(benchmarkId, databaseId, dbName, dbVersion, hostAddress, hostPort, schema, embeddings,
-                entityName, targets, includeChildren, InsertMode.SINGLE);
+                entityName, targets, ReadDepth.fromIncludeChildren(includeChildren), InsertMode.SINGLE);
+    }
+
+    public ReadContext(String benchmarkId, String databaseId, String dbName, String dbVersion,
+                       String hostAddress, int hostPort, LogicalSchema schema, EmbeddingMap embeddings,
+                       String entityName, List<RegistryEntry> targets, boolean includeChildren,
+                       InsertMode mode) {
+        this(benchmarkId, databaseId, dbName, dbVersion, hostAddress, hostPort, schema, embeddings,
+                entityName, targets, ReadDepth.fromIncludeChildren(includeChildren), mode);
+    }
+
+    public boolean includeChildren() {
+        return readDepth != null && readDepth != ReadDepth.NONE;
     }
 }
