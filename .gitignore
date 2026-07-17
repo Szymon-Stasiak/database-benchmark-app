@@ -32,8 +32,6 @@ services/backend/data/
 ### IntelliJ HTTP client scratches ###
 services/script-creator/http/
 
-### Local pip freeze (deps declared in pyproject.toml) ###
-services/script-creator/requirements.txt
 
 ### Generated pipeline outputs (regenerate on demand) ###
 services/script-creator/src/ecommerce_benchmark/
