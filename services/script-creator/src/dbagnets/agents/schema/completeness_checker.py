@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dbagnets.agents.base import BaseAgent
-from dbagnets.models.schema import LogicalSchema
 from dbagnets.models.validation import ValidationResult
+from dbagnets.models.validation_context import ValidationContext
 
 
 class SchemaCompletenessCheckerAgent(BaseAgent):
@@ -15,7 +15,8 @@ class SchemaCompletenessCheckerAgent(BaseAgent):
     def role_description(self) -> str:
         return "Validates that a logical schema covers all essential domain entities."
 
-    def validate(self, schema: LogicalSchema) -> ValidationResult:
+    def validate(self, ctx: ValidationContext) -> ValidationResult:
+        schema = ctx.schema
         system_prompt = (
             "You are a domain modeling expert.\n"
             "Your task is to verify that the logical schema includes all essential "

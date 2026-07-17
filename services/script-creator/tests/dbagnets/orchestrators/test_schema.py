@@ -57,8 +57,7 @@ class TestSchemaOrchestrator:
         assert orch.model == "vertex_ai/claude-sonnet-4-6"
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
-        assert orch.depth_checker is not None
-        assert len(orch.llm_validators) == 3
+        assert len(orch.validators) == 4
 
     def test_init_accepts_custom_values(self):
         orch = SchemaOrchestrator(
@@ -78,11 +77,7 @@ class TestSchemaRun:
 
     def test_returns_success_when_all_validators_pass(self):
         orch = self._setup_orchestrator()
-        orch.depth_checker = MagicMock()
-        orch.depth_checker.name = "SchemaDepthChecker"
-        orch.depth_checker.validate = MagicMock(return_value=make_pass_result("SchemaDepthChecker"))
-
-        for v in orch.llm_validators:
+        for v in orch.validators:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
 
         state = orch.run("test", 2)
@@ -95,11 +90,7 @@ class TestSchemaRun:
 
     def test_retries_on_failure_and_succeeds(self):
         orch = self._setup_orchestrator()
-        orch.depth_checker = MagicMock()
-        orch.depth_checker.name = "SchemaDepthChecker"
-        orch.depth_checker.validate = MagicMock(return_value=make_pass_result("SchemaDepthChecker"))
-
-        for v in orch.llm_validators:
+        for v in orch.validators:
             v.validate = MagicMock(
                 side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
             )
@@ -112,11 +103,7 @@ class TestSchemaRun:
 
     def test_returns_failure_when_iterations_exhausted(self):
         orch = self._setup_orchestrator(max_iterations=2)
-        orch.depth_checker = MagicMock()
-        orch.depth_checker.name = "SchemaDepthChecker"
-        orch.depth_checker.validate = MagicMock(return_value=make_fail_result("SchemaDepthChecker"))
-
-        for v in orch.llm_validators:
+        for v in orch.validators:
             v.validate = MagicMock(return_value=make_fail_result(v.name))
 
         state = orch.run("test", 2)
@@ -140,19 +127,13 @@ class TestSchemaRunSequential:
         orch = SchemaOrchestrator(max_iterations=1, parallel_validation=False)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = _SAMPLE_SCHEMA
-
-        orch.depth_checker = MagicMock()
-        orch.depth_checker.name = "SchemaDepthChecker"
-        orch.depth_checker.validate = MagicMock(return_value=make_pass_result("SchemaDepthChecker"))
-
-        for v in orch.llm_validators:
+        for v in orch.validators:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
 
         state = orch.run("test", 2)
 
         assert state.success is True
-        orch.depth_checker.validate.assert_called_once()
-        for v in orch.llm_validators:
+        for v in orch.validators:
             v.validate.assert_called_once()
 
 
@@ -161,14 +142,9 @@ class TestSchemaRunParallel:
         orch = SchemaOrchestrator(max_iterations=1, parallel_validation=True)
         orch.generator = MagicMock()
         orch.generator.generate.return_value = _SAMPLE_SCHEMA
-
-        orch.depth_checker = MagicMock()
-        orch.depth_checker.name = "SchemaDepthChecker"
-        orch.depth_checker.validate = MagicMock(return_value=make_pass_result("SchemaDepthChecker"))
-
-        orch.llm_validators[0].validate = MagicMock(side_effect=RuntimeError("API timeout"))
-        for v in orch.llm_validators[1:]:
+        for v in orch.validators:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
+        orch.validators[1].validate = MagicMock(side_effect=RuntimeError("API timeout"))
 
         state = orch.run("test", 2)
 

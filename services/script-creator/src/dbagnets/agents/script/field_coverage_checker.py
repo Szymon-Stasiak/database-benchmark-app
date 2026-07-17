@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-from dbagnets.models.config import TargetConfig
 from dbagnets.models.enums import (
     DatabaseType,
     RelationshipCardinality,
@@ -15,6 +14,7 @@ from dbagnets.models.schema import (
     LogicalSchema,
 )
 from dbagnets.models.validation import ValidationResult
+from dbagnets.models.validation_context import ValidationContext
 
 
 class FieldCoverageChecker:
@@ -23,13 +23,13 @@ class FieldCoverageChecker:
     def name(self) -> str:
         return "FieldCoverageChecker"
 
-    def validate(
-        self,
-        target: TargetConfig,
-        schema: LogicalSchema,
-        script: str,
-        embedding_mappings: list[DocumentEmbeddingMapping] | None = None,
-    ) -> ValidationResult:
+    def validate(self, ctx: ValidationContext) -> ValidationResult:
+        target = ctx.target
+        assert target is not None and ctx.script is not None
+        schema = ctx.schema
+        script = ctx.script
+        embedding_mappings = ctx.embedding_mappings
+
         entity_blocks = self._extract_entity_blocks(target.db_type, script)
         script_lower = script.lower()
 

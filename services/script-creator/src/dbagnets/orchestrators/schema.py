@@ -1,25 +1,24 @@
 from __future__ import annotations
 
-import concurrent.futures
 import logging
 import time
 
 from langgraph.graph import END, StateGraph
 
 from dbagnets.agents.schema.completeness_checker import SchemaCompletenessCheckerAgent
-from dbagnets.log_context import set_log_context
 from dbagnets.agents.schema.depth_checker import SchemaDepthChecker
 from dbagnets.agents.schema.generator import SchemaGeneratorAgent
 from dbagnets.agents.schema.relationship_checker import SchemaRelationshipCheckerAgent
 from dbagnets.agents.schema.topic_checker import SchemaTopicCheckerAgent
+from dbagnets.log_context import set_log_context
 from dbagnets.models import (
     IterationResult,
     SchemaGraphState,
     SchemaLoopState,
-    ValidationResult,
-    ValidationStatus,
 )
 from dbagnets.models.schema import LogicalSchema
+from dbagnets.models.validation_context import ValidationContext, Validator
+from dbagnets.orchestrators.validator_runner import run_validators
 
 logger = logging.getLogger("dbagnets")
 
@@ -37,8 +36,8 @@ class SchemaOrchestrator:
         self.parallel_validation = parallel_validation
 
         self.generator = SchemaGeneratorAgent(model)
-        self.depth_checker = SchemaDepthChecker()
-        self.llm_validators = [
+        self.validators: list[Validator] = [
+            SchemaDepthChecker(),
             SchemaTopicCheckerAgent(model),
             SchemaCompletenessCheckerAgent(model),
             SchemaRelationshipCheckerAgent(model),
@@ -89,6 +88,7 @@ class SchemaOrchestrator:
         schema_json = state["schema_json"]
         schema = LogicalSchema.model_validate_json(schema_json)
         iteration = state["current_iteration"]
+        ctx = ValidationContext(schema=schema)
 
         logger.info("")
         logger.info(
@@ -96,7 +96,7 @@ class SchemaOrchestrator:
             "parallel" if self.parallel_validation else "sequential",
         )
         val_start = time.time()
-        validations = self._run_validators(schema)
+        validations = run_validators(self.validators, ctx, self.parallel_validation)
         val_elapsed = time.time() - val_start
         logger.info("[SchemaValidation] All validators finished in %.1fs", val_elapsed)
 
@@ -197,64 +197,3 @@ class SchemaOrchestrator:
             final_schema_json=final_state["final_schema_json"],
             success=final_state["success"],
         )
-
-    def _run_validators(self, schema: LogicalSchema) -> list[ValidationResult]:
-        if self.parallel_validation:
-            return self._run_validators_parallel(schema)
-        return self._run_validators_sequential(schema)
-
-    def _run_validators_sequential(self, schema: LogicalSchema) -> list[ValidationResult]:
-        results: list[ValidationResult] = []
-
-        logger.info("  [%s] Checking...", self.depth_checker.name)
-        start = time.time()
-        result = self.depth_checker.validate(schema)
-        elapsed = time.time() - start
-        icon = "PASS" if result.passed else "FAIL"
-        logger.info("  [%s] [%s] (%.1fs)", self.depth_checker.name, icon, elapsed)
-        results.append(result)
-
-        for validator in self.llm_validators:
-            logger.info("  [%s] Checking...", validator.name)
-            start = time.time()
-            result = validator.validate(schema)
-            elapsed = time.time() - start
-            icon = "PASS" if result.passed else "FAIL"
-            logger.info("  [%s] [%s] (%.1fs)", validator.name, icon, elapsed)
-            results.append(result)
-
-        return results
-
-    def _run_validators_parallel(self, schema: LogicalSchema) -> list[ValidationResult]:
-        results: list[ValidationResult] = []
-
-        depth_result = self.depth_checker.validate(schema)
-        icon = "PASS" if depth_result.passed else "FAIL"
-        logger.info("  [%s] [%s]", self.depth_checker.name, icon)
-        results.append(depth_result)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.llm_validators)) as executor:
-            future_to_validator = {
-                executor.submit(validator.validate, schema): validator
-                for validator in self.llm_validators
-            }
-
-            for future in concurrent.futures.as_completed(future_to_validator):
-                validator = future_to_validator[future]
-                try:
-                    result = future.result()
-                    icon = "PASS" if result.passed else "FAIL"
-                    logger.info("  [%s] [%s]", validator.name, icon)
-                    results.append(result)
-                except Exception as e:
-                    logger.error("  [%s] [ERROR] %s", validator.name, e)
-                    results.append(
-                        ValidationResult(
-                            agent_name=validator.name,
-                            status=ValidationStatus.FAIL,
-                            feedback=f"Validator error: {e}",
-                            details=str(e),
-                        )
-                    )
-
-        return results

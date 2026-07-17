@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from dbagnets.agents.base import BaseAgent
-from dbagnets.models.config import TargetConfig
-from dbagnets.models.enums import DatabaseType
-from dbagnets.models.schema import LogicalSchema
 from dbagnets.models.validation import ValidationResult
+from dbagnets.models.validation_context import ValidationContext
 
 
 class NamingConsistencyCheckerAgent(BaseAgent):
@@ -17,65 +15,13 @@ class NamingConsistencyCheckerAgent(BaseAgent):
     def role_description(self) -> str:
         return "Verifies that entity and attribute names in a database script match the LogicalSchema exactly."
 
-    _NAMING_RULES: dict[DatabaseType, str] = {
-        DatabaseType.RELATIONAL: """DATABASE-SPECIFIC NAMING RULES (relational):
-- Each entity name in the LogicalSchema MUST appear as a table name (exact match, snake_case).
-- Each attribute name MUST appear as a column name in its corresponding table (exact match).
-- Junction tables for M:N relationships MAY use a combined name (e.g. actors_movies)
-  but the original entity tables MUST keep their schema names.
-- Extra columns beyond the LogicalSchema (e.g. FK columns) are ALLOWED — do NOT penalize.""",
-
-        DatabaseType.GRAPH: """DATABASE-SPECIFIC NAMING RULES (graph):
-- Each entity name in the LogicalSchema MUST appear as a node label.
-  PascalCase conversion is ALLOWED (e.g. "movie_review" -> "MovieReview").
-- GRAPH DATABASES ARE SCHEMA-LESS: properties are NOT declared in DDL.
-  Properties only appear in the script when they are referenced by a constraint
-  or an index. If a property has no constraint/index, it will NOT appear in the
-  script at all — this is NORMAL and CORRECT. Do NOT flag missing properties
-  that have no constraint or index.
-- To verify attribute coverage, check ONLY:
-  (a) Primary key attributes MUST appear in a uniqueness constraint on their node label.
-  (b) Attributes marked as indexed or unique MUST appear in an index or constraint.
-  (c) All other attributes (non-PK, non-indexed, non-unique) are NOT expected to
-      appear in the DDL. Their absence is correct — they exist at data insertion time.
-- FK attributes (another entity's ID stored on this node) MUST be ABSENT —
-  the graph relationship encodes the link.
-- Relationship type names MAY differ from LogicalSchema relationship names
-  (UPPER_SNAKE_CASE is standard for graph DBs).
-- Extra properties or constraints beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
-
-        DatabaseType.DOCUMENT: """DATABASE-SPECIFIC NAMING RULES (document):
-- Each entity name MUST appear either as a collection name OR as an embedded
-  sub-document key (exact match, snake_case).
-- Each attribute MUST appear as a field name in its collection or embedded document
-  (exact match, snake_case).
-- Denormalized/snapshot fields are ALLOWED — do NOT penalize extra fields.""",
-
-        DatabaseType.VECTOR: """DATABASE-SPECIFIC NAMING RULES (vector):
-- Each entity name MUST appear as a collection name (exact match, snake_case).
-- Each attribute MUST appear as a field name in its collection (exact match, snake_case).
-- Extra fields beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
-
-        DatabaseType.KEY_VALUE: """DATABASE-SPECIFIC NAMING RULES (key-value):
-- Each entity name MUST appear in the key namespace/pattern (exact match, snake_case).
-- Each attribute MUST appear as a hash field name or structured value key
-  (exact match, snake_case).
-- Extra fields beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
-
-        DatabaseType.TIME_SERIES: """DATABASE-SPECIFIC NAMING RULES (time-series):
-- Each entity name MUST appear as a table/hypertable/measurement name
-  (exact match, snake_case).
-- Each attribute MUST appear as a column/tag/field name (exact match, snake_case).
-- Extra columns beyond the LogicalSchema are ALLOWED — do NOT penalize.""",
-    }
-
-    def validate(
-        self, target: TargetConfig, schema: LogicalSchema, script: str
-    ) -> ValidationResult:
-        naming_rules = self._NAMING_RULES[target.db_type]
+    def validate(self, ctx: ValidationContext) -> ValidationResult:
+        target = ctx.target
+        assert target is not None and ctx.script is not None
+        naming_rules = ctx.profile.naming_rules
 
         entity_list = []
-        for entity in schema.entities:
+        for entity in ctx.schema.entities:
             attr_names = [a.name for a in entity.attributes]
             entity_list.append(
                 f"  - Entity '{entity.name}': attributes = {attr_names}"
@@ -111,10 +57,10 @@ In your feedback, list every mismatch as: "Entity 'X': expected attribute 'Y', f
 
 Use the validate tool to return your assessment."""
 
-        schema_json = schema.model_dump_json(indent=2)
+        schema_json = ctx.schema.model_dump_json(indent=2)
         user_prompt = (
             f"LogicalSchema:\n{schema_json}\n\n"
-            f"Database script for {target.db_name} {target.db_version}:\n\n{script}"
+            f"Database script for {target.db_name} {target.db_version}:\n\n{ctx.script}"
         )
 
         return self._validate_with_tool_use(system_prompt, user_prompt)

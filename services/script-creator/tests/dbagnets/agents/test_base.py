@@ -146,6 +146,50 @@ class TestValidateWithToolUse:
         assert result.feedback == "Errors found"
 
 
+class TestFormatFeedbackBlock:
+    def test_formats_failed_validators_only(self):
+        feedback = [
+            ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
+            ValidationResult(agent_name="B", status=ValidationStatus.FAIL, feedback="Bad syntax"),
+        ]
+        result = _ConcreteAgent._format_feedback_block(feedback)
+        assert "A" not in result
+        assert "- [B] Bad syntax" in result
+
+    def test_includes_todos_when_present(self):
+        feedback = [
+            ValidationResult(
+                agent_name="C", status=ValidationStatus.FAIL, feedback="Missing indexes",
+                todos=["Add index on users.email", "Add index on orders.created_at"],
+            ),
+        ]
+        result = _ConcreteAgent._format_feedback_block(feedback)
+        assert "TODO:" in result
+        assert "Add index on users.email" in result
+        assert "Add index on orders.created_at" in result
+
+    def test_includes_details_when_no_todos(self):
+        feedback = [
+            ValidationResult(
+                agent_name="D", status=ValidationStatus.FAIL, feedback="Depth mismatch",
+                details="Expected depth 3, got 2",
+            ),
+        ]
+        result = _ConcreteAgent._format_feedback_block(feedback)
+        assert "Details: Expected depth 3, got 2" in result
+
+    def test_returns_empty_string_when_all_pass(self):
+        feedback = [
+            ValidationResult(agent_name="A", status=ValidationStatus.PASS, feedback="OK"),
+            ValidationResult(agent_name="B", status=ValidationStatus.PASS, feedback="All good"),
+        ]
+        result = _ConcreteAgent._format_feedback_block(feedback)
+        assert result == ""
+
+    def test_returns_empty_string_for_empty_list(self):
+        assert _ConcreteAgent._format_feedback_block([]) == ""
+
+
 class TestFlattenJsonSchema:
     def test_inlines_ref_from_defs(self):
         schema = {

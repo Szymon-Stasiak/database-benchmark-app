@@ -16,9 +16,25 @@ logger = logging.getLogger("dbagnets")
 
 T = TypeVar("T", bound=BaseModel)
 
+_RESPONSE_FORMAT_RULES = """
+
+RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
+- PASS:
+  feedback = exactly ONE short sentence (under 30 words). Example: "The script passes all checks."
+  details = "" (empty string)
+  todos = [] (empty list)
+  NEVER add suggestions, recommendations, "minor issues", strengths, or commentary.
+  PASS means ACCEPTED. Say nothing else. No bullet points. No markdown. No sections.
+- FAIL:
+  feedback = exactly ONE sentence naming the core blocker (under 40 words).
+  todos = list of CONCRETE changes required to pass. Each item is a specific
+  instruction like "Add index on users.email for faster lookups".
+  Only include items that would flip the result from FAIL to PASS.
+  Do NOT include cosmetic, optional, or "nice to have" items.
+  details = "" (empty string, put everything in todos instead)"""
+
 
 def flatten_json_schema(schema: dict) -> object:
-    """Inline $defs references for API compatibility."""
     defs = schema.pop("$defs", {})
     schema.pop("title", None)
 
@@ -101,22 +117,19 @@ class BaseAgent(ABC):
 
         raise ValueError(f"[{self.name}] No tool call found in LLM response")
 
-    _RESPONSE_FORMAT_RULES = """
-    
-RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
-- PASS:
-  feedback = exactly ONE short sentence (under 30 words). Example: "The script passes all checks."
-  details = "" (empty string)
-  todos = [] (empty list)
-  NEVER add suggestions, recommendations, "minor issues", strengths, or commentary.
-  PASS means ACCEPTED. Say nothing else. No bullet points. No markdown. No sections.
-- FAIL:
-  feedback = exactly ONE sentence naming the core blocker (under 40 words).
-  todos = list of CONCRETE changes required to pass. Each item is a specific
-  instruction like "Add index on users.email for faster lookups".
-  Only include items that would flip the result from FAIL to PASS.
-  Do NOT include cosmetic, optional, or "nice to have" items.
-  details = "" (empty string, put everything in todos instead)"""
+    @staticmethod
+    def _format_feedback_block(feedback: list[ValidationResult]) -> str:
+        parts = []
+        for v in feedback:
+            if v.passed:
+                continue
+            part = f"- [{v.agent_name}] {v.feedback}"
+            if v.todos:
+                part += "\n  TODO:\n" + "\n".join(f"    - {t}" for t in v.todos)
+            elif v.details:
+                part += f"\n  Details: {v.details}"
+            parts.append(part)
+        return "\n".join(parts)
 
     def _validate_with_tool_use(
         self,
@@ -124,7 +137,7 @@ RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
         user_prompt: str,
     ) -> ValidationResult:
         response = self._call_llm_structured(
-            system_prompt=system_prompt + self._RESPONSE_FORMAT_RULES,
+            system_prompt=system_prompt + _RESPONSE_FORMAT_RULES,
             user_prompt=user_prompt,
             response_model=ValidatorResponse,
             tool_name="validate",

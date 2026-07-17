@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from dbagnets.main import setup_logging, parse_args, parse_target, main, DB_TYPE_MAP, _EXTENSIONS
+from dbagnets.main import setup_logging, parse_args, parse_target, main, _EXTENSIONS
 from dbagnets.models import (
     DocumentEmbeddingMapping,
     PipelineResult,
@@ -14,16 +14,6 @@ from dbagnets.models import (
     TargetConfig,
 )
 from dbagnets.models.state import SchemaLoopState, ScriptLoopState
-
-
-class TestDbTypeMap:
-    def test_maps_all_six_string_keys_to_enum_values(self):
-        assert DB_TYPE_MAP["relational"] == DatabaseType.RELATIONAL
-        assert DB_TYPE_MAP["graph"] == DatabaseType.GRAPH
-        assert DB_TYPE_MAP["vector"] == DatabaseType.VECTOR
-        assert DB_TYPE_MAP["document"] == DatabaseType.DOCUMENT
-        assert DB_TYPE_MAP["key_value"] == DatabaseType.KEY_VALUE
-        assert DB_TYPE_MAP["time_series"] == DatabaseType.TIME_SERIES
 
 
 class TestSetupLogging:
@@ -120,6 +110,13 @@ class TestParseTarget:
     def test_raises_on_unknown_db_type(self):
         with pytest.raises(argparse.ArgumentTypeError, match="Unknown database type"):
             parse_target("nosql:foo:1")
+
+    @pytest.mark.parametrize("db_type", [t.value for t in DatabaseType])
+    def test_parses_all_database_types(self, db_type: str):
+        target = parse_target(f"{db_type}:somedb:1.0")
+        assert target.db_type == DatabaseType(db_type)
+        assert target.db_name == "somedb"
+        assert target.db_version == "1.0"
 
 
 class TestExtensions:

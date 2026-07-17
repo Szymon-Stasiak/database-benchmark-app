@@ -7,6 +7,7 @@ from dbagnets.models.enums import (
     ValidationStatus,
 )
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
+from dbagnets.models.validation_context import ValidationContext
 
 
 def _entity(name: str) -> Entity:
@@ -37,7 +38,7 @@ class TestValidate:
             relationships=[_rel("a_to_b", "a", "b"), _rel("b_to_c", "b", "c")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
         assert result.agent_name == "SchemaDepthChecker"
@@ -50,7 +51,7 @@ class TestValidate:
             relationships=[_rel("a_to_b", "a", "b")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "1" in result.feedback
@@ -68,7 +69,7 @@ class TestValidate:
             ],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "3" in result.feedback
@@ -81,7 +82,7 @@ class TestValidate:
             relationships=[],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -92,7 +93,7 @@ class TestValidate:
             relationships=[],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -108,7 +109,7 @@ class TestValidate:
             ],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -124,7 +125,7 @@ class TestValidate:
             ],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -140,7 +141,7 @@ class TestValidate:
             ],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -154,7 +155,7 @@ class TestDepthChainValidation:
             relationships=[_rel("a_b", "a", "b"), _rel("b_c", "b", "c")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
 
@@ -166,7 +167,7 @@ class TestDepthChainValidation:
             relationships=[_rel("a_b", "a", "b"), _rel("b_c", "b", "c")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "2 entities" in result.feedback
@@ -180,7 +181,7 @@ class TestDepthChainValidation:
             relationships=[_rel("a_b", "a", "b")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "missing" in result.feedback
@@ -193,7 +194,7 @@ class TestDepthChainValidation:
             relationships=[_rel("a_b", "a", "b")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "b" in result.feedback
@@ -206,6 +207,28 @@ class TestDepthChainValidation:
             relationships=[_rel("a_b", "a", "b"), _rel("b_c", "b", "c")],
         )
         checker = SchemaDepthChecker()
-        result = checker.validate(schema)
+        result = checker.validate(ValidationContext(schema=schema))
 
         assert result.status == ValidationStatus.PASS
+
+    def test_fails_depth_too_deep_with_chain_and_mn_rel_identifies_offenders(self):
+        # depth=1, chain a->b is valid, but b->c exists making longest=2.
+        # d->b (M:N) exercises the continue branch inside the offending loop.
+        # c->a exercises the "src not in chain, tgt in chain" branch.
+        schema = LogicalSchema(
+            idea="test", depth=1,
+            depth_chain=["a", "b"],
+            entities=[_entity("a"), _entity("b"), _entity("c"), _entity("d")],
+            relationships=[
+                _rel("a_to_b", "a", "b"),
+                _rel("b_to_c", "b", "c"),
+                _rel("c_to_a", "c", "a"),
+                _rel("d_to_b", "d", "b", RelationshipCardinality.MANY_TO_MANY),
+            ],
+        )
+        checker = SchemaDepthChecker()
+        result = checker.validate(ValidationContext(schema=schema))
+
+        assert result.status == ValidationStatus.FAIL
+        assert "b -> c" in result.feedback
+        assert "c -> a" in result.feedback

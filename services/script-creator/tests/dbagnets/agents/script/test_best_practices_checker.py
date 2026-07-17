@@ -5,6 +5,33 @@ from unittest.mock import patch
 
 from dbagnets.agents.script.best_practices_checker import BestPracticesCheckerAgent
 from dbagnets.models import ValidationResult, ValidationStatus
+from dbagnets.models.config import TargetConfig
+from dbagnets.models.enums import AbstractDataType
+from dbagnets.models.schema import Attribute, Entity, LogicalSchema
+from dbagnets.models.validation_context import ValidationContext
+
+
+def _sample_schema() -> LogicalSchema:
+    return LogicalSchema(
+        idea="test",
+        depth=1,
+        entities=[Entity(name="t", attributes=[Attribute(name="id", data_type=AbstractDataType.INTEGER)])],
+        relationships=[],
+    )
+
+
+def _ctx_from(config, script):
+    return ValidationContext(
+        schema=_sample_schema(),
+        target=TargetConfig(
+            db_type=config.db_type,
+            db_name=config.db_name,
+            db_version=config.db_version,
+        ),
+        script=script,
+        idea=config.idea,
+        depth=config.depth,
+    )
 
 
 class TestBestPracticesCheckerAgent:
@@ -30,7 +57,7 @@ class TestValidate:
                 feedback="Follows best practices", details="None",
             ),
         ):
-            result = agent.validate(sample_config, "CREATE TABLE t (id INT);")
+            result = agent.validate(_ctx_from(sample_config, "CREATE TABLE t (id INT);"))
 
         assert result.status == ValidationStatus.PASS
         assert result.feedback == "Follows best practices"
@@ -44,7 +71,7 @@ class TestValidate:
                 feedback="Poor naming conventions", details="camelCase used",
             ),
         ):
-            result = agent.validate(sample_config, "CREATE TABLE myTable (myCol INT);")
+            result = agent.validate(_ctx_from(sample_config, "CREATE TABLE myTable (myCol INT);"))
 
         assert result.status == ValidationStatus.FAIL
         assert result.feedback == "Poor naming conventions"
@@ -57,7 +84,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(sample_config, "SELECT 1;")
+            agent.validate(_ctx_from(sample_config, "SELECT 1;"))
 
         system_prompt = mock_validate.call_args.args[0]
         user_prompt = mock_validate.call_args.args[1]

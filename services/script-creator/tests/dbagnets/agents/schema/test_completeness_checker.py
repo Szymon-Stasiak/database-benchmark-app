@@ -7,6 +7,7 @@ from dbagnets.agents.schema.completeness_checker import SchemaCompletenessChecke
 from dbagnets.models import ValidationResult, ValidationStatus
 from dbagnets.models.enums import AbstractDataType
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema
+from dbagnets.models.validation_context import ValidationContext
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ class TestValidate:
                 feedback="Schema covers all essential entities", details="None",
             ),
         ):
-            result = agent.validate(sample_schema)
+            result = agent.validate(ValidationContext(schema=sample_schema))
 
         assert result.status == ValidationStatus.PASS
         assert result.feedback == "Schema covers all essential entities"
@@ -62,7 +63,7 @@ class TestValidate:
                 details="Present: movies. Missing: actors, directors, reviews",
             ),
         ):
-            result = agent.validate(sample_schema)
+            result = agent.validate(ValidationContext(schema=sample_schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "Missing critical entities" in result.feedback
@@ -75,7 +76,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(sample_schema)
+            agent.validate(ValidationContext(schema=sample_schema))
 
         system_prompt = mock_validate.call_args.args[0]
         assert "movie management database" in system_prompt

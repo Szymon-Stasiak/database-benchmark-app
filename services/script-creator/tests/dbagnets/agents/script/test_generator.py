@@ -290,3 +290,42 @@ class TestBuildUserPrompt:
         )
 
         assert "Generate a complete database initialization script." in prompt
+
+
+class TestVersionRestrictions:
+    def test_returns_empty_for_non_vector_db(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.RELATIONAL, db_name="postgresql", db_version="16")
+        assert agent._version_restrictions(target) == ""
+
+    def test_returns_empty_for_non_milvus_vector_db(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.VECTOR, db_name="qdrant", db_version="1.7")
+        assert agent._version_restrictions(target) == ""
+
+    def test_returns_empty_for_milvus_at_or_above_24(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.VECTOR, db_name="milvus", db_version="2.4")
+        assert agent._version_restrictions(target) == ""
+
+    def test_milvus_below_24_reports_single_vector_field_constraint(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.VECTOR, db_name="milvus", db_version="2.3")
+        result = agent._version_restrictions(target)
+        assert "VERSION CONSTRAINTS" in result
+        assert "Milvus < 2.4" in result
+        assert "EXACTLY ONE vector field" in result
+
+    def test_milvus_below_23_reports_gpu_unavailable(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.VECTOR, db_name="milvus", db_version="2.2.9")
+        result = agent._version_restrictions(target)
+        assert "Milvus < 2.3" in result
+        assert "GPU index" in result
+
+    def test_milvus_below_229_reports_partition_key_unavailable(self):
+        agent = ScriptGeneratorAgent("test-model")
+        target = TargetConfig(db_type=DatabaseType.VECTOR, db_name="milvus", db_version="2.2.8")
+        result = agent._version_restrictions(target)
+        assert "Milvus < 2.2.9" in result
+        assert "partition_key" in result

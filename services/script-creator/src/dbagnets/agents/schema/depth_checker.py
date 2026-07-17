@@ -3,6 +3,7 @@ from __future__ import annotations
 from dbagnets.models.enums import RelationshipCardinality, ValidationStatus
 from dbagnets.models.schema import LogicalSchema
 from dbagnets.models.validation import ValidationResult
+from dbagnets.models.validation_context import ValidationContext
 
 
 class SchemaDepthChecker:
@@ -11,7 +12,10 @@ class SchemaDepthChecker:
     def name(self) -> str:
         return "SchemaDepthChecker"
 
-    def validate(self, schema: LogicalSchema) -> ValidationResult:
+    def validate(self, ctx: ValidationContext) -> ValidationResult:
+        return self._validate(ctx.schema)
+
+    def _validate(self, schema: LogicalSchema) -> ValidationResult:
         adjacency: dict[str, list[str]] = {e.name: [] for e in schema.entities}
 
         for rel in schema.relationships:

@@ -7,6 +7,7 @@ from dbagnets.agents.schema.relationship_checker import SchemaRelationshipChecke
 from dbagnets.models import ValidationResult, ValidationStatus
 from dbagnets.models.enums import AbstractDataType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
+from dbagnets.models.validation_context import ValidationContext
 
 
 @pytest.fixture
@@ -58,7 +59,7 @@ class TestValidate:
                 feedback="All relationships are valid and coherent", details="None",
             ),
         ):
-            result = agent.validate(sample_schema)
+            result = agent.validate(ValidationContext(schema=sample_schema))
 
         assert result.status == ValidationStatus.PASS
         assert result.feedback == "All relationships are valid and coherent"
@@ -73,7 +74,7 @@ class TestValidate:
                 details="Relationship 'has_reviews' references 'reviews' which does not exist",
             ),
         ):
-            result = agent.validate(sample_schema)
+            result = agent.validate(ValidationContext(schema=sample_schema))
 
         assert result.status == ValidationStatus.FAIL
         assert "non-existent entity" in result.feedback
@@ -86,7 +87,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(sample_schema)
+            agent.validate(ValidationContext(schema=sample_schema))
 
         system_prompt = mock_validate.call_args.args[0]
         assert "movies" in system_prompt

@@ -18,6 +18,16 @@ from dbagnets.models.schema import (
     LogicalSchema,
     Relationship,
 )
+from dbagnets.models.validation_context import ValidationContext
+
+
+def _ctx(target, schema, script, mappings=None):
+    return ValidationContext(
+        schema=schema,
+        target=target,
+        script=script,
+        embedding_mappings=tuple(mappings or ()),
+    )
 
 
 def _attr(
@@ -81,7 +91,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
         assert result.agent_name == "FieldCoverageChecker"
@@ -101,7 +111,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("email" in t for t in result.todos)
@@ -117,7 +127,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("orders" in t for t in result.todos)
@@ -138,7 +148,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -158,7 +168,7 @@ class TestRelational:
         ALTER TABLE users ADD COLUMN status VARCHAR(50);
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -173,7 +183,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -188,7 +198,7 @@ class TestRelational:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("name" in t for t in result.todos)
@@ -213,9 +223,7 @@ class TestDocument:
         });
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.DOCUMENT, "mongodb"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.DOCUMENT, "mongodb"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -237,9 +245,7 @@ class TestDocument:
         });
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.DOCUMENT, "mongodb"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.DOCUMENT, "mongodb"), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("age" in t for t in result.todos)
@@ -284,10 +290,7 @@ class TestDocument:
             ),
         ]
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.DOCUMENT, "mongodb"),
-            schema, script, mappings,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.DOCUMENT, "mongodb"), schema, script, mappings))
 
         assert result.status == ValidationStatus.PASS
 
@@ -330,10 +333,7 @@ class TestDocument:
             ),
         ]
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.DOCUMENT, "mongodb"),
-            schema, script, mappings,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.DOCUMENT, "mongodb"), schema, script, mappings))
 
         assert result.status == ValidationStatus.FAIL
         assert any("zip_code" in t for t in result.todos)
@@ -353,9 +353,7 @@ class TestGraph:
         CREATE INDEX movie_title_idx FOR (n:Movie) ON (n.title);
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -371,9 +369,7 @@ class TestGraph:
         CREATE CONSTRAINT movie_id_unique FOR (n:Movie) REQUIRE n.movie_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
         assert "movie.title" in result.details
@@ -390,9 +386,7 @@ class TestGraph:
         CREATE CONSTRAINT movie_id_unique FOR (n:Movie) REQUIRE n.movie_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("title" in t for t in result.todos)
@@ -407,9 +401,7 @@ class TestGraph:
         CREATE CONSTRAINT review_id_unique FOR (n:MovieReview) REQUIRE n.review_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -459,9 +451,7 @@ class TestGraph:
         CREATE CONSTRAINT review_id_unique FOR (n:Review) REQUIRE n.review_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
         assert "movie.director_id" in result.details
@@ -490,9 +480,7 @@ class TestGraph:
         CREATE CONSTRAINT comment_id_unique FOR (n:Comment) REQUIRE n.comment_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
         assert "comment.parent_comment_id" in result.details
@@ -526,7 +514,7 @@ class TestRelationshipAttributes:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -556,7 +544,7 @@ class TestRelationshipAttributes:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("billing_order" in t for t in result.todos)
@@ -576,9 +564,7 @@ class TestFallback:
         HSET sensor_data:2 sensor_id "s2" temperature 24.1
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -591,9 +577,7 @@ class TestFallback:
         HSET users:1 id "u1"
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("orders" in t for t in result.todos)
@@ -617,9 +601,7 @@ class TestTimeSeries:
         SELECT create_hypertable('metrics', 'time');
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.TIME_SERIES, "timescaledb"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.TIME_SERIES, "timescaledb"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -641,9 +623,7 @@ class TestVector:
         );
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.VECTOR, "pgvector"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.VECTOR, "pgvector"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -665,9 +645,7 @@ schema = CollectionSchema(fields=fields)
 collection = Collection("movies", schema)
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.VECTOR, "milvus"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.VECTOR, "milvus"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -688,9 +666,7 @@ class_obj = {
 }
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.VECTOR, "weaviate"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.VECTOR, "weaviate"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -711,9 +687,7 @@ schema = CollectionSchema(fields=fields)
 collection = Collection("movies", schema)
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.VECTOR, "milvus"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.VECTOR, "milvus"), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("rating" in t for t in result.todos)
@@ -732,9 +706,7 @@ class TestKeyValue:
 FT.CREATE idx:products ON HASH PREFIX 1 products SCHEMA name TEXT price NUMERIC category TAG;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -750,9 +722,7 @@ FT.CREATE idx:products ON HASH PREFIX 1 products SCHEMA name TEXT price NUMERIC 
 FT.CREATE idx:products ON HASH PREFIX 1 products SCHEMA name TEXT price NUMERIC;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script))
 
         assert result.status == ValidationStatus.FAIL
         assert any("description" in t for t in result.todos)
@@ -777,9 +747,7 @@ class TestEmbeddedEdgeCases:
             ),
         ]
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script, mappings,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script, mappings))
 
         assert result.status == ValidationStatus.PASS
 
@@ -795,9 +763,7 @@ class TestEmbeddedEdgeCases:
             ),
         ]
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.KEY_VALUE, "redis"), schema, script, mappings,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.KEY_VALUE, "redis"), schema, script, mappings))
 
         assert result.status == ValidationStatus.FAIL
         assert any("orders" in t and "Parent" in t for t in result.todos)
@@ -825,7 +791,7 @@ class TestRelationshipEdgeCases:
         CREATE TABLE posts (id SERIAL PRIMARY KEY);
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -849,7 +815,7 @@ class TestRelationshipEdgeCases:
         CREATE TABLE tags (id SERIAL PRIMARY KEY);
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(_target(DatabaseType.RELATIONAL), schema, script)
+        result = checker.validate(_ctx(_target(DatabaseType.RELATIONAL), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -874,9 +840,7 @@ class TestRelationshipEdgeCases:
         CREATE CONSTRAINT movie_id_unique FOR (n:Movies) REQUIRE n.movie_id IS UNIQUE;
         """
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -888,9 +852,7 @@ class TestGraphEdgeCases:
         ])
         script = "CREATE CONSTRAINT user_id FOR (n:User) REQUIRE n.user_id IS UNIQUE"
         checker = FieldCoverageChecker()
-        result = checker.validate(
-            _target(DatabaseType.GRAPH, "neo4j"), schema, script,
-        )
+        result = checker.validate(_ctx(_target(DatabaseType.GRAPH, "neo4j"), schema, script))
 
         assert result.status == ValidationStatus.PASS
 
@@ -922,3 +884,80 @@ class TestHelpers:
         checker = FieldCoverageChecker()
         assert checker._snake_to_pascal("movie_review") == "MovieReview"
         assert checker._snake_to_pascal("user") == "User"
+
+
+class TestGetGraphFkAttributes:
+    def test_returns_empty_frozenset_when_entity_not_in_schema(self):
+        schema = _schema([_entity("other", [_attr("id", AbstractDataType.INTEGER, pk=True)])])
+        result = FieldCoverageChecker._get_graph_fk_attributes("nonexistent", schema)
+        assert result == frozenset()
+
+    def test_skips_attr_with_empty_stem_after_stripping_id_suffix(self):
+        # "id" (not pk): ends with "id", stem = "id"[:-2] = "" → skipped
+        schema = _schema([
+            _entity("user", [
+                _attr("user_id", AbstractDataType.INTEGER, pk=True),
+                _attr("id"),
+            ]),
+        ])
+        result = FieldCoverageChecker._get_graph_fk_attributes("user", schema)
+        assert "id" not in result
+
+    def test_self_reference_stem_marks_attr_as_fk(self):
+        # entity "comment", attr "comment_id" (not pk):
+        # stem="comment" == entity_name_norm="comment" → identified as FK
+        schema = _schema([
+            _entity("comment", [
+                _attr("id", AbstractDataType.INTEGER, pk=True),
+                _attr("comment_id"),
+            ]),
+        ])
+        result = FieldCoverageChecker._get_graph_fk_attributes("comment", schema)
+        assert "comment_id" in result
+
+    def test_skips_related_entity_whose_name_normalizes_to_empty(self):
+        # related entity named "_" normalizes to "" → that iteration is skipped
+        schema = _schema(
+            entities=[
+                _entity("item", [
+                    _attr("id", AbstractDataType.INTEGER, pk=True),
+                    _attr("some_id"),
+                ]),
+                _entity("_", [_attr("id", AbstractDataType.INTEGER, pk=True)]),
+            ],
+            relationships=[
+                Relationship(
+                    name="item_to_placeholder",
+                    source_entity="item",
+                    target_entity="_",
+                    cardinality=RelationshipCardinality.ONE_TO_MANY,
+                ),
+            ],
+        )
+        result = FieldCoverageChecker._get_graph_fk_attributes("item", schema)
+        assert "some_id" not in result
+
+    def test_partial_stem_match_against_related_entity_marks_as_fk(self):
+        # entity "order", attr "admin_id": stem="admin"
+        # related entity "system_administrator": "admin" in "systemadministrator" → FK
+        schema = _schema(
+            entities=[
+                _entity("order", [
+                    _attr("id", AbstractDataType.INTEGER, pk=True),
+                    _attr("admin_id"),
+                ]),
+                _entity("system_administrator", [
+                    _attr("id", AbstractDataType.INTEGER, pk=True),
+                ]),
+            ],
+            relationships=[
+                Relationship(
+                    name="admin_handles_order",
+                    source_entity="system_administrator",
+                    target_entity="order",
+                    cardinality=RelationshipCardinality.ONE_TO_MANY,
+                ),
+            ],
+        )
+        result = FieldCoverageChecker._get_graph_fk_attributes("order", schema)
+        assert "admin_id" in result

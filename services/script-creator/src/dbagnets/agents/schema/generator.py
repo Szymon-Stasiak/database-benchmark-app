@@ -204,17 +204,7 @@ Use the generate_schema tool to return the schema."""
         previous_schema_json: str | None,
     ) -> str:
         if feedback and previous_schema_json:
-            feedback_parts = []
-            for v in feedback:
-                if v.passed:
-                    continue
-                part = f"- [{v.agent_name}] {v.feedback}"
-                if v.todos:
-                    part += "\n  TODO:\n" + "\n".join(f"    - {t}" for t in v.todos)
-                elif v.details:
-                    part += f"\n  Details: {v.details}"
-                feedback_parts.append(part)
-            feedback_text = "\n".join(feedback_parts)
+            feedback_text = self._format_feedback_block(feedback)
             return (
                 f"Idea: {idea}\n"
                 f"Required relationship depth: {depth}\n\n"

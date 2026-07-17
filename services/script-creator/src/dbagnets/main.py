@@ -13,15 +13,6 @@ from dbagnets.log_context import LogContextFilter
 from dbagnets.models import PipelineConfig, DatabaseType, TargetConfig
 
 
-DB_TYPE_MAP = {
-    "relational": DatabaseType.RELATIONAL,
-    "graph": DatabaseType.GRAPH,
-    "vector": DatabaseType.VECTOR,
-    "document": DatabaseType.DOCUMENT,
-    "key_value": DatabaseType.KEY_VALUE,
-    "time_series": DatabaseType.TIME_SERIES,
-}
-
 _EXTENSIONS: dict[DatabaseType, str] = {
     DatabaseType.RELATIONAL: "sql",
     DatabaseType.GRAPH: "cypher",
@@ -30,6 +21,9 @@ _EXTENSIONS: dict[DatabaseType, str] = {
     DatabaseType.KEY_VALUE: "redis",
     DatabaseType.TIME_SERIES: "sql",
 }
+assert set(_EXTENSIONS) == set(DatabaseType), (
+    f"_EXTENSIONS is missing entries for: {set(DatabaseType) - set(_EXTENSIONS)}"
+)
 
 
 def setup_logging(verbose: bool) -> None:
@@ -55,13 +49,15 @@ def parse_target(target_str: str) -> TargetConfig:
             "(e.g. relational:postgresql:16)"
         )
     db_type_str, db_name, db_version = parts
-    if db_type_str not in DB_TYPE_MAP:
+    try:
+        db_type = DatabaseType(db_type_str)
+    except ValueError:
         raise argparse.ArgumentTypeError(
             f"Unknown database type: '{db_type_str}'. "
-            f"Valid types: {', '.join(DB_TYPE_MAP.keys())}"
+            f"Valid types: {', '.join(t.value for t in DatabaseType)}"
         )
     return TargetConfig(
-        db_type=DB_TYPE_MAP[db_type_str],
+        db_type=db_type,
         db_name=db_name,
         db_version=db_version,
     )

@@ -8,6 +8,7 @@ from dbagnets.models import ValidationResult, ValidationStatus
 from dbagnets.models.config import TargetConfig
 from dbagnets.models.enums import AbstractDataType, DatabaseType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
+from dbagnets.models.validation_context import ValidationContext
 
 
 @pytest.fixture
@@ -83,7 +84,7 @@ class TestValidate:
                 details="None",
             ),
         ):
-            result = agent.validate(sample_target, sample_schema, SAMPLE_SCRIPT)
+            result = agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script=SAMPLE_SCRIPT))
 
         assert result.status == ValidationStatus.PASS
         assert result.agent_name == "NamingConsistencyChecker"
@@ -100,7 +101,7 @@ class TestValidate:
                 todos=["Rename column 'name' to 'full_name' in table 'actors'."],
             ),
         ):
-            result = agent.validate(sample_target, sample_schema, "CREATE TABLE actors (id INT, name VARCHAR);")
+            result = agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script="CREATE TABLE actors (id INT, name VARCHAR);"))
 
         assert result.status == ValidationStatus.FAIL
         assert "full_name" in result.feedback
@@ -115,7 +116,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(sample_target, sample_schema, SAMPLE_SCRIPT)
+            agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script=SAMPLE_SCRIPT))
 
         system_prompt = mock_validate.call_args.args[0]
         user_prompt = mock_validate.call_args.args[1]
@@ -140,7 +141,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(graph_target, sample_schema, "CREATE CONSTRAINT ...")
+            agent.validate(ValidationContext(schema=sample_schema, target=graph_target, script="CREATE CONSTRAINT ..."))
 
         system_prompt = mock_validate.call_args.args[0]
         assert "node label" in system_prompt

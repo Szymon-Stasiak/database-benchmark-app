@@ -8,6 +8,7 @@ from dbagnets.models import ValidationResult, ValidationStatus
 from dbagnets.models.config import TargetConfig
 from dbagnets.models.enums import AbstractDataType, DatabaseType, RelationshipCardinality
 from dbagnets.models.schema import Attribute, Entity, LogicalSchema, Relationship
+from dbagnets.models.validation_context import ValidationContext
 
 
 @pytest.fixture
@@ -77,7 +78,7 @@ class TestValidate:
                 feedback="Script faithfully implements the LogicalSchema", details="None",
             ),
         ):
-            result = agent.validate(sample_target, sample_schema, SAMPLE_SCRIPT)
+            result = agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script=SAMPLE_SCRIPT))
 
         assert result.status == ValidationStatus.PASS
         assert result.feedback == "Script faithfully implements the LogicalSchema"
@@ -94,7 +95,7 @@ class TestValidate:
                 details="Entity 'actors' from LogicalSchema has no corresponding table",
             ),
         ):
-            result = agent.validate(sample_target, sample_schema, "CREATE TABLE movies (id INT);")
+            result = agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script="CREATE TABLE movies (id INT);"))
 
         assert result.status == ValidationStatus.FAIL
         assert "Missing entity" in result.feedback
@@ -109,7 +110,7 @@ class TestValidate:
                 feedback="OK", details="None",
             ),
         ) as mock_validate:
-            agent.validate(sample_target, sample_schema, SAMPLE_SCRIPT)
+            agent.validate(ValidationContext(schema=sample_schema, target=sample_target, script=SAMPLE_SCRIPT))
 
         system_prompt = mock_validate.call_args.args[0]
         user_prompt = mock_validate.call_args.args[1]

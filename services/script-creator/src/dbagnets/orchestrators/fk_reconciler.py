@@ -111,6 +111,4 @@ def _is_unchanged(
     new_entities: list[Entity],
     new_relationships: list[Relationship],
 ) -> bool:
-    return all(a is b for a, b in zip(schema.entities, new_entities)) and all(
-        a is b for a, b in zip(schema.relationships, new_relationships)
-    )
+    return schema.entities == new_entities and schema.relationships == new_relationships

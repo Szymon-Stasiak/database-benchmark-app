@@ -51,13 +51,8 @@ _SAMPLE_SCHEMA = LogicalSchema(
 
 
 def _mock_all_validators(orch: ScriptOrchestrator, result_fn=make_pass_result):
-    for v in orch.standard_validators:
+    for v in orch.validators:
         v.validate = MagicMock(return_value=result_fn(v.name))
-    for v in orch.schema_validators:
-        v.validate = MagicMock(return_value=result_fn(v.name))
-    orch.field_coverage_checker.validate = MagicMock(
-        return_value=result_fn(orch.field_coverage_checker.name)
-    )
 
 
 class TestScriptOrchestrator:
@@ -66,8 +61,7 @@ class TestScriptOrchestrator:
         assert orch.model == "vertex_ai/claude-sonnet-4-6"
         assert orch.max_iterations == 10
         assert orch.parallel_validation is True
-        assert len(orch.standard_validators) == 3
-        assert len(orch.schema_validators) == 2
+        assert len(orch.validators) == 6
 
     def test_init_accepts_custom_values(self):
         orch = ScriptOrchestrator(
@@ -104,20 +98,10 @@ class TestScriptRun:
     def test_retries_and_succeeds(self):
         orch = self._setup_orchestrator()
 
-        for v in orch.standard_validators:
+        for v in orch.validators:
             v.validate = MagicMock(
                 side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
             )
-        for v in orch.schema_validators:
-            v.validate = MagicMock(
-                side_effect=[make_fail_result(v.name), make_pass_result(v.name)]
-            )
-        orch.field_coverage_checker.validate = MagicMock(
-            side_effect=[
-                make_fail_result(orch.field_coverage_checker.name),
-                make_pass_result(orch.field_coverage_checker.name),
-            ]
-        )
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
@@ -128,13 +112,8 @@ class TestScriptRun:
     def test_returns_failure_when_exhausted(self):
         orch = self._setup_orchestrator(max_iterations=2)
 
-        for v in orch.standard_validators:
+        for v in orch.validators:
             v.validate = MagicMock(return_value=make_fail_result(v.name))
-        for v in orch.schema_validators:
-            v.validate = MagicMock(return_value=make_fail_result(v.name))
-        orch.field_coverage_checker.validate = MagicMock(
-            return_value=make_fail_result(orch.field_coverage_checker.name)
-        )
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
@@ -181,9 +160,7 @@ class TestScriptRunSequential:
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 
         assert state.success is True
-        for v in orch.standard_validators:
-            v.validate.assert_called_once()
-        for v in orch.schema_validators:
+        for v in orch.validators:
             v.validate.assert_called_once()
 
 
@@ -193,16 +170,11 @@ class TestScriptRunParallel:
         orch.generator = MagicMock()
         orch.generator.generate.return_value = ("SELECT 1;", [])
 
-        orch.standard_validators[0].validate = MagicMock(
+        orch.validators[0].validate = MagicMock(
             side_effect=RuntimeError("API timeout")
         )
-        for v in orch.standard_validators[1:]:
+        for v in orch.validators[1:]:
             v.validate = MagicMock(return_value=make_pass_result(v.name))
-        for v in orch.schema_validators:
-            v.validate = MagicMock(return_value=make_pass_result(v.name))
-        orch.field_coverage_checker.validate = MagicMock(
-            return_value=make_pass_result(orch.field_coverage_checker.name)
-        )
 
         state = orch.run(_SAMPLE_TARGET, _SAMPLE_SCHEMA, "test", 1)
 

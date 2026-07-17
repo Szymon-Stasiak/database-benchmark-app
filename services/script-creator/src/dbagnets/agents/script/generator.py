@@ -4,6 +4,7 @@ import logging
 
 from dbagnets.agents.base import BaseAgent
 from dbagnets.models.config import TargetConfig
+from dbagnets.models.database_profile import get_profile
 from dbagnets.models.enums import DatabaseType
 from dbagnets.models.llm_schemas import GeneratedScript
 from dbagnets.models.schema import DocumentEmbeddingMapping, LogicalSchema
@@ -64,159 +65,8 @@ class ScriptGeneratorAgent(BaseAgent):
 
         return script, mappings
 
-    _STRUCTURE_RULES: dict[DatabaseType, str] = {
-        DatabaseType.RELATIONAL: """- CREATE TABLE statements with columns and data types
-   - Primary keys and foreign keys implementing all relationships
-   - Indexes on all attributes marked as indexed in the schema
-   - NOT NULL constraints as defined in the schema (no UNIQUE outside PK, no CHECK)
-   - Junction tables for M:N relationships
-   CONSTRAINT POLICY (CRITICAL — random benchmark data is inserted later):
-   - ONLY structural constraints are allowed: PRIMARY KEY, FOREIGN KEY, NOT NULL.
-   - Do NOT emit: UNIQUE (outside the PK itself), CHECK, EXCLUSION, ENUM types
-     (CREATE TYPE ... AS ENUM, MySQL ENUM(...)), CREATE DOMAIN.
-   - Value-restricting constraints break random-data benchmarks downstream.
-   PRIMARY KEY RULE (CRITICAL — benchmark inserts depend on this):
-   - Every table MUST have a SINGLE-COLUMN primary key (a surrogate id column).
-   - NEVER use composite primary keys (e.g. `PRIMARY KEY (id, other_col)`).
-   - Composite PKs break downstream insert benchmarks and FK propagation.
-   NO TABLE PARTITIONING (CRITICAL):
-   - Do NOT use `PARTITION BY RANGE`, `PARTITION BY LIST`, `PARTITION BY HASH`,
-     or `PARTITION BY KEY` on any table.
-   - Partitioning forces composite primary keys (PostgreSQL hard requirement)
-     and breaks foreign keys from non-partitioned children. Skip it entirely.
-   - For benchmark purposes, plain non-partitioned tables with proper indexes
-     are sufficient and avoid FK conflicts.
-   PRODUCTION-SCALE DESIGN (without partitioning):
-   - Covering indexes (INCLUDE columns) for frequently queried combinations
-   - Partial indexes on commonly filtered subsets (e.g. WHERE status = 'active')
-   - Functional/expression indexes (e.g. LOWER(email)) for case-insensitive lookups
-   - B-tree for equality/range, GIN for arrays/JSONB/full-text, GiST for spatial/ranges
-   - FILLFACTOR tuning on tables with frequent updates
-   MAXIMIZE NATIVE FEATURES — use as many of these as the schema allows:
-   - GENERATED/computed columns for derived values
-   - Materialized views or regular views for common multi-table read patterns
-   - Triggers for audit timestamps (created_at, updated_at auto-population)
-   - Sequences for controlled ID generation""",
-
-        DatabaseType.GRAPH: """- EVERY entity in the LogicalSchema MUST be a separate node label — do NOT
-     collapse entities into relationship properties, even for leaf entities.
-     This is required to preserve the relationship depth chain.
-   - For EACH relationship in the LogicalSchema, the script MUST include either:
-     (a) relationship property constraints (e.g. CREATE CONSTRAINT ... FOR ()-[r:REL_TYPE]-() ...)
-     (b) relationship property indexes
-     so that every relationship type is explicitly defined in the DDL.
-   - FOREIGN KEY vs PRIMARY KEY distinction (CRITICAL):
-     A PRIMARY KEY is an entity's OWN identifier on its OWN node
-     (e.g. director_id on Director). PKs MUST be included as node properties.
-     A FOREIGN KEY is ANOTHER entity's ID on THIS node (e.g. director_id on
-     Movie, user_id on Review). FKs MUST be OMITTED — the relationship
-     encodes the link. Only omit FK attributes, NEVER omit PKs.
-   - Indexes on frequently queried properties (marked as indexed)
-   - Uniqueness constraints ONLY for primary-key attributes
-     (no uniqueness on natural identifiers like email/slug — random benchmark
-      data must not collide with value constraints)
-   - Use PascalCase for node labels and UPPER_SNAKE_CASE for relationship types
-   NEO4J COMMUNITY EDITION LIMITATION (CRITICAL):
-   - Property existence constraints (IS NOT NULL) and node key constraints
-     require Neo4j Enterprise Edition. NEVER use them — they will cause runtime
-     errors on Community Edition. Use uniqueness constraints and indexes only.
-   PRODUCTION-SCALE DESIGN:
-   - Range indexes on properties used in WHERE clauses and ORDER BY
-   - Text indexes on properties used in full-text search (CONTAINS, STARTS WITH)
-   - Composite indexes on properties frequently queried together
-   MAXIMIZE NATIVE FEATURES — show what graphs do better than relational:
-   - Rich relationship properties (e.g. role, weight, timestamp on edges)
-     with indexes on those properties
-   - Point/spatial types for geographic data
-   - Additional traversal relationships beyond the LogicalSchema to expose
-     useful graph navigation paths (e.g. shortcut relationships, reverse lookups)
-   - Full-text indexes on text/string properties that users would search""",
-
-        DatabaseType.VECTOR: """- Collection definitions with scalar and vector fields
-   - Vector index configuration (index type, metric type, dimensions)
-   - Primary key / ID field for each collection
-   - Reference fields implementing relationships between collections
-   PRODUCTION-SCALE DESIGN:
-   - Choose index type based on data_size_hints: IVF_FLAT (<100K rows), HNSW (<10M, latency-critical),
-     IVF_SQ8/IVF_PQ (>10M rows, memory-constrained) — match the scale
-   - Tune index params: HNSW (M=16-64, efConstruction=200-500), IVF (nlist=sqrt(N))
-   - Partition keys for data distribution on collections with >1M rows
-   - Scalar indexes on ALL filter fields — hybrid search (vector + filter) is the primary use case
-   MAXIMIZE NATIVE FEATURES — show what vector DBs do better:
-   - Multiple vector fields per collection when entity has different embeddings
-     AND the target database version supports it (see VERSION CONSTRAINTS below).
-     If multi-vector is unsupported, choose the single most important embedding
-     and store the others in a separate collection.
-   - Correct metric type per use case (COSINE for text, L2 for images, IP for recommendations)
-   - Dynamic schema fields where additional metadata varies per record
-   - Consistency level configuration for read/write tradeoffs""",
-
-        DatabaseType.DOCUMENT: """- Collection definitions for top-level entities
-   - Index definitions on indexed attributes
-   - Relationships via embedded sub-documents (preferred for data accessed together)
-     or reference fields (for independently queried entities)
-   - Denormalization is expected — embed related data for read performance
-   CONSTRAINT POLICY (CRITICAL — random benchmark data is inserted later):
-   - JSON Schema validation is OPTIONAL and, if present, MUST be type-only
-     (bsonType / required). Do NOT use enum, pattern, minimum, maximum,
-     minLength, maxLength — value validators break random-data benchmarks.
-   PRODUCTION-SCALE DESIGN:
-   - Compound indexes following ESR rule (Equality, Sort, Range) for query optimization
-   - Covered queries: include all projected fields in indexes where possible
-   - Partial/sparse indexes for optional fields to save space at scale
-   - Shard key design: choose high-cardinality fields for even data distribution
-   - Read concern/write concern configuration for consistency vs performance tradeoffs
-   MAXIMIZE NATIVE FEATURES — show what document DBs do better:
-   - Multi-key indexes on array fields (e.g. tags, categories)
-   - Text indexes for full-text search on string/text fields
-   - TTL indexes on timestamp fields for data with natural expiration
-   - Wildcard indexes on polymorphic or flexible sub-documents
-   - Collation-aware indexes for locale-specific string sorting
-   - Aggregation pipeline views for common read patterns
-   - Change streams configuration for real-time data processing
-   - Capped collections for fixed-size log-like entities""",
-
-        DatabaseType.KEY_VALUE: """- Key namespace/keyspace definitions for each entity
-   - Data structure definitions (hashes, lists, sets, sorted sets)
-   - Key reference patterns implementing relationships
-   - Secondary index definitions for indexed attributes
-   PRODUCTION-SCALE DESIGN:
-   - Memory-efficient encoding: use hashes for objects (ziplist encoding for small hashes)
-   - Key expiration strategies: volatile-lru, allkeys-lfu depending on use case
-   - Pipeline-friendly key design: namespace:entity_id pattern for batch operations
-   - Secondary indexes via sorted sets for non-primary lookups at scale
-   MAXIMIZE NATIVE FEATURES — show what key-value stores do better:
-   - Hashes for entity storage (HSET/HGET for field-level access)
-   - Sorted sets for ranked data, leaderboards, time-ordered indexes
-   - Sets for unique collections, tags, M:N relationship members
-   - Streams with consumer groups for event/activity log entities
-   - HyperLogLog for approximate cardinality counting (unique visitors, etc.)
-   - Geospatial commands (GEOADD/GEOSEARCH) for location-based entities
-   - TTL policies (EXPIRE) on ephemeral/session-like data
-   - Bitmaps for boolean flag matrices (feature flags, permissions)
-   - Lua scripts for atomic multi-key operations
-   - Pub/Sub channels for real-time entity change notifications""",
-
-        DatabaseType.TIME_SERIES: """- Measurement/hypertable definitions with tags and fields
-   - Time-based partitioning configuration
-   - Relationship implementation via foreign keys or tag references
-   - Indexes on indexed attributes
-   PRODUCTION-SCALE DESIGN:
-   - Chunk interval tuned to data_size_hints: 1 day for high-frequency, 1 week for low-frequency
-   - Compression policies with segmentby (tags) and orderby (time) for 90%+ compression
-   - Retention policies to automatically drop data older than business requirements
-   - Composite indexes on (time, tag columns) for the primary query pattern: time-range + filter
-   MAXIMIZE NATIVE FEATURES — show what time-series DBs do better:
-   - Continuous aggregates for pre-computed rollups (hourly, daily, weekly summaries)
-   - Real-time aggregation functions (time_bucket, first, last, interpolate)
-   - Hierarchical continuous aggregates (minute → hour → day)
-   - Data tiering policies (move old data to cheaper storage)
-   - Downsampling continuous aggregates for long-term trend storage
-   - Space-partitioning with add_dimension for multi-tenant or multi-device data""",
-    }
-
     def _build_system_prompt(self, target: TargetConfig, schema: LogicalSchema, depth: int) -> str:
-        structure_rules = self._STRUCTURE_RULES[target.db_type]
+        structure_rules = get_profile(target.db_type).structure_rules
         type_hints = format_type_mapping_prompt(target.db_name)
         version_restrictions = self._version_restrictions(target)
 
@@ -376,17 +226,7 @@ RULES:
         )
 
         if feedback and previous_script:
-            feedback_parts = []
-            for v in feedback:
-                if v.passed:
-                    continue
-                part = f"- [{v.agent_name}] {v.feedback}"
-                if v.todos:
-                    part += "\n  TODO:\n" + "\n".join(f"    - {t}" for t in v.todos)
-                elif v.details:
-                    part += f"\n  Details: {v.details}"
-                feedback_parts.append(part)
-            feedback_text = "\n".join(feedback_parts)
+            feedback_text = self._format_feedback_block(feedback)
             return (
                 f"{context}\n\n"
                 f"Previous script (needs fixing):\n```\n{previous_script}\n```\n\n"
