@@ -19,8 +19,6 @@ public interface SseEvents {
     String EVENT_DELETE_RUN_STATUS = "delete_run_status";
     String EVENT_DELETE_RUN_PREPARED = "delete_run_prepared";
     String EVENT_DELETE_RESULT_STATUS = "delete_result_status";
-    String EVENT_RUN_CONFLICT = "run_conflict";
-    String EVENT_RUN_RESULT_UPDATE = "run_result_update";
 
     String EVENT_CONTAINER_STATS = "container_stats";
 
@@ -33,8 +31,6 @@ public interface SseEvents {
 
     String PAYLOAD_BENCHMARK_ID = "benchmarkId";
     String PAYLOAD_DATABASE_ID = "databaseId";
-    String PAYLOAD_RUN_ID = "runId";
-    String PAYLOAD_ENTITY_NAME = "entityName";
     String PAYLOAD_STATUS = "status";
     String PAYLOAD_ERROR_MESSAGE = "errorMessage";
     String PAYLOAD_HOST_PORT = "hostPort";
@@ -48,9 +44,9 @@ public interface SseEvents {
 
     static Map<String, Object> databaseStatusPayload(String benchmarkId, String databaseId, Object status) {
         return Map.of(
-            PAYLOAD_BENCHMARK_ID, benchmarkId,
-            PAYLOAD_DATABASE_ID, databaseId,
-            PAYLOAD_STATUS, status
+                PAYLOAD_BENCHMARK_ID, benchmarkId,
+                PAYLOAD_DATABASE_ID, databaseId,
+                PAYLOAD_STATUS, status
         );
     }
 
@@ -59,18 +55,18 @@ public interface SseEvents {
             return databaseStatusPayload(benchmarkId, databaseId, status);
         }
         return Map.of(
-            PAYLOAD_BENCHMARK_ID, benchmarkId,
-            PAYLOAD_DATABASE_ID, databaseId,
-            PAYLOAD_STATUS, status,
-            PAYLOAD_ERROR_MESSAGE, errorMessage
+                PAYLOAD_BENCHMARK_ID, benchmarkId,
+                PAYLOAD_DATABASE_ID, databaseId,
+                PAYLOAD_STATUS, status,
+                PAYLOAD_ERROR_MESSAGE, errorMessage
         );
     }
 
     static Map<String, Object> databasePortAssignedPayload(String benchmarkId, String databaseId, int hostPort) {
         return Map.of(
-            PAYLOAD_BENCHMARK_ID, benchmarkId,
-            PAYLOAD_DATABASE_ID, databaseId,
-            PAYLOAD_HOST_PORT, hostPort
+                PAYLOAD_BENCHMARK_ID, benchmarkId,
+                PAYLOAD_DATABASE_ID, databaseId,
+                PAYLOAD_HOST_PORT, hostPort
         );
     }
 }

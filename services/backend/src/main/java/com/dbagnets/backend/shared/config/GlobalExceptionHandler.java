@@ -16,29 +16,29 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> handleNotFound(NoSuchElementException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-            .body(Map.of("error", "not_found", "message", safeMessage(e)));
+                .body(Map.of("error", "not_found", "message", safeMessage(e)));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<Map<String, String>> handleBadRequest(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(Map.of("error", "bad_request", "message", safeMessage(e)));
+                .body(Map.of("error", "bad_request", "message", safeMessage(e)));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()
-            .findFirst()
-            .map(err -> err.getField() + ": " + err.getDefaultMessage())
-            .orElse("validation failed");
+                .findFirst()
+                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                .orElse("validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(Map.of("error", "validation_failed", "message", message));
+                .body(Map.of("error", "validation_failed", "message", message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, String>> handleConstraintViolation(ConstraintViolationException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(Map.of("error", "validation_failed", "message", safeMessage(e)));
+                .body(Map.of("error", "validation_failed", "message", safeMessage(e)));
     }
 
     private static String safeMessage(Throwable e) {

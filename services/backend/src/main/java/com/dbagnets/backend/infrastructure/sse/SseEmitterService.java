@@ -62,7 +62,7 @@ public class SseEmitterService implements BenchmarkEventPort {
 
     public void broadcastBenchmarkStatus(String benchmarkId, Object status) {
         sendEvent(benchmarkId, SseEvents.EVENT_BENCHMARK_STATUS,
-            SseEvents.benchmarkStatusPayload(benchmarkId, status));
+                SseEvents.benchmarkStatusPayload(benchmarkId, status));
     }
 
     public void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status) {
@@ -71,12 +71,12 @@ public class SseEmitterService implements BenchmarkEventPort {
 
     public void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status, String errorMessage) {
         sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_STATUS,
-            SseEvents.databaseStatusPayload(benchmarkId, databaseId, status, errorMessage));
+                SseEvents.databaseStatusPayload(benchmarkId, databaseId, status, errorMessage));
     }
 
     public void broadcastDatabasePortAssigned(String benchmarkId, String databaseId, int hostPort) {
         sendEvent(benchmarkId, SseEvents.EVENT_DATABASE_PORT_ASSIGNED,
-            SseEvents.databasePortAssignedPayload(benchmarkId, databaseId, hostPort));
+                SseEvents.databasePortAssignedPayload(benchmarkId, databaseId, hostPort));
     }
 
     @Scheduled(fixedRate = 30000)
@@ -86,8 +86,6 @@ public class SseEmitterService implements BenchmarkEventPort {
             for (var emitter : list) {
                 try {
                     emitter.send(SseEmitter.event().name(SseEvents.EVENT_HEARTBEAT).data("{}"));
-                } catch (IOException | IllegalStateException e) {
-                    deadEmitters.add(emitter);
                 } catch (Exception e) {
                     deadEmitters.add(emitter);
                 }

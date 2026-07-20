@@ -13,28 +13,32 @@ import java.util.List;
 @Slf4j
 public class ScriptCreatorClient implements ScriptGenerationPort {
     private final WebClient webClient;
+    private final String model;
 
-    public ScriptCreatorClient(@Value("${script-creator.base-url}") String baseUrl) {
+    public ScriptCreatorClient(
+            @Value("${script-creator.base-url}") String baseUrl,
+            @Value("${script-creator.model}") String model) {
         this.webClient = WebClient.builder()
-            .baseUrl(baseUrl)
-            .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
-            .build();
+                .baseUrl(baseUrl)
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
+                .build();
+        this.model = model;
     }
 
     public ScriptCreatorResponse generate(String idea, int depth, List<ScriptCreatorRequest.TargetRequest> targets) {
         var request = new ScriptCreatorRequest(
-            idea, depth, targets,
-            "vertex_ai/claude-sonnet-4-6",
-            10, false
+                idea, depth, targets,
+                model,
+                10, false
         );
 
         log.info("Calling script-creator with {} targets for idea: {}", targets.size(), idea);
         return webClient.post()
-            .uri("/generate")
-            .bodyValue(request)
-            .retrieve()
-            .bodyToMono(ScriptCreatorResponse.class)
-            .timeout(Duration.ofMinutes(10))
-            .block();
+                .uri("/generate")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(ScriptCreatorResponse.class)
+                .timeout(Duration.ofMinutes(10))
+                .block();
     }
 }

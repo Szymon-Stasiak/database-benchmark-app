@@ -24,6 +24,8 @@ spring:
     driver-class-name: org.sqlite.JDBC
     hikari:
       maximum-pool-size: 1
+      connection-timeout: 120000
+      connection-init-sql: "PRAGMA journal_mode=WAL"
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
@@ -38,6 +40,7 @@ spring:
 
 script-creator:
   base-url: http://localhost:8001
+  model: vertex_ai/claude-sonnet-4-6
 
 app:
   cors:

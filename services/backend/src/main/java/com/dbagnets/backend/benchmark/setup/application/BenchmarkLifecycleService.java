@@ -18,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -46,7 +48,13 @@ public class BenchmarkLifecycleService {
         benchmarkRepository.save(benchmark);
         log.info("Created benchmark {} with {} databases", benchmark.getId(), request.databases().size());
 
-        deployment.deployAsync(benchmark.getId());
+        String benchmarkId = benchmark.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deployment.deployAsync(benchmarkId);
+            }
+        });
 
         return BenchmarkResponse.from(benchmark);
     }
@@ -80,7 +88,13 @@ public class BenchmarkLifecycleService {
         benchmarkRepository.save(benchmark);
         log.info("Imported benchmark {} from bundle with {} databases", benchmark.getId(), manifest.databases().size());
 
-        deployment.deployFromBundleAsync(benchmark.getId());
+        String benchmarkId = benchmark.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deployment.deployFromBundleAsync(benchmarkId);
+            }
+        });
 
         return BenchmarkResponse.from(benchmark);
     }
