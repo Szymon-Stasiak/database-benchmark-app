@@ -1,19 +1,24 @@
 package com.dbagnets.backend.benchmark.result.application;
 
+import com.dbagnets.backend.benchmark.result.api.dto.DatabaseSizeResponse;
 import com.dbagnets.backend.engine.driver.redis.RedisPoolCache;
 import com.dbagnets.backend.infrastructure.docker.DockerService;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.infrastructure.size.EngineDataDir;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 import com.dbagnets.backend.domain.DatabaseEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -22,11 +27,32 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DataSizeProbe {
 
     private static final Duration CACHE_TTL = Duration.ofSeconds(2);
+    private static final double BYTES_PER_KB = 1024.0;
 
     private final DockerService dockerService;
     private final RedisPoolCache redisCache;
+    private final BenchmarkRepository benchmarkRepository;
+
+    @Value("${app.container-host}")
+    private String hostAddress;
 
     private final ConcurrentHashMap<String, CachedSize> cache = new ConcurrentHashMap<>();
+
+    public List<DatabaseSizeResponse> getDatabaseSizes(String benchmarkId) {
+        return benchmarkRepository.findById(benchmarkId)
+                .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId))
+                .getDatabases().stream()
+                .map(this::buildSizeResponse)
+                .toList();
+    }
+
+    private DatabaseSizeResponse buildSizeResponse(BenchmarkDatabase db) {
+        Long size = sizeOf(db, hostAddress);
+        Long baseline = db.getBaselineSizeBytes();
+        Long delta = (size != null && baseline != null) ? Math.max(0L, size - baseline) : null;
+        return new DatabaseSizeResponse(db.getId(), db.getDbName(), db.getDbVersion(),
+                size, baseline, delta, humanize(size), size != null);
+    }
 
     public Long sizeOf(BenchmarkDatabase db, String hostAddress) {
         if (db == null) return null;
@@ -98,12 +124,12 @@ public class DataSizeProbe {
 
     public String humanize(Long bytes) {
         if (bytes == null) return "n/a";
-        if (bytes < 1024) return bytes + " B";
-        double kb = bytes / 1024.0;
-        if (kb < 1024) return String.format(Locale.ROOT, "%.1f KB", kb);
-        double mb = kb / 1024.0;
-        if (mb < 1024) return String.format(Locale.ROOT, "%.1f MB", mb);
-        return String.format(Locale.ROOT, "%.1f GB", mb / 1024.0);
+        if (bytes < BYTES_PER_KB) return bytes + " B";
+        double kb = bytes / BYTES_PER_KB;
+        if (kb < BYTES_PER_KB) return String.format(Locale.ROOT, "%.1f KB", kb);
+        double mb = kb / BYTES_PER_KB;
+        if (mb < BYTES_PER_KB) return String.format(Locale.ROOT, "%.1f MB", mb);
+        return String.format(Locale.ROOT, "%.1f GB", mb / BYTES_PER_KB);
     }
 
     private record CachedSize(Long bytes, Instant capturedAt) {

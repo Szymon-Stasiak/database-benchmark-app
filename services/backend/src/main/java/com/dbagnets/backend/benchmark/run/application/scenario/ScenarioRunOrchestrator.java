@@ -37,6 +37,7 @@ import com.dbagnets.backend.infrastructure.sse.SseEvents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -57,7 +58,8 @@ import java.util.concurrent.Executors;
 @RequiredArgsConstructor
 public class ScenarioRunOrchestrator {
 
-    private static final String HOST_ADDRESS = "127.0.0.1";
+    @Value("${app.container-host}")
+    private String hostAddress;
     public static final String CONSISTENCY_MATCH = "MATCH";
     public static final String CONSISTENCY_MISMATCH = "MISMATCH";
     public static final String CONSISTENCY_INCOMPLETE = "INCOMPLETE";
@@ -204,7 +206,7 @@ public class ScenarioRunOrchestrator {
                 db.getId(),
                 db.getDbName(),
                 db.getDbVersion(),
-                HOST_ADDRESS,
+                hostAddress,
                 db.getHostPort(),
                 schema,
                 embeddings,

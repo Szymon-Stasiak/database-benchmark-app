@@ -53,6 +53,7 @@ import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -71,7 +72,8 @@ import java.util.NoSuchElementException;
 @RequestMapping("/api")
 public class BenchmarkOpsController {
 
-    private static final String HOST_ADDRESS = "127.0.0.1";
+    @Value("${app.container-host}")
+    private String hostAddress;
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkRunRepository runRepository;
@@ -296,7 +298,7 @@ public class BenchmarkOpsController {
         String sql = "SELECT " + fkCol + " FROM " + childTable
                 + " WHERE " + fkCol + " IS NOT NULL ORDER BY RANDOM() LIMIT 1";
         try {
-            PgConnectionInfo info = PgConnectionInfo.defaultLocal(pgDb.getId(), HOST_ADDRESS, pgDb.getHostPort());
+            PgConnectionInfo info = PgConnectionInfo.defaultLocal(pgDb.getId(), hostAddress, pgDb.getHostPort());
             javax.sql.DataSource ds = pgDataSourceCache.get(info);
             try (java.sql.Connection conn = ds.getConnection();
                  java.sql.PreparedStatement ps = conn.prepareStatement(sql);
@@ -385,26 +387,7 @@ public class BenchmarkOpsController {
 
     @GetMapping("/benchmarks/{benchmarkId}/database-sizes")
     public List<DatabaseSizeResponse> getDatabaseSizes(@PathVariable String benchmarkId) {
-        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
-                .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId));
-        return benchmark.getDatabases().stream()
-                .map(this::probeSize)
-                .toList();
-    }
-
-    private DatabaseSizeResponse probeSize(BenchmarkDatabase db) {
-        Long size = dataSizeProbe.sizeOf(db, HOST_ADDRESS);
-        Long baseline = db.getBaselineSizeBytes();
-        Long delta = (size != null && baseline != null) ? Math.max(0L, size - baseline) : null;
-        return new DatabaseSizeResponse(
-                db.getId(),
-                db.getDbName(),
-                db.getDbVersion(),
-                size,
-                baseline,
-                delta,
-                dataSizeProbe.humanize(size),
-                size != null);
+        return dataSizeProbe.getDatabaseSizes(benchmarkId);
     }
 
     private CascadePreviewResponse buildPreview(LogicalSchema schema, CascadePlan plan, CascadePreviewRequest request) {

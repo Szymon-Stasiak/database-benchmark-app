@@ -42,6 +42,7 @@ import com.dbagnets.backend.infrastructure.sse.SseEvents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -61,8 +62,10 @@ import java.util.concurrent.Executors;
 @RequiredArgsConstructor
 public class InsertRunOrchestrator {
 
-    private static final String HOST_ADDRESS = "127.0.0.1";
     private static final int DEFAULT_BATCH_SIZE = 100;
+
+    @Value("${app.container-host}")
+    private String hostAddress;
     private static final int DEFAULT_WORKER_COUNT = 4;
 
     private final BenchmarkRepository benchmarkRepository;
@@ -202,7 +205,7 @@ public class InsertRunOrchestrator {
                     db.getId(),
                     db.getDbName(),
                     db.getDbVersion(),
-                    HOST_ADDRESS,
+                    hostAddress,
                     db.getHostPort(),
                     schema,
                     embeddings,

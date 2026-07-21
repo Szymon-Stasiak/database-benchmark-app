@@ -36,6 +36,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -54,8 +55,10 @@ import java.util.concurrent.Executors;
 @RequiredArgsConstructor
 public class DeleteRunOrchestrator {
 
-    private static final String HOST_ADDRESS = "127.0.0.1";
     private static final int DEFAULT_SAMPLE_SIZE = 100;
+
+    @Value("${app.container-host}")
+    private String hostAddress;
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkRunRepository runRepository;
@@ -215,7 +218,7 @@ public class DeleteRunOrchestrator {
                     db.getId(),
                     db.getDbName(),
                     db.getDbVersion(),
-                    HOST_ADDRESS,
+                    hostAddress,
                     db.getHostPort(),
                     schema,
                     embeddings,
@@ -277,7 +280,7 @@ public class DeleteRunOrchestrator {
                             db.getId(),
                             db.getDbName(),
                             db.getDbVersion(),
-                            HOST_ADDRESS,
+                            hostAddress,
                             db.getHostPort(),
                             schema,
                             embeddings,
@@ -292,7 +295,7 @@ public class DeleteRunOrchestrator {
 
     private Long safeProbe(BenchmarkDatabase db) {
         try {
-            return dataSizeProbe.sizeOf(db, HOST_ADDRESS);
+            return dataSizeProbe.sizeOf(db, hostAddress);
         } catch (Exception ex) {
             log.debug("Size probe failed for {}: {}", db.getDbName(), ex.getMessage());
             return null;

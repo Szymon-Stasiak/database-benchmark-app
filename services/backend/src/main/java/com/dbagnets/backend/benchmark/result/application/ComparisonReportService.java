@@ -273,4 +273,3 @@ public class ComparisonReportService {
         return Math.min(100.0, (min / self) * 100.0);
     }
 }
-

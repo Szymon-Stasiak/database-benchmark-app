@@ -21,6 +21,7 @@ import com.dbagnets.backend.shared.event.BenchmarkEventPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
@@ -38,7 +39,9 @@ import java.util.concurrent.Future;
 public class BenchmarkDeploymentService {
 
     private static final long CONTAINER_MEMORY_MB = 2048;
-    private static final String HOST_ADDRESS = "127.0.0.1";
+
+    @Value("${app.container-host}")
+    private String hostAddress;
 
     private final BenchmarkRepository benchmarkRepository;
     private final BenchmarkDatabaseRepository databaseRepository;
@@ -353,7 +356,7 @@ public class BenchmarkDeploymentService {
     private void captureBaseline(String benchmarkId, String dbId) {
         var db = databaseRepository.findById(dbId).orElseThrow();
         dataSizeProbe.invalidate(dbId);
-        Long bytes = dataSizeProbe.sizeOf(db, HOST_ADDRESS);
+        Long bytes = dataSizeProbe.sizeOf(db, hostAddress);
         if (bytes == null) {
             log.warn("Baseline capture skipped for {} ({}): probe unavailable", db.getDbName(), dbId);
             return;
