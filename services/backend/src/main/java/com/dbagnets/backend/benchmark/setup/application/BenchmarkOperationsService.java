@@ -31,12 +31,7 @@ public class BenchmarkOperationsService {
     public void redeployBenchmark(String benchmarkId) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
         List<BenchmarkDatabase> redeployableDbs = benchmark.getDatabases().stream()
-                .filter(db -> db.getScript() != null
-                        && db.getStatus() != DatabaseStatus.RUNNING
-                        && db.getStatus() != DatabaseStatus.PENDING
-                        && db.getStatus() != DatabaseStatus.SCRIPT_GENERATING
-                        && db.getStatus() != DatabaseStatus.CONTAINER_STARTING
-                        && db.getStatus() != DatabaseStatus.INITIALIZING)
+                .filter(db -> db.getScript() != null && db.getStatus().isRedeployable())
                 .toList();
 
         if (redeployableDbs.isEmpty()) {

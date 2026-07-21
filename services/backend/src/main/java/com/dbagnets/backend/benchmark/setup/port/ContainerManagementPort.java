@@ -21,7 +21,5 @@ public interface ContainerManagementPort {
 
     void streamLogs(String containerId, SseEmitter emitter);
 
-    boolean isContainerRunning(String containerId);
-
     int findAvailablePort();
 }

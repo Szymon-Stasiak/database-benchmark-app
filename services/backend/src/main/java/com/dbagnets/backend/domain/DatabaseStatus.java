@@ -8,5 +8,9 @@ public enum DatabaseStatus {
     INITIALIZING,
     RUNNING,
     STOPPED,
-    FAILED
+    FAILED;
+
+    public boolean isRedeployable() {
+        return this == SCRIPT_READY || this == STOPPED || this == FAILED;
+    }
 }

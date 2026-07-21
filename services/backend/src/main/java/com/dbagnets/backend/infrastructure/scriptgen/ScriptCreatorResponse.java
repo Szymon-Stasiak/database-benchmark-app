@@ -10,6 +10,9 @@ public record ScriptCreatorResponse(
         @JsonProperty("logical_schema") Object logicalSchema,
         List<ScriptResult> scripts
 ) {
+    public ScriptCreatorResponse {
+        scripts = scripts == null ? List.of() : scripts;
+    }
     public record ScriptResult(
             @JsonProperty("db_type") String dbType,
             @JsonProperty("db_name") String dbName,

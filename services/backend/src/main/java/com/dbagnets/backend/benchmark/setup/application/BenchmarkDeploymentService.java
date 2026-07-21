@@ -204,14 +204,13 @@ public class BenchmarkDeploymentService {
                 benchmark.getTopic(), benchmark.getDepth(), targets
         );
 
-        long successCount = response.scripts() == null ? 0
-                : response.scripts().stream().filter(ScriptResult::success).count();
+        long successCount = response.scripts().stream().filter(ScriptResult::success).count();
         if (successCount == 0) {
             throw new RuntimeException("Script generation failed for every database");
         }
         if (!response.success()) {
             log.warn("Partial script-generation success: {}/{} databases produced a script — failed ones will be marked FAILED, the rest will proceed",
-                    successCount, response.scripts() == null ? 0 : response.scripts().size());
+                    successCount, response.scripts().size());
         }
         benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
         try {
