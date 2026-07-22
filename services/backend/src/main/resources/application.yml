@@ -4,10 +4,6 @@ server:
 spring:
   application:
     name: backend
-  # Disable Spring Boot auto-configuration for the per-benchmark DB drivers we use directly inside
-  # insert strategies. We open per-strategy MongoClient / Neo4j Driver / JedisPool / Mongo Repos
-  # ad-hoc against benchmark containers — we never want a global bean trying to connect to
-  # localhost:27017 / :7687 / :6379 on startup.
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
@@ -41,10 +37,11 @@ spring:
 script-creator:
   base-url: http://localhost:8001
   model: vertex_ai/claude-sonnet-4-6
+  generate-path: /generate
+  max-iterations: 10
+  timeout-minutes: 10
 
 app:
   container-host: 127.0.0.1
   cors:
-    # Comma-separated list. Override per environment with APP_CORS_ALLOWED_ORIGINS env var
-    # or --app.cors.allowed-origins=... CLI flag (e.g. https://prod.example.com,https://staging.example.com).
     allowed-origins: http://localhost:5173
