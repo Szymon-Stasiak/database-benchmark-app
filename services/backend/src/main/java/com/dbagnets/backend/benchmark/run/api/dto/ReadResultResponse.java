@@ -29,6 +29,9 @@ public record ReadResultResponse(
         Long memoryBytesP95,
         Integer resourceSampleCount
 ) {
+    private static final long NS_PER_US = 1_000L;
+    private static final long NS_PER_MS = 1_000_000L;
+
     public static ReadResultResponse from(BenchmarkResult r) {
         return new ReadResultResponse(
                 r.getId(),
@@ -45,7 +48,7 @@ public record ReadResultResponse(
                 toMicros(r.getP50DbTimeNs()),
                 toMicros(r.getP95DbTimeNs()),
                 toMicros(r.getP99DbTimeNs()),
-                r.getWireTimeNs() == null ? null : r.getWireTimeNs() / 1_000_000L,
+                r.getWireTimeNs() == null ? null : r.getWireTimeNs() / NS_PER_MS,
                 r.getSamplesRecorded(),
                 r.getCpuPercentMax(),
                 r.getCpuPercentMean(),
@@ -57,6 +60,6 @@ public record ReadResultResponse(
     }
 
     private static Long toMicros(Long ns) {
-        return ns == null ? null : ns / 1_000L;
+        return ns == null ? null : ns / NS_PER_US;
     }
 }

@@ -39,6 +39,8 @@ public record DeleteResultResponse(
 ) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Integer>> BREAKDOWN_TYPE = new TypeReference<>() {};
+    private static final long NS_PER_US = 1_000L;
+    private static final long NS_PER_MS = 1_000_000L;
 
     public static DeleteResultResponse from(BenchmarkResult r) {
         Long delta = (r.getDataSizeBefore() != null && r.getDataSizeAfter() != null)
@@ -62,7 +64,7 @@ public record DeleteResultResponse(
                 toMicros(r.getP50DbTimeNs()),
                 toMicros(r.getP95DbTimeNs()),
                 toMicros(r.getP99DbTimeNs()),
-                r.getWireTimeNs() == null ? null : r.getWireTimeNs() / 1_000_000L,
+                r.getWireTimeNs() == null ? null : r.getWireTimeNs() / NS_PER_MS,
                 r.getSamplesRecorded(),
                 r.getDataSizeBefore(),
                 r.getDataSizeAfter(),
@@ -86,6 +88,6 @@ public record DeleteResultResponse(
     }
 
     private static Long toMicros(Long ns) {
-        return ns == null ? null : ns / 1_000L;
+        return ns == null ? null : ns / NS_PER_US;
     }
 }
