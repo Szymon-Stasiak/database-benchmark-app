@@ -14,7 +14,7 @@ public record StartDeleteRunRequest(
         SelectionStrategy selectionStrategy,
         InsertMode mode,
         List<String> databaseIds
-) {
+) implements EntityRunRequest {
     public SelectionStrategy strategyOrDefault() {
         return selectionStrategy == null ? SelectionStrategy.RANDOM_UNIFORM : selectionStrategy;
     }

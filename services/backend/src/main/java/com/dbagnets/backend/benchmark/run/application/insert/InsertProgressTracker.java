@@ -1,11 +1,5 @@
 package com.dbagnets.backend.benchmark.run.application.insert;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResultRepository;
-import com.dbagnets.backend.benchmark.run.persistence.OperationType;
-import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
 import com.dbagnets.backend.benchmark.run.api.dto.BatchProgressEvent;
 import org.springframework.stereotype.Service;
 
@@ -29,10 +23,6 @@ public class InsertProgressTracker {
         Map<String, BatchProgressEvent> per = byRun.get(runId);
         if (per == null) return List.of();
         return new ArrayList<>(per.values());
-    }
-
-    public void clear(String runId) {
-        byRun.remove(runId);
     }
 
     private String key(String databaseId, String entityName) {

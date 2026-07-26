@@ -15,7 +15,7 @@ public record StartReadRunRequest(
         InsertMode mode,
         Integer iterations,
         List<String> databaseIds
-) {
+) implements EntityRunRequest {
     private static final int DEFAULT_ITERATIONS = 1;
     private static final int MAX_ITERATIONS = 50;
 
