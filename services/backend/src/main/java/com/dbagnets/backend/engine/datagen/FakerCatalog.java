@@ -11,13 +11,14 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 
 public final class FakerCatalog {
 
-    private static final double NULL_PROBABILITY = 0.10;
+    private static final double NULL_PROBABILITY = 0.10; // to make data realistic if nullable you can get null
 
     private final Faker faker;
 
@@ -48,14 +49,14 @@ public final class FakerCatalog {
 
     private Function<LogicalAttribute, Object> matchByName(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
-        if (lower.endsWith("_id") && lower.equals("id")) return a -> UUID.randomUUID().toString();
+        if (lower.endsWith("_id") || lower.equals("id")) return a -> UUID.randomUUID().toString();
         if (lower.contains("email")) return a -> faker.internet().emailAddress();
         if (lower.contains("phone")) return a -> faker.phoneNumber().phoneNumber();
         if (lower.contains("full_name") || lower.equals("name")) return a -> faker.name().fullName();
         if (lower.contains("first_name")) return a -> faker.name().firstName();
         if (lower.contains("last_name")) return a -> faker.name().lastName();
-        if (lower.contains("username")) return a -> faker.name().username();
-        if (lower.contains("password")) return a -> faker.internet().password();
+        if (lower.contains("username")) return a -> faker.name().firstName().toLowerCase(Locale.ROOT) + ThreadLocalRandom.current().nextInt(1000, 9999);
+        if (lower.contains("password")) return a -> UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         if (lower.contains("url") || lower.contains("uri")) return a -> faker.internet().url();
         if (lower.contains("avatar") || lower.contains("image")) return a -> faker.internet().image();
         if (lower.contains("title")) return a -> faker.book().title();
@@ -82,7 +83,8 @@ public final class FakerCatalog {
             case BOOLEAN -> ThreadLocalRandom.current().nextBoolean();
             case DATE -> LocalDate.now().minusDays(ThreadLocalRandom.current().nextInt(0, 365 * 50));
             case TIMESTAMP -> Instant.now().minus(ThreadLocalRandom.current().nextLong(0, 365L * 24), ChronoUnit.HOURS);
-            case JSON -> "{\"key\":\"" + faker.lorem().word() + "\",\"n\":" + ThreadLocalRandom.current().nextInt(100) + "}";
+            case JSON ->
+                    "{\"key\":\"" + faker.lorem().word() + "\",\"n\":" + ThreadLocalRandom.current().nextInt(100) + "}";
             case ENUM -> pickEnum(attr);
             case VECTOR -> generateVector(attr);
         };
@@ -110,9 +112,5 @@ public final class FakerCatalog {
             v[i] = (float) ThreadLocalRandom.current().nextGaussian();
         }
         return v;
-    }
-
-    public Instant fakerEpochSeed() {
-        return Instant.ofEpochSecond(0).atZone(ZoneOffset.UTC).toInstant();
     }
 }

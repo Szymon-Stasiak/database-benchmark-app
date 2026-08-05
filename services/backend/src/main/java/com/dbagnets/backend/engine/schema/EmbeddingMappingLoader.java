@@ -18,7 +18,7 @@ public class EmbeddingMappingLoader {
             return List.of();
         }
         try {
-            return objectMapper.readValue(json, new TypeReference<List<EmbeddingMapping>>() {});
+            return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (Exception e) {
             throw new IllegalStateException("Failed to parse embedding mappings JSON", e);
         }

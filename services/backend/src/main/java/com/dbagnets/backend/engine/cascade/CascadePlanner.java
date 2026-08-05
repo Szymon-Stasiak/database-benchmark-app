@@ -22,9 +22,7 @@ public class CascadePlanner {
         return plan(schema, leafChoices, Map.of());
     }
 
-    public CascadePlan plan(LogicalSchema schema,
-                             List<LeafChoice> leafChoices,
-                             Map<String, Double> ratioOverrides) {
+    public CascadePlan plan(LogicalSchema schema, List<LeafChoice> leafChoices, Map<String, Double> ratioOverrides) {
         if (leafChoices == null || leafChoices.isEmpty()) {
             throw new IllegalArgumentException("At least one leaf entity must be chosen");
         }
@@ -50,7 +48,7 @@ public class CascadePlanner {
             for (LogicalRelationship rel : parents) {
                 String parentName = rel.parentEntity();
                 String fk = ForeignKeyResolver.resolve(schema, rel);
-                double ratio = ratioOverrides.getOrDefault(rel.name(), defaultRatio(rel));
+                double ratio = ratioOverrides.getOrDefault(rel.name(), rel.cardinality().defaultRatio());
 
                 long parentCount = (long) Math.ceil(childCount / ratio);
                 derived.merge(parentName, parentCount, Math::max);
@@ -72,14 +70,6 @@ public class CascadePlanner {
                     incomingByChild.getOrDefault(entity, List.of())));
         }
         return new CascadePlan(nodes);
-    }
-
-    private static double defaultRatio(LogicalRelationship rel) {
-        return switch (rel.cardinality()) {
-            case ONE_TO_ONE -> 1.0;
-            case ONE_TO_MANY -> 5.0;
-            case MANY_TO_MANY -> 3.0;
-        };
     }
 
     private static List<String> topologicalSort(Set<String> nodes, LogicalSchema schema) {

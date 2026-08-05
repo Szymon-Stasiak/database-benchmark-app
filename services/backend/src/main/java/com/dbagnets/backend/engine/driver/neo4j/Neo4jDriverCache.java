@@ -17,8 +17,7 @@ public class Neo4jDriverCache implements ConnectionCache, BoltDriverProvider {
 
     @Override
     public Driver get(String databaseId, String host, int port) {
-        return drivers.computeIfAbsent(databaseId,
-                id -> GraphDatabase.driver("bolt://" + host + ":" + port, AuthTokens.basic("neo4j", "benchmark")));
+        return drivers.computeIfAbsent(databaseId, id -> GraphDatabase.driver("bolt://" + host + ":" + port, AuthTokens.basic("neo4j", "benchmark")));
     }
 
     @Override

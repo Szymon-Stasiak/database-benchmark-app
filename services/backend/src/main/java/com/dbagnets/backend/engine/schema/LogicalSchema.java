@@ -42,9 +42,4 @@ public record LogicalSchema(
                 .filter(r -> !r.isManyToMany())
                 .toList();
     }
-
-    public Map<String, Long> dataSizeHintsByEntity() {
-        return dataSizeHints.stream()
-                .collect(Collectors.toMap(DataSizeHint::entityName, DataSizeHint::expectedRowCount));
-    }
 }

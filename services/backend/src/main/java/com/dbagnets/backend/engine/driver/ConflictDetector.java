@@ -19,7 +19,8 @@ public final class ConflictDetector {
             case MYSQL -> matchesMySqlConflict(error);
             case MONGODB -> matchesMessage(error, "e11000", "duplicate key");
             case NEO4J, MEMGRAPH -> matchesMessage(error, "constraintvalidationfailed", "already exists");
-            case QDRANT, ELASTICSEARCH, COUCHDB, ARANGODB -> matchesMessage(error, "already exists", "version_conflict");
+            case QDRANT, ELASTICSEARCH, COUCHDB, ARANGODB ->
+                    matchesMessage(error, "already exists", "version_conflict");
             default -> false;
         };
     }

@@ -19,6 +19,14 @@ public enum RelationshipCardinality {
         return wireFormat;
     }
 
+    public double defaultRatio() {
+        return switch (this) {
+            case ONE_TO_ONE -> 1.0;
+            case ONE_TO_MANY -> 5.0;
+            case MANY_TO_MANY -> 3.0;
+        };
+    }
+
     @JsonCreator
     public static RelationshipCardinality from(String value) {
         return Arrays.stream(values())

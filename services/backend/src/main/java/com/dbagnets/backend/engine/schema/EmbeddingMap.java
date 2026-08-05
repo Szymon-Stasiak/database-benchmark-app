@@ -30,11 +30,6 @@ public final class EmbeddingMap {
         return new EmbeddingMap(indexed);
     }
 
-    public boolean isEmbedded(String entityName) {
-        EmbeddingMapping m = byEntity.get(entityName.toLowerCase(Locale.ROOT));
-        return m != null && m.isEmbedded();
-    }
-
     public Optional<EmbeddingMapping> lookup(String entityName) {
         return Optional.ofNullable(byEntity.get(entityName.toLowerCase(Locale.ROOT)));
     }

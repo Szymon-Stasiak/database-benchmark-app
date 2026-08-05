@@ -37,12 +37,6 @@ public class DynamodbClientCache implements ConnectionCache {
     }
 
     private DynamoDbClient create(String host, int port) {
-        return DynamoDbClient.builder()
-                .endpointOverride(URI.create("http://" + host + ":" + port))
-                .region(Region.US_EAST_1)
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create("dummy", "dummy")))
-                .httpClient(UrlConnectionHttpClient.create())
-                .build();
+        return DynamoDbClient.builder().endpointOverride(URI.create("http://" + host + ":" + port)).region(Region.US_EAST_1).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("dummy", "dummy"))).httpClient(UrlConnectionHttpClient.create()).build();
     }
 }

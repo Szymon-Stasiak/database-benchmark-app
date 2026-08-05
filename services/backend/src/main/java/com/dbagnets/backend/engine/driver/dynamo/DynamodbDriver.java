@@ -2,14 +2,18 @@ package com.dbagnets.backend.engine.driver.dynamo;
 
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
+import com.dbagnets.backend.engine.driver.BatchSizes;
+import com.dbagnets.backend.engine.driver.BulkInsertLoop;
 import com.dbagnets.backend.engine.driver.DeleteContext;
 import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.EntityOutcome;
 import com.dbagnets.backend.engine.driver.InsertContext;
+import com.dbagnets.backend.engine.driver.InsertOuterLoop;
+import com.dbagnets.backend.engine.driver.PerTargetLoop;
 import com.dbagnets.backend.engine.driver.ReadContext;
-import com.dbagnets.backend.engine.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
-import com.dbagnets.backend.engine.timing.RecordedId;
+import com.dbagnets.backend.engine.schema.LogicalSchema;
 import com.dbagnets.backend.engine.timing.TimedOperation;
 import com.dbagnets.backend.domain.DatabaseEngine;
 import lombok.RequiredArgsConstructor;
@@ -55,115 +59,32 @@ public class DynamodbDriver implements EngineDriver {
     }
 
     @Override
-    public TimedOperation insert(InsertContext ctx) {
+    public TimedOperation insert(InsertContext ctx) throws Exception {
         DynamoDbClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long totalDbTimeNs = 0L;
-        long totalRowsAffected = 0L;
-        List<RecordedId> recordedIds = new ArrayList<>();
-
-        long wireStart = System.nanoTime();
-        for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
-            List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
-            if (rows == null || rows.isEmpty()) continue;
+        return InsertOuterLoop.run(ctx, (node, rows) -> {
             LogicalEntity entity = ctx.schema().requireEntity(node.entityName());
             String table = node.entityName().toLowerCase();
             ensureTable(client, table, entity);
-            EntityOutcome outcome = bulkInsert(client, ctx, node, entity, table, rows);
-            totalDbTimeNs += outcome.dbTimeNs;
-            totalRowsAffected += outcome.rowsAffected;
-            recordedIds.addAll(outcome.recordedIds);
-            ctx.progress().onEntityFinished(node.entityName());
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(totalRowsAffected)
-                .conflictsSkipped(0)
-                .recordedIds(recordedIds)
-                .build();
+            return bulkInsert(client, ctx, node, entity, table, rows);
+        });
     }
 
     @Override
     public TimedOperation read(ReadContext ctx) {
-        DynamoDbClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
-        String pkName = entity.primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + entity.name()))
-                .name();
-        String table = ctx.entityName().toLowerCase();
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsRead = 0L;
-
-        long wireStart = System.nanoTime();
-        for (int i = 0; i < ctx.targets().size(); i++) {
-            RegistryEntry entry = ctx.targets().get(i);
-            try {
-                long start = System.nanoTime();
-                var resp = client.getItem(GetItemRequest.builder()
-                        .tableName(table)
-                        .key(Map.of(pkName, AttributeValue.fromS(String.valueOf(entry.physicalId()))))
-                        .build());
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (resp.hasItem() && !resp.item().isEmpty()) rowsRead++;
-            } catch (Exception ex) {
-                log.warn("DynamoDB read failed {}/{}: {}", table, entry.physicalId(), ex.getMessage());
-            }
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsRead)
-                .sampleDbTimeNs(samples)
-                .build();
+        DynamoCtx d = resolveCtx(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort(), ctx.entityName(), ctx.schema());
+        return PerTargetLoop.run(ctx.targets(), "DynamoDB read", e -> d.table() + "/" + e.physicalId(), entry -> {
+            var resp = d.client().getItem(GetItemRequest.builder().tableName(d.table()).key(Map.of(d.pkName(), AttributeValue.fromS(String.valueOf(entry.physicalId())))).build());
+            return resp.hasItem() && !resp.item().isEmpty() ? 1 : 0;
+        });
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) {
-        DynamoDbClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
-        String pkName = entity.primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + entity.name()))
-                .name();
-        String table = ctx.entityName().toLowerCase();
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsAffected = 0L;
-
-        long wireStart = System.nanoTime();
-        for (int i = 0; i < ctx.targets().size(); i++) {
-            RegistryEntry entry = ctx.targets().get(i);
-            try {
-                long start = System.nanoTime();
-                client.deleteItem(DeleteItemRequest.builder()
-                        .tableName(table)
-                        .key(Map.of(pkName, AttributeValue.fromS(String.valueOf(entry.physicalId()))))
-                        .build());
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                rowsAffected++;
-            } catch (Exception ex) {
-                log.warn("DynamoDB delete failed {}/{}: {}", table, entry.physicalId(), ex.getMessage());
-            }
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsAffected)
-                .sampleDbTimeNs(samples)
-                .build();
+        DynamoCtx d = resolveCtx(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort(), ctx.entityName(), ctx.schema());
+        return PerTargetLoop.run(ctx.targets(), "DynamoDB delete", e -> d.table() + "/" + e.physicalId(), entry -> {
+            d.client().deleteItem(DeleteItemRequest.builder().tableName(d.table()).key(Map.of(d.pkName(), AttributeValue.fromS(String.valueOf(entry.physicalId())))).build());
+            return 1;
+        });
     }
 
     private void ensureTable(DynamoDbClient client, String table, LogicalEntity entity) {
@@ -173,59 +94,30 @@ public class DynamodbDriver implements EngineDriver {
             return;
         } catch (Exception ignore) {
         }
-        String pkName = entity.primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + entity.name()))
-                .name();
+        String pkName = entity.primaryKey().orElseThrow(() -> new IllegalStateException("Entity missing PK: " + entity.name())).name();
         try {
-            client.createTable(CreateTableRequest.builder()
-                    .tableName(table)
-                    .keySchema(KeySchemaElement.builder().attributeName(pkName).keyType(KeyType.HASH).build())
-                    .attributeDefinitions(AttributeDefinition.builder()
-                            .attributeName(pkName)
-                            .attributeType(ScalarAttributeType.S)
-                            .build())
-                    .billingMode(BillingMode.PAY_PER_REQUEST)
-                    .build());
+            client.createTable(CreateTableRequest.builder().tableName(table).keySchema(KeySchemaElement.builder().attributeName(pkName).keyType(KeyType.HASH).build()).attributeDefinitions(AttributeDefinition.builder().attributeName(pkName).attributeType(ScalarAttributeType.S).build()).billingMode(BillingMode.PAY_PER_REQUEST).build());
         } catch (Exception ex) {
             log.warn("DynamoDB createTable failed for {}: {}", table, ex.getMessage());
         }
     }
 
-    private EntityOutcome bulkInsert(DynamoDbClient client,
-                                     InsertContext ctx,
-                                     CascadeNode node,
-                                     LogicalEntity entity,
-                                     String table,
-                                     List<GeneratedRow> rows) {
-        EntityOutcome outcome = new EntityOutcome();
-        int batchSize = Math.min(BATCH_LIMIT, effectiveBatchSize(ctx));
-        int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
-        int batchIndex = 0;
-
-        for (int from = 0; from < rows.size(); from += batchSize) {
-            int to = Math.min(from + batchSize, rows.size());
-            List<GeneratedRow> slice = rows.subList(from, to);
+    private EntityOutcome bulkInsert(DynamoDbClient client, InsertContext ctx, CascadeNode node, LogicalEntity entity, String table, List<GeneratedRow> rows) throws Exception {
+        BulkInsertLoop.Config config = new BulkInsertLoop.Config(
+                BatchSizes.effectiveCapped(ctx, BATCH_LIMIT, BATCH_LIMIT),
+                engine(),
+                false,
+                "DynamoDB batchWrite failed on {} batch {}: {}",
+                null,
+                table);
+        return BulkInsertLoop.run(ctx, node, rows, config, (slice, batchIndex, totalBatches) -> {
             List<WriteRequest> writes = new ArrayList<>(slice.size());
             for (GeneratedRow row : slice) {
-                writes.add(WriteRequest.builder()
-                        .putRequest(PutRequest.builder().item(toItem(entity, row)).build())
-                        .build());
+                writes.add(WriteRequest.builder().putRequest(PutRequest.builder().item(toItem(entity, row)).build()).build());
             }
-            try {
-                long start = System.nanoTime();
-                client.batchWriteItem(BatchWriteItemRequest.builder()
-                        .requestItems(Map.of(table, writes))
-                        .build());
-                outcome.dbTimeNs += System.nanoTime() - start;
-                outcome.rowsAffected += slice.size();
-                slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
-            } catch (Exception ex) {
-                log.warn("DynamoDB batchWrite failed on {} batch {}: {}", table, batchIndex, ex.getMessage());
-            }
-            batchIndex++;
-            ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
-        }
-        return outcome;
+            client.batchWriteItem(BatchWriteItemRequest.builder().requestItems(Map.of(table, writes)).build());
+            return  slice.size();
+        });
     }
 
     private Map<String, AttributeValue> toItem(LogicalEntity entity, GeneratedRow row) {
@@ -261,20 +153,17 @@ public class DynamodbDriver implements EngineDriver {
         return AttributeValue.fromS(value.toString());
     }
 
-    private int effectiveBatchSize(InsertContext ctx) {
-        return switch (ctx.mode()) {
-            case SINGLE -> 1;
-            case BATCH -> Math.max(1, Math.min(BATCH_LIMIT, ctx.batchSize()));
-            case BULK -> Math.min(BATCH_LIMIT, Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : BATCH_LIMIT));
-        };
-    }
-
     @SuppressWarnings("unused")
     private static final Set<String> UNUSED_RESERVED = new HashSet<>();
 
-    private static final class EntityOutcome {
-        long dbTimeNs;
-        long rowsAffected;
-        List<RecordedId> recordedIds = new ArrayList<>();
+    private DynamoCtx resolveCtx(String databaseId, String hostAddress, int hostPort,
+                                  String entityName, LogicalSchema schema) {
+        DynamoDbClient client = clientCache.get(databaseId, hostAddress, hostPort);
+        String pkName = schema.requireEntity(entityName).primaryKey()
+                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + entityName))
+                .name();
+        return new DynamoCtx(client, pkName, entityName.toLowerCase());
     }
+
+    private record DynamoCtx(DynamoDbClient client, String pkName, String table) {}
 }

@@ -31,8 +31,4 @@ public final class PrimaryKeyVault {
         CopyOnWriteArrayList<String> pks = pksByEntity.get(entityName);
         return pks == null ? 0 : pks.size();
     }
-
-    public void clear() {
-        pksByEntity.clear();
-    }
 }

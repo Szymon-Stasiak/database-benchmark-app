@@ -15,8 +15,4 @@ public record CascadePlan(
         return nodesInInsertOrder.stream()
                 .collect(Collectors.toUnmodifiableMap(CascadeNode::entityName, n -> n));
     }
-
-    public long totalRecords() {
-        return nodesInInsertOrder.stream().mapToLong(CascadeNode::recordCount).sum();
-    }
 }

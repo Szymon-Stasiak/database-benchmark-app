@@ -1,7 +1,7 @@
 package com.dbagnets.backend.engine.driver.pg;
 
+import com.dbagnets.backend.engine.driver.SqlTypes;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
-import com.dbagnets.backend.engine.schema.LogicalDataType;
 import org.postgresql.util.PGobject;
 
 import java.math.BigDecimal;
@@ -21,7 +21,7 @@ public final class PgValueBinder {
 
     public static void bind(PreparedStatement stmt, int index, LogicalAttribute attr, Object value) throws SQLException {
         if (value == null) {
-            stmt.setNull(index, jdbcType(attr.dataType()));
+            stmt.setNull(index, SqlTypes.jdbcType(attr.dataType(), Types.OTHER));
             return;
         }
         switch (attr.dataType()) {
@@ -36,7 +36,7 @@ public final class PgValueBinder {
             case BOOLEAN -> stmt.setBoolean(index, (Boolean) value);
             case DATE -> stmt.setDate(index, value instanceof LocalDate ld ? Date.valueOf(ld) : Date.valueOf(value.toString()));
             case TIMESTAMP -> stmt.setTimestamp(index, value instanceof Instant ins ? Timestamp.from(ins) : Timestamp.valueOf(value.toString()));
-            case VECTOR -> stmt.setObject(index, formatVector((float[]) value), Types.OTHER);
+            case VECTOR -> stmt.setObject(index, SqlTypes.formatVector((float[]) value), Types.OTHER);
         }
     }
 
@@ -45,33 +45,5 @@ public final class PgValueBinder {
         obj.setType("jsonb");
         obj.setValue(json);
         return obj;
-    }
-
-    private static int jdbcType(LogicalDataType type) {
-        return switch (type) {
-            case UUID -> Types.OTHER;
-            case STRING, TEXT, ENUM -> Types.VARCHAR;
-            case JSON -> Types.OTHER;
-            case INTEGER -> Types.INTEGER;
-            case BIGINT -> Types.BIGINT;
-            case FLOAT -> Types.FLOAT;
-            case DOUBLE -> Types.DOUBLE;
-            case DECIMAL -> Types.DECIMAL;
-            case BOOLEAN -> Types.BOOLEAN;
-            case DATE -> Types.DATE;
-            case TIMESTAMP -> Types.TIMESTAMP;
-            case VECTOR -> Types.OTHER;
-        };
-    }
-
-    private static String formatVector(float[] vec) {
-        StringBuilder sb = new StringBuilder(vec.length * 6 + 2);
-        sb.append('[');
-        for (int i = 0; i < vec.length; i++) {
-            if (i > 0) sb.append(',');
-            sb.append(vec[i]);
-        }
-        sb.append(']');
-        return sb.toString();
     }
 }

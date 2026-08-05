@@ -26,10 +26,6 @@ public record LogicalRelationship(
         return cardinality == RelationshipCardinality.MANY_TO_MANY;
     }
 
-    public boolean isOneToMany() {
-        return cardinality == RelationshipCardinality.ONE_TO_MANY;
-    }
-
     public String parentEntity() {
         return sourceEntity;
     }

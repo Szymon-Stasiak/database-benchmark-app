@@ -1,5 +1,6 @@
 package com.dbagnets.backend.engine.driver.pg;
 
+import com.dbagnets.backend.engine.driver.SqlInsertStatement;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
 
@@ -11,7 +12,7 @@ public record PgInsertStatement(
         List<LogicalAttribute> orderedColumns,
         String singleRowSql,
         boolean withConflictClause
-) {
+) implements SqlInsertStatement {
 
     public static PgInsertStatement of(LogicalEntity entity) {
         return of(entity, true);
@@ -37,10 +38,6 @@ public record PgInsertStatement(
                 .collect(Collectors.joining(", "));
         String conflictSuffix = withConflictClause ? " ON CONFLICT DO NOTHING" : "";
         return "INSERT INTO " + tableName + " (" + colList + ") VALUES " + groups + conflictSuffix;
-    }
-
-    public String explainAnalyzeSql() {
-        return "EXPLAIN (ANALYZE, FORMAT JSON, BUFFERS) " + singleRowSql;
     }
 
     private static String quote(String identifier) {

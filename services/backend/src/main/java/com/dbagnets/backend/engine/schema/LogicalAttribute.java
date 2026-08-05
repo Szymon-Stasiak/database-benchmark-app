@@ -31,8 +31,4 @@ public record LogicalAttribute(
     public boolean isNullable() {
         return constraints != null && constraints.isNullable();
     }
-
-    public boolean isUnique() {
-        return constraints != null && constraints.isUnique();
-    }
 }

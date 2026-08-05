@@ -2,12 +2,21 @@ package com.dbagnets.backend.engine.driver.mongo;
 
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
+import com.dbagnets.backend.engine.driver.BatchSizes;
+import com.dbagnets.backend.engine.driver.BulkInsertLoop;
+import com.dbagnets.backend.engine.driver.CascadeBfsState;
 import com.dbagnets.backend.engine.driver.ConflictDetector;
 import com.dbagnets.backend.engine.driver.DeleteContext;
+import com.dbagnets.backend.engine.driver.DriverValues;
 import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.EntityOutcome;
+import com.dbagnets.backend.engine.driver.FrontierBfs;
 import com.dbagnets.backend.engine.driver.InsertContext;
+import com.dbagnets.backend.engine.driver.InsertOuterLoop;
 import com.dbagnets.backend.engine.driver.ReadContext;
 import com.dbagnets.backend.engine.driver.ReadDepth;
+import com.dbagnets.backend.engine.driver.SampledAccumulator;
+import com.dbagnets.backend.engine.driver.ScenarioTimings;
 import com.dbagnets.backend.engine.driver.pg.PgScenarios;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.engine.scenario.AggregateParams;
@@ -15,7 +24,6 @@ import com.dbagnets.backend.engine.scenario.KnnParams;
 import com.dbagnets.backend.engine.scenario.RangeParams;
 import com.dbagnets.backend.engine.scenario.ResultCanonicalizer;
 import com.dbagnets.backend.engine.scenario.ScenarioContext;
-import com.dbagnets.backend.engine.scenario.ScenarioResult;
 import com.dbagnets.backend.engine.scenario.TraversalParams;
 import com.dbagnets.backend.engine.schema.EmbeddingMap;
 import com.dbagnets.backend.engine.schema.EmbeddingMapping;
@@ -23,7 +31,6 @@ import com.dbagnets.backend.engine.schema.LogicalEntity;
 import com.dbagnets.backend.engine.timing.RecordedId;
 import com.dbagnets.backend.engine.timing.TimedOperation;
 import com.dbagnets.backend.domain.DatabaseEngine;
-import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.InsertManyOptions;
@@ -56,110 +63,58 @@ public class MongoDriver implements EngineDriver {
     }
 
     @Override
-    public TimedOperation insert(InsertContext ctx) {
-        MongoClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        MongoDatabase db = client.getDatabase(DATABASE_NAME);
-
-        long totalDbTimeNs = 0L;
-        long totalRowsAffected = 0L;
-        int totalConflicts = 0;
-        List<RecordedId> recordedIds = new ArrayList<>();
-
-        long wireStart = System.nanoTime();
-        for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
-            List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
-            if (rows == null || rows.isEmpty()) continue;
-            EntityWriteOutcome outcome = writeEntity(db, ctx, node, rows);
-            totalDbTimeNs += outcome.dbTimeNs;
-            totalRowsAffected += outcome.rowsAffected;
-            totalConflicts += outcome.conflicts;
-            recordedIds.addAll(outcome.recordedIds);
-            ctx.progress().onEntityFinished(node.entityName());
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(totalRowsAffected)
-                .conflictsSkipped(totalConflicts)
-                .recordedIds(recordedIds)
-                .build();
+    public TimedOperation insert(InsertContext ctx) throws Exception {
+        MongoDatabase db = resolveDb(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        return InsertOuterLoop.run(ctx, (node, rows) -> writeEntity(db, ctx, node, rows));
     }
 
     @Override
     public TimedOperation read(ReadContext ctx) {
-        MongoClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        MongoDatabase db = client.getDatabase(DATABASE_NAME);
-        EmbeddingMap embeddings = ctx.embeddings();
-        Optional<EmbeddingMapping> mapping = embeddings.lookup(ctx.entityName());
-        boolean embedded = mapping.isPresent() && mapping.get().isEmbedded();
-        String collectionName = embedded ? mapping.get().parentEntity().toLowerCase() : ctx.entityName().toLowerCase();
+        MongoDatabase db = resolveDb(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        Optional<EmbeddingMapping> embedding = findEmbedding(ctx.embeddings(), ctx.entityName());
+        boolean embedded = embedding.isPresent();
+        String collectionName = embedded ? embedding.get().parentEntity().toLowerCase() : ctx.entityName().toLowerCase();
         MongoCollection<Document> collection = db.getCollection(collectionName);
-        String fieldName = embedded ? mapping.get().fieldName() : null;
+        String fieldName = embedded ? embedding.get().fieldName() : null;
 
         ReadDepth depth = ctx.readDepth() == null ? ReadDepth.NONE : ctx.readDepth();
         List<PgScenarios.TraversalLevel> chain = chainForDepth(ctx.schema(), ctx.entityName(), depth);
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsRead = 0L;
 
+        SampledAccumulator acc = new SampledAccumulator(ctx.targets().size());
         long wireStart = System.nanoTime();
         for (int i = 0; i < ctx.targets().size(); i++) {
             RegistryEntry entry = ctx.targets().get(i);
-            Document filter = embedded
-                    ? new Document(fieldName + "._id", entry.physicalId())
-                    : new Document("_id", entry.physicalId());
+            Document filter = embedded ? new Document(fieldName + "._id", entry.physicalId()) : new Document("_id", entry.physicalId());
             long start = System.nanoTime();
             Document found = collection.find(filter).first();
             long innerRows = found == null ? 0 : 1;
             if (!embedded && !chain.isEmpty() && found != null) {
                 innerRows += fetchMongoDescendants(db, entry.physicalId(), chain);
             }
-            long sampleNs = System.nanoTime() - start;
-            samples[i] = sampleNs;
-            totalDbTimeNs += sampleNs;
-            rowsRead += innerRows;
+            acc.sample(i, System.nanoTime() - start, innerRows);
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsRead)
-                .sampleDbTimeNs(samples)
-                .build();
+        return acc.finish(System.nanoTime() - wireStart);
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) {
-        MongoClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        MongoDatabase db = client.getDatabase(DATABASE_NAME);
-        EmbeddingMap embeddings = ctx.embeddings();
-        Optional<EmbeddingMapping> mapping = embeddings.lookup(ctx.entityName());
-        boolean embedded = mapping.isPresent() && mapping.get().isEmbedded();
+        MongoDatabase db = resolveDb(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        Optional<EmbeddingMapping> embedding = findEmbedding(ctx.embeddings(), ctx.entityName());
+        boolean embedded = embedding.isPresent();
 
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsAffected = 0L;
-        java.util.Map<String, java.util.List<String>> cascadeAccumulator = new java.util.LinkedHashMap<>();
+        SampledAccumulator acc = new SampledAccumulator(ctx.targets().size());
+        Map<String, List<String>> cascadeAccumulator = new LinkedHashMap<>();
 
         long wireStart = System.nanoTime();
         if (embedded) {
-            String parentCollection = mapping.get().parentEntity().toLowerCase();
-            String arrayField = mapping.get().fieldName();
+            String parentCollection = embedding.get().parentEntity().toLowerCase();
+            String arrayField = embedding.get().fieldName();
             MongoCollection<Document> parentCol = db.getCollection(parentCollection);
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
                 long start = System.nanoTime();
-                long updated = parentCol.updateMany(
-                        new Document(arrayField + "._id", entry.physicalId()),
-                        Updates.pull(arrayField, new Document("_id", entry.physicalId()))
-                ).getModifiedCount();
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (updated > 0) rowsAffected += updated;
+                long updated = parentCol.updateMany(new Document(arrayField + "._id", entry.physicalId()), Updates.pull(arrayField, new Document("_id", entry.physicalId()))).getModifiedCount();
+                acc.sample(i, System.nanoTime() - start, updated > 0 ? updated : 0);
             }
         } else {
             String collectionName = ctx.entityName().toLowerCase();
@@ -171,107 +126,60 @@ public class MongoDriver implements EngineDriver {
                     cascadeChildrenBfs(db, ctx.schema(), ctx.entityName(), entry.physicalId(), cascadeAccumulator);
                 }
                 long deleted = collection.deleteOne(new Document("_id", entry.physicalId())).getDeletedCount();
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (deleted > 0) rowsAffected += deleted;
+                acc.sample(i, System.nanoTime() - start, deleted > 0 ? deleted : 0);
             }
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsAffected)
-                .sampleDbTimeNs(samples)
-                .cascadeDeletedByEntity(cascadeAccumulator)
-                .build();
+        return acc.finishWithCascade(System.nanoTime() - wireStart, cascadeAccumulator);
     }
 
     @Override
-    public ScenarioOutcome runScenario(ScenarioContext ctx) {
-        MongoClient client = clientCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-        MongoDatabase db = client.getDatabase(DATABASE_NAME);
-
-        long wireStart = System.nanoTime();
-        long start = System.nanoTime();
-        ScenarioResult result = switch (ctx.params()) {
+    public ScenarioOutcome runScenario(ScenarioContext ctx) throws Exception {
+        MongoDatabase db = resolveDb(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
+        return ScenarioTimings.execute(() -> switch (ctx.params()) {
             case AggregateParams p -> {
-                Map<String, Long> grouped = MongoScenarios.executeAggregate(db, ctx.schema(),
-                        ctx.embeddings(), p.parentEntity(), p.childEntity());
+                Map<String, Long> grouped = MongoScenarios.executeAggregate(db, ctx.schema(), ctx.embeddings(), p.parentEntity(), p.childEntity());
                 yield ResultCanonicalizer.build(grouped, grouped.size());
             }
             case RangeParams p -> {
-                long count = MongoScenarios.executeRangeCount(db, ctx.schema(), ctx.embeddings(),
-                        p.entityName(), p.attribute(), p.min(), p.max());
+                long count = MongoScenarios.executeRangeCount(db, ctx.schema(), ctx.embeddings(), p.entityName(), p.attribute(), p.min(), p.max());
                 yield ResultCanonicalizer.build(Map.of("count", count), count);
             }
             case TraversalParams p -> {
-                List<String> ids = MongoScenarios.executeTraversal(db, ctx.schema(),
-                        p.startEntity(), p.startLogicalId(), p.depth());
+                List<String> ids = MongoScenarios.executeTraversal(db, ctx.schema(), p.startEntity(), p.startLogicalId(), p.depth());
                 yield ResultCanonicalizer.build(ids, ids.size());
             }
-            case KnnParams ignored -> throw new UnsupportedOperationException(
-                    engine() + " does not support VECTOR_KNN");
-        };
-        long dbTimeNs = System.nanoTime() - start;
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        TimedOperation timed = TimedOperation.builder()
-                .dbTimeNs(dbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(result.rowsReturned())
-                .sampleDbTimeNs(new long[] { dbTimeNs })
-                .build();
-        return new ScenarioOutcome(timed, result);
+            case KnnParams ignored ->
+                    throw new UnsupportedOperationException(engine() + " does not support VECTOR_KNN");
+        });
     }
 
-    private List<PgScenarios.TraversalLevel> chainForDepth(com.dbagnets.backend.engine.schema.LogicalSchema schema,
-                                                            String entityName,
-                                                            ReadDepth depth) {
+    private List<PgScenarios.TraversalLevel> chainForDepth(com.dbagnets.backend.engine.schema.LogicalSchema schema, String entityName, ReadDepth depth) {
         if (depth == ReadDepth.NONE) return List.of();
         if (depth == ReadDepth.ONE_HOP) return PgScenarios.resolveChain(schema, entityName, 1);
         return PgScenarios.resolveChain(schema, entityName, ReadDepth.FULL_CASCADE_MAX_DEPTH);
     }
 
-    private long fetchMongoDescendants(MongoDatabase db,
-                                         Object rootId,
-                                         List<PgScenarios.TraversalLevel> chain) {
-        long total = 0L;
-        List<Object> frontier = List.of(rootId);
-        for (PgScenarios.TraversalLevel level : chain) {
-            if (frontier.isEmpty()) break;
+    private long fetchMongoDescendants(MongoDatabase db, Object rootId, List<PgScenarios.TraversalLevel> chain) {
+        return FrontierBfs.descend(chain, rootId, (level, frontier, nextFrontier) -> {
             MongoCollection<Document> collection = db.getCollection(level.childEntity().toLowerCase());
-            Document filter = new Document(level.fkColumn().toLowerCase(),
-                    new Document("$in", frontier));
-            List<Object> nextFrontier = new java.util.ArrayList<>();
+            Document filter = new Document(level.fkColumn().toLowerCase(), new Document("$in", frontier));
+            long count = 0L;
             for (Document doc : collection.find(filter).projection(new Document("_id", 1))) {
                 Object id = doc.get("_id");
                 if (id == null) continue;
-                total++;
+                count++;
                 nextFrontier.add(id);
             }
-            frontier = nextFrontier;
-        }
-        return total;
+            return count;
+        });
     }
 
-    private void cascadeChildrenBfs(MongoDatabase db,
-                                     com.dbagnets.backend.engine.schema.LogicalSchema schema,
-                                     String rootEntity,
-                                     Object rootId,
-                                     java.util.Map<String, java.util.List<String>> accumulator) {
-        java.util.Map<String, java.util.List<Object>> byEntity = new java.util.LinkedHashMap<>();
-        byEntity.put(rootEntity, new java.util.ArrayList<>(java.util.List.of(rootId)));
-        java.util.Set<String> visited = new java.util.HashSet<>();
-        java.util.Deque<String> queue = new java.util.ArrayDeque<>();
-        queue.add(rootEntity);
-
-        int safety = 0;
-        while (!queue.isEmpty() && safety++ < 16) {
-            String cur = queue.poll();
-            if (!visited.add(cur)) continue;
-            java.util.List<Object> curIds = byEntity.get(cur);
+    private void cascadeChildrenBfs(MongoDatabase db, com.dbagnets.backend.engine.schema.LogicalSchema schema, String rootEntity, Object rootId, Map<String, List<String>> accumulator) {
+        CascadeBfsState state = new CascadeBfsState(rootEntity, rootId, 16);
+        while (state.hasNext()) {
+            String cur = state.poll();
+            if (!state.visit(cur)) continue;
+            List<Object> curIds = state.idsFor(cur);
             if (curIds == null || curIds.isEmpty()) continue;
 
             for (var rel : schema.relationships()) {
@@ -281,11 +189,9 @@ public class MongoDriver implements EngineDriver {
                 String fkCol = resolveFkColumn(rel, schema);
                 if (fkCol == null) continue;
                 MongoCollection<Document> childCol = db.getCollection(childName.toLowerCase());
-                java.util.List<Object> childIds = new java.util.ArrayList<>();
+                List<Object> childIds = new ArrayList<>();
                 try {
-                    var found = childCol.find(new Document(fkCol, new Document("$in", curIds)))
-                            .projection(new Document("_id", 1));
-                    for (Document d : found) {
+                    for (Document d : childCol.find(new Document(fkCol, new Document("$in", curIds))).projection(new Document("_id", 1))) {
                         Object id = d.get("_id");
                         if (id != null) childIds.add(id);
                     }
@@ -293,31 +199,24 @@ public class MongoDriver implements EngineDriver {
                     log.debug("Mongo cascade scan {} → {} failed: {}", cur, childName, ex.getMessage());
                     continue;
                 }
-                if (childIds.isEmpty()) continue;
-                byEntity.computeIfAbsent(childName, k -> new java.util.ArrayList<>()).addAll(childIds);
-                if (!visited.contains(childName)) queue.add(childName);
+                if (!childIds.isEmpty()) state.addChildren(childName, childIds);
             }
         }
 
-        java.util.List<String> deletionOrder = new java.util.ArrayList<>(byEntity.keySet());
-        java.util.Collections.reverse(deletionOrder);
-        for (String entityName : deletionOrder) {
+        for (String entityName : state.reversedEntityOrder()) {
             if (entityName.equalsIgnoreCase(rootEntity)) continue;
-            java.util.List<Object> ids = byEntity.get(entityName);
+            List<Object> ids = state.idsFor(entityName);
             if (ids == null || ids.isEmpty()) continue;
             try {
-                MongoCollection<Document> col = db.getCollection(entityName.toLowerCase());
-                col.deleteMany(new Document("_id", new Document("$in", ids)));
-                accumulator.computeIfAbsent(entityName, k -> new java.util.ArrayList<>())
-                        .addAll(ids.stream().map(String::valueOf).toList());
+                db.getCollection(entityName.toLowerCase()).deleteMany(new Document("_id", new Document("$in", ids)));
+                accumulator.computeIfAbsent(entityName, k -> new ArrayList<>()).addAll(ids.stream().map(String::valueOf).toList());
             } catch (Exception ex) {
                 log.warn("Mongo cascade delete failed for {}: {}", entityName, ex.getMessage());
             }
         }
     }
 
-    private String resolveFkColumn(com.dbagnets.backend.engine.schema.LogicalRelationship rel,
-                                    com.dbagnets.backend.engine.schema.LogicalSchema schema) {
+    private String resolveFkColumn(com.dbagnets.backend.engine.schema.LogicalRelationship rel, com.dbagnets.backend.engine.schema.LogicalSchema schema) {
         String declared = rel.fkColumnInChild();
         if (declared != null && !declared.isBlank()) return declared;
         var parent = schema.findEntity(rel.parentEntity()).orElse(null);
@@ -326,71 +225,41 @@ public class MongoDriver implements EngineDriver {
         if (parentPk == null) return null;
         var child = schema.findEntity(rel.childEntity()).orElse(null);
         if (child == null) return null;
-        return child.attributes().stream()
-                .anyMatch(a -> a.name().equalsIgnoreCase(parentPk.name()))
-                ? parentPk.name()
-                : null;
+        return child.attributes().stream().anyMatch(a -> a.name().equalsIgnoreCase(parentPk.name())) ? parentPk.name() : null;
     }
 
-    private EntityWriteOutcome writeEntity(MongoDatabase db,
-                                            InsertContext ctx,
-                                            CascadeNode node,
-                                            List<GeneratedRow> rows) {
-        EmbeddingMap embeddings = ctx.embeddings();
-        Optional<EmbeddingMapping> mapping = embeddings.lookup(node.entityName());
-        if (mapping.isPresent() && mapping.get().isEmbedded()) {
-            return embedIntoParent(db, ctx, node, rows, mapping.get());
-        }
-        return insertStandalone(db, ctx, node, rows);
+    private EntityOutcome writeEntity(MongoDatabase db, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows) throws Exception {
+        Optional<EmbeddingMapping> embedding = findEmbedding(ctx.embeddings(), node.entityName());
+        return embedding.isPresent()
+                ? embedIntoParent(db, ctx, node, rows, embedding.get())
+                : insertStandalone(db, ctx, node, rows);
     }
 
-    private EntityWriteOutcome insertStandalone(MongoDatabase db,
-                                                 InsertContext ctx,
-                                                 CascadeNode node,
-                                                 List<GeneratedRow> rows) {
-        EntityWriteOutcome outcome = new EntityWriteOutcome();
+    private EntityOutcome insertStandalone(MongoDatabase db, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows) throws Exception {
         LogicalEntity entity = ctx.schema().requireEntity(node.entityName());
         String collectionName = node.entityName().toLowerCase();
         MongoCollection<Document> collection = db.getCollection(collectionName);
-
-        int batchSize = effectiveBatchSize(ctx);
-        int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
         InsertManyOptions options = new InsertManyOptions().ordered(false);
 
-        int batchIndex = 0;
-        for (int from = 0; from < rows.size(); from += batchSize) {
-            int to = Math.min(from + batchSize, rows.size());
-            List<GeneratedRow> slice = rows.subList(from, to);
+        BulkInsertLoop.Config config = new BulkInsertLoop.Config(
+                BatchSizes.effective(ctx, 10_000),
+                engine(),
+                true,
+                null,
+                "Mongo conflict on {} batch {}/{}: {}",
+                node.entityName());
+        return BulkInsertLoop.run(ctx, node, rows, config, (slice, batchIndex, totalBatches) -> {
             List<Document> docs = new ArrayList<>(slice.size());
             for (GeneratedRow row : slice) {
                 docs.add(toDocument(entity, row));
             }
-            try {
-                long start = System.nanoTime();
-                collection.insertMany(docs, options);
-                outcome.dbTimeNs += System.nanoTime() - start;
-                outcome.rowsAffected += slice.size();
-                slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
-            } catch (Exception ex) {
-                if (ConflictDetector.isConflict(engine(), ex)) {
-                    outcome.conflicts += slice.size();
-                    log.warn("Mongo conflict on {} batch {}/{}: {}", node.entityName(), batchIndex, totalBatches, ex.getMessage());
-                } else {
-                    throw ex;
-                }
-            }
-            batchIndex++;
-            ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
-        }
-        return outcome;
+            collection.insertMany(docs, options);
+            return slice.size();
+        });
     }
 
-    private EntityWriteOutcome embedIntoParent(MongoDatabase db,
-                                                InsertContext ctx,
-                                                CascadeNode node,
-                                                List<GeneratedRow> rows,
-                                                EmbeddingMapping mapping) {
-        EntityWriteOutcome outcome = new EntityWriteOutcome();
+    private EntityOutcome embedIntoParent(MongoDatabase db, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows, EmbeddingMapping mapping) {
+        EntityOutcome outcome = new EntityOutcome();
         String parentCollection = mapping.parentEntity().toLowerCase();
         String arrayField = mapping.fieldName();
         MongoCollection<Document> parentCol = db.getCollection(parentCollection);
@@ -402,9 +271,7 @@ public class MongoDriver implements EngineDriver {
 
         List<WriteModel<Document>> updates = new ArrayList<>(groupedByParent.size());
         for (Map.Entry<String, List<Document>> entry : groupedByParent.entrySet()) {
-            updates.add(new UpdateOneModel<>(
-                    new Document("_id", entry.getKey()),
-                    Updates.pushEach(arrayField, entry.getValue())));
+            updates.add(new UpdateOneModel<>(new Document("_id", entry.getKey()), Updates.pushEach(arrayField, entry.getValue())));
         }
         try {
             long start = System.nanoTime();
@@ -426,9 +293,7 @@ public class MongoDriver implements EngineDriver {
 
     private Map<String, List<Document>> groupChildrenByParent(InsertContext ctx, CascadeNode node, List<GeneratedRow> rows) {
         Map<String, List<Document>> grouped = new LinkedHashMap<>();
-        String parentFkColumn = node.incomingFromParents().isEmpty()
-                ? null
-                : node.incomingFromParents().get(0).fkColumnInChild();
+        String parentFkColumn = node.incomingFromParents().isEmpty() ? null : node.incomingFromParents().getFirst().fkColumnInChild();
         if (parentFkColumn == null) {
             return grouped;
         }
@@ -436,8 +301,7 @@ public class MongoDriver implements EngineDriver {
         for (GeneratedRow row : rows) {
             Object parentRef = row.get(parentFkColumn);
             if (parentRef == null) continue;
-            grouped.computeIfAbsent(parentRef.toString(), k -> new ArrayList<>())
-                    .add(toDocument(entity, row));
+            grouped.computeIfAbsent(parentRef.toString(), k -> new ArrayList<>()).add(toDocument(entity, row));
         }
         return grouped;
     }
@@ -446,30 +310,16 @@ public class MongoDriver implements EngineDriver {
         Document doc = new Document();
         entity.primaryKey().ifPresent(pk -> doc.put("_id", row.get(pk.name())));
         for (Map.Entry<String, Object> entry : row.values().entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof float[] arr) {
-                List<Double> list = new ArrayList<>(arr.length);
-                for (float f : arr) list.add((double) f);
-                doc.put(entry.getKey(), list);
-            } else {
-                doc.put(entry.getKey(), value);
-            }
+            doc.put(entry.getKey(), DriverValues.serialize(entry.getValue()));
         }
         return doc;
     }
 
-    private int effectiveBatchSize(InsertContext ctx) {
-        return switch (ctx.mode()) {
-            case SINGLE -> 1;
-            case BATCH -> Math.max(1, ctx.batchSize());
-            case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 10_000);
-        };
+    private MongoDatabase resolveDb(String databaseId, String host, int port) {
+        return clientCache.get(databaseId, host, port).getDatabase(DATABASE_NAME);
     }
 
-    private static final class EntityWriteOutcome {
-        long dbTimeNs;
-        long rowsAffected;
-        int conflicts;
-        List<RecordedId> recordedIds = new ArrayList<>();
+    private static Optional<EmbeddingMapping> findEmbedding(EmbeddingMap embeddings, String entityName) {
+        return embeddings.lookup(entityName).filter(EmbeddingMapping::isEmbedded);
     }
 }

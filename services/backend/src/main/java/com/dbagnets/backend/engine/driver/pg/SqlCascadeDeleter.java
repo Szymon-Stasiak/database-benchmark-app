@@ -1,5 +1,6 @@
 package com.dbagnets.backend.engine.driver.pg;
 
+import com.dbagnets.backend.engine.driver.CascadeBfsState;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
 import com.dbagnets.backend.engine.schema.LogicalRelationship;
@@ -9,15 +10,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -36,27 +31,17 @@ public final class SqlCascadeDeleter {
         void bind(PreparedStatement stmt, int index, LogicalAttribute attr, Object value) throws SQLException;
     }
 
-    public static int deleteRoot(Connection conn,
-                                  LogicalEntity entity,
-                                  LogicalAttribute pk,
-                                  Object physicalId,
-                                  Dialect dialect) throws SQLException {
-        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
+    public static int deleteRoot(Connection conn, LogicalEntity entity, LogicalAttribute pk, Object physicalId, Dialect dialect) throws SQLException {
+        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase()) + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             dialect.binder().bind(ps, 1, pk, physicalId);
             return ps.executeUpdate();
         }
     }
 
-    public static int deleteRootBatch(Connection conn,
-                                       LogicalEntity entity,
-                                       LogicalAttribute pk,
-                                       List<Object> physicalIds,
-                                       Dialect dialect) throws SQLException {
+    public static int deleteRootBatch(Connection conn, LogicalEntity entity, LogicalAttribute pk, List<Object> physicalIds, Dialect dialect) throws SQLException {
         if (physicalIds.isEmpty()) return 0;
-        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
+        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase()) + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
         int affected = 0;
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (Object id : physicalIds) {
@@ -69,15 +54,10 @@ public final class SqlCascadeDeleter {
         return affected;
     }
 
-    public static int deleteRootBulk(Connection conn,
-                                      LogicalEntity entity,
-                                      LogicalAttribute pk,
-                                      List<Object> physicalIds,
-                                      Dialect dialect) throws SQLException {
+    public static int deleteRootBulk(Connection conn, LogicalEntity entity, LogicalAttribute pk, List<Object> physicalIds, Dialect dialect) throws SQLException {
         if (physicalIds.isEmpty()) return 0;
         String placeholders = physicalIds.stream().map(x -> "?").collect(Collectors.joining(", "));
-        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " IN (" + placeholders + ")";
+        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase()) + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " IN (" + placeholders + ")";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < physicalIds.size(); i++) {
                 dialect.binder().bind(ps, i + 1, pk, physicalIds.get(i));
@@ -86,15 +66,10 @@ public final class SqlCascadeDeleter {
         }
     }
 
-    public static long readBulk(Connection conn,
-                                  LogicalEntity entity,
-                                  LogicalAttribute pk,
-                                  List<Object> physicalIds,
-                                  Dialect dialect) throws SQLException {
+    public static long readBulk(Connection conn, LogicalEntity entity, LogicalAttribute pk, List<Object> physicalIds, Dialect dialect) throws SQLException {
         if (physicalIds.isEmpty()) return 0L;
         String placeholders = physicalIds.stream().map(x -> "?").collect(Collectors.joining(", "));
-        String sql = "SELECT * FROM " + dialect.quote().apply(entity.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " IN (" + placeholders + ")";
+        String sql = "SELECT * FROM " + dialect.quote().apply(entity.name().toLowerCase()) + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " IN (" + placeholders + ")";
         long count = 0L;
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < physicalIds.size(); i++) {
@@ -107,23 +82,12 @@ public final class SqlCascadeDeleter {
         return count;
     }
 
-    public static Map<String, List<Object>> cascadeChildrenOf(Connection conn,
-                                                                LogicalSchema schema,
-                                                                String rootEntity,
-                                                                Object rootPhysicalId,
-                                                                Dialect dialect) throws SQLException {
-        Map<String, List<Object>> collected = new LinkedHashMap<>();
-        collected.put(rootEntity, new ArrayList<>(List.of(rootPhysicalId)));
-
-        Set<String> visited = new HashSet<>();
-        Deque<String> queue = new ArrayDeque<>();
-        queue.add(rootEntity);
-
-        int safety = 0;
-        while (!queue.isEmpty() && safety++ < MAX_DEPTH) {
-            String cur = queue.poll();
-            if (!visited.add(cur)) continue;
-            List<Object> curIds = collected.get(cur);
+    public static Map<String, List<Object>> cascadeChildrenOf(Connection conn, LogicalSchema schema, String rootEntity, Object rootPhysicalId, Dialect dialect) throws SQLException {
+        CascadeBfsState state = new CascadeBfsState(rootEntity, rootPhysicalId, MAX_DEPTH);
+        while (state.hasNext()) {
+            String cur = state.poll();
+            if (!state.visit(cur)) continue;
+            List<Object> curIds = state.idsFor(cur);
             if (curIds == null || curIds.isEmpty()) continue;
 
             for (LogicalRelationship rel : schema.relationships()) {
@@ -136,43 +100,30 @@ public final class SqlCascadeDeleter {
                 if (childPk == null) continue;
                 String fkCol = resolveFkColumn(rel, schema);
                 if (fkCol == null) continue;
-                LogicalAttribute parentPk = schema.findEntity(rel.parentEntity())
-                        .flatMap(LogicalEntity::primaryKey)
-                        .orElse(null);
+                LogicalAttribute parentPk = schema.findEntity(rel.parentEntity()).flatMap(LogicalEntity::primaryKey).orElse(null);
                 if (parentPk == null) continue;
 
                 List<Object> childIds = selectChildIds(conn, child, childPk, fkCol, parentPk, curIds, dialect);
-                if (childIds.isEmpty()) continue;
-                collected.computeIfAbsent(childName, k -> new ArrayList<>()).addAll(childIds);
-                if (!visited.contains(childName)) queue.add(childName);
+                if (!childIds.isEmpty()) state.addChildren(childName, childIds);
             }
         }
 
-        List<String> deletionOrder = new ArrayList<>(collected.keySet());
-        Collections.reverse(deletionOrder);
-        for (String entityName : deletionOrder) {
+        for (String entityName : state.reversedEntityOrder()) {
             if (entityName.equalsIgnoreCase(rootEntity)) continue;
-            List<Object> ids = collected.get(entityName);
+            List<Object> ids = state.idsFor(entityName);
             if (ids == null || ids.isEmpty()) continue;
             LogicalEntity entity = schema.requireEntity(entityName);
             LogicalAttribute pk = entity.primaryKey().orElse(null);
             if (pk == null) continue;
             deleteByIds(conn, entity, pk, ids, dialect);
         }
-        collected.remove(rootEntity);
-        return collected;
+        Map<String, List<Object>> result = state.snapshot();
+        result.remove(rootEntity);
+        return result;
     }
 
-    private static List<Object> selectChildIds(Connection conn,
-                                                LogicalEntity child,
-                                                LogicalAttribute childPk,
-                                                String fkCol,
-                                                LogicalAttribute parentPk,
-                                                List<Object> parentIds,
-                                                Dialect dialect) throws SQLException {
-        String sql = "SELECT " + dialect.quote().apply(childPk.name().toLowerCase())
-                + " FROM " + dialect.quote().apply(child.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(fkCol.toLowerCase()) + " = ?";
+    private static List<Object> selectChildIds(Connection conn, LogicalEntity child, LogicalAttribute childPk, String fkCol, LogicalAttribute parentPk, List<Object> parentIds, Dialect dialect) throws SQLException {
+        String sql = "SELECT " + dialect.quote().apply(childPk.name().toLowerCase()) + " FROM " + dialect.quote().apply(child.name().toLowerCase()) + " WHERE " + dialect.quote().apply(fkCol.toLowerCase()) + " = ?";
         List<Object> ids = new ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (Object parentId : parentIds) {
@@ -188,13 +139,8 @@ public final class SqlCascadeDeleter {
         return ids;
     }
 
-    private static void deleteByIds(Connection conn,
-                                     LogicalEntity entity,
-                                     LogicalAttribute pk,
-                                     List<Object> ids,
-                                     Dialect dialect) throws SQLException {
-        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase())
-                + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
+    private static void deleteByIds(Connection conn, LogicalEntity entity, LogicalAttribute pk, List<Object> ids, Dialect dialect) throws SQLException {
+        String sql = "DELETE FROM " + dialect.quote().apply(entity.name().toLowerCase()) + " WHERE " + dialect.quote().apply(pk.name().toLowerCase()) + " = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (Object id : ids) {
                 dialect.binder().bind(ps, 1, pk, id);
@@ -212,9 +158,6 @@ public final class SqlCascadeDeleter {
         if (parentPk == null) return null;
         LogicalEntity child = schema.findEntity(rel.childEntity()).orElse(null);
         if (child == null) return null;
-        return child.attributes().stream()
-                .anyMatch(a -> a.name().equalsIgnoreCase(parentPk.name()))
-                ? parentPk.name()
-                : null;
+        return child.attributes().stream().anyMatch(a -> a.name().equalsIgnoreCase(parentPk.name())) ? parentPk.name() : null;
     }
 }

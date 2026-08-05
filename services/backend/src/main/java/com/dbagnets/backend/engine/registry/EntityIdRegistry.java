@@ -18,14 +18,9 @@ public class EntityIdRegistry {
     private final EntityIdRegistryRepository repository;
 
     @Transactional
-    public void recordAll(String benchmarkId,
-                          String databaseId,
-                          String entityName,
-                          List<RegistryEntry> entries) {
+    public void recordAll(String benchmarkId, String databaseId, String entityName, List<RegistryEntry> entries) {
         if (entries.isEmpty()) return;
-        List<EntityIdRecord> records = entries.stream()
-                .map(e -> new EntityIdRecord(benchmarkId, databaseId, entityName, e.logicalId(), e.physicalId()))
-                .toList();
+        List<EntityIdRecord> records = entries.stream().map(e -> new EntityIdRecord(benchmarkId, databaseId, entityName, e.logicalId(), e.physicalId())).toList();
         repository.saveAll(records);
     }
 
@@ -35,10 +30,7 @@ public class EntityIdRegistry {
     }
 
     @Transactional(readOnly = true)
-    public List<String> selectLogicalIds(String benchmarkId,
-                                          String entityName,
-                                          int sampleSize,
-                                          SelectionStrategy strategy) {
+    public List<String> selectLogicalIds(String benchmarkId, String entityName, int sampleSize, SelectionStrategy strategy) {
         List<String> all = new ArrayList<>(repository.distinctLogicalIds(benchmarkId, entityName));
         if (all.isEmpty()) return List.of();
         return switch (strategy) {
@@ -69,37 +61,26 @@ public class EntityIdRegistry {
         return selectLogicalIds(benchmarkId, entityName, sampleSize, SelectionStrategy.RANDOM_UNIFORM);
     }
 
-    @Transactional(readOnly = true)
-    public List<RegistryEntry> sampleEntries(String databaseId, String entityName, int sampleSize) {
-        List<EntityIdRecord> all = new ArrayList<>(repository.findByDatabaseIdAndEntityName(databaseId, entityName));
-        if (all.isEmpty()) return List.of();
-        Collections.shuffle(all, ThreadLocalRandom.current());
-        List<EntityIdRecord> picked = all.size() <= sampleSize ? all : all.subList(0, sampleSize);
-        return picked.stream()
-                .map(r -> new RegistryEntry(r.getLogicalId(), r.getPhysicalId()))
-                .toList();
+    @Transactional
+    public void deleteByLogicalIds(String databaseId, String entityName, List<String> logicalIds) {
+        if (logicalIds.isEmpty()) return;
+        repository.deleteByDatabaseIdAndEntityNameAndLogicalIdIn(databaseId, entityName, logicalIds);
     }
 
     @Transactional
-    public int deleteByLogicalIds(String databaseId, String entityName, List<String> logicalIds) {
-        if (logicalIds.isEmpty()) return 0;
-        return repository.deleteByDatabaseIdAndEntityNameAndLogicalIdIn(databaseId, entityName, logicalIds);
+    public void deleteByPhysicalIds(String databaseId, String entityName, List<String> physicalIds) {
+        if (physicalIds.isEmpty()) return;
+        repository.deleteByDatabaseIdAndEntityNameAndPhysicalIdIn(databaseId, entityName, physicalIds);
     }
 
     @Transactional
-    public int deleteByPhysicalIds(String databaseId, String entityName, List<String> physicalIds) {
-        if (physicalIds.isEmpty()) return 0;
-        return repository.deleteByDatabaseIdAndEntityNameAndPhysicalIdIn(databaseId, entityName, physicalIds);
+    public void evictAllForDatabase(String databaseId) {
+        repository.deleteByDatabaseId(databaseId);
     }
 
     @Transactional
-    public int evictAllForDatabase(String databaseId) {
-        return repository.deleteByDatabaseId(databaseId);
-    }
-
-    @Transactional
-    public int evictAllForBenchmark(String benchmarkId) {
-        return repository.deleteByBenchmarkId(benchmarkId);
+    public void evictAllForBenchmark(String benchmarkId) {
+        repository.deleteByBenchmarkId(benchmarkId);
     }
 
     private List<String> sampleRandom(List<String> all, int sampleSize) {

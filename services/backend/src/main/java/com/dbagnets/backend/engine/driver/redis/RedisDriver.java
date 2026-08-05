@@ -2,10 +2,15 @@ package com.dbagnets.backend.engine.driver.redis;
 
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
+import com.dbagnets.backend.engine.driver.BatchSizes;
+import com.dbagnets.backend.engine.driver.BulkInsertLoop;
 import com.dbagnets.backend.engine.driver.DeleteContext;
 import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.EntityOutcome;
+import com.dbagnets.backend.engine.driver.InsertAccumulator;
 import com.dbagnets.backend.engine.driver.InsertContext;
 import com.dbagnets.backend.engine.driver.ReadContext;
+import com.dbagnets.backend.engine.driver.SampledAccumulator;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.engine.timing.RecordedId;
 import com.dbagnets.backend.engine.timing.TimedOperation;
@@ -37,141 +42,85 @@ public class RedisDriver implements EngineDriver {
     @Override
     public TimedOperation insert(InsertContext ctx) throws Exception {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long totalDbTimeNs = 0L;
-        long totalRowsAffected = 0L;
-        List<RecordedId> recordedIds = new ArrayList<>();
-
+        InsertAccumulator acc = new InsertAccumulator();
         long wireStart = System.nanoTime();
         try (Jedis jedis = pool.getResource()) {
             for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
                 List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
                 if (rows == null || rows.isEmpty()) continue;
-                totalDbTimeNs += writeEntity(jedis, ctx, node, rows, recordedIds);
-                totalRowsAffected += rows.size();
+                acc.accept(writeEntity(jedis, ctx, node, rows));
                 ctx.progress().onEntityFinished(node.entityName());
             }
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(totalRowsAffected)
-                .conflictsSkipped(0)
-                .recordedIds(recordedIds)
-                .build();
+        return acc.finish(System.nanoTime() - wireStart);
     }
 
     @Override
     public TimedOperation read(ReadContext ctx) {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsRead = 0L;
-
+        SampledAccumulator acc = new SampledAccumulator(ctx.targets().size());
         long wireStart = System.nanoTime();
         try (Jedis jedis = pool.getResource()) {
             String prefix = ctx.entityName().toLowerCase() + ":";
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
-                String key = entry.physicalId() != null && entry.physicalId().startsWith(prefix)
-                        ? entry.physicalId()
-                        : prefix + entry.logicalId();
+                String key = entry.physicalId() != null && entry.physicalId().startsWith(prefix) ? entry.physicalId() : prefix + entry.logicalId();
                 long start = System.nanoTime();
                 String value = jedis.get(key);
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (value != null) rowsRead++;
+                acc.sample(i, System.nanoTime() - start, value != null ? 1 : 0);
             }
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsRead)
-                .sampleDbTimeNs(samples)
-                .build();
+        return acc.finish(System.nanoTime() - wireStart);
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) {
         JedisPool pool = poolCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsAffected = 0L;
-
+        SampledAccumulator acc = new SampledAccumulator(ctx.targets().size());
         long wireStart = System.nanoTime();
         try (Jedis jedis = pool.getResource()) {
             String prefix = ctx.entityName().toLowerCase() + ":";
             for (int i = 0; i < ctx.targets().size(); i++) {
                 RegistryEntry entry = ctx.targets().get(i);
-                String key = entry.physicalId() != null && entry.physicalId().startsWith(prefix)
-                        ? entry.physicalId()
-                        : prefix + entry.logicalId();
+                String key = entry.physicalId() != null && entry.physicalId().startsWith(prefix) ? entry.physicalId() : prefix + entry.logicalId();
                 long start = System.nanoTime();
                 long deleted = jedis.del(key);
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                rowsAffected += deleted;
+                acc.sample(i, System.nanoTime() - start, deleted);
             }
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsAffected)
-                .sampleDbTimeNs(samples)
-                .build();
+        return acc.finish(System.nanoTime() - wireStart);
     }
 
-    private long writeEntity(Jedis jedis,
-                              InsertContext ctx,
-                              CascadeNode node,
-                              List<GeneratedRow> rows,
-                              List<RecordedId> recordedIds) throws Exception {
-        int batchSize = effectiveBatchSize(ctx);
-        int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
-        long dbTimeNs = 0L;
-        int batchIndex = 0;
+    private EntityOutcome writeEntity(Jedis jedis, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows) throws Exception {
         String entityLowerName = node.entityName().toLowerCase();
-
-        for (int from = 0; from < rows.size(); from += batchSize) {
-            int to = Math.min(from + batchSize, rows.size());
-            List<GeneratedRow> slice = rows.subList(from, to);
-            List<String> keys = new ArrayList<>(slice.size());
-            List<String> payloads = new ArrayList<>(slice.size());
-            for (GeneratedRow row : slice) {
-                String key = entityLowerName + ":" + row.logicalId();
-                keys.add(key);
-                payloads.add(objectMapper.writeValueAsString(row.values()));
-                recordedIds.add(new RecordedId(node.entityName(), row.logicalId(), key));
-            }
-            long start = System.nanoTime();
-            try (Pipeline pipeline = jedis.pipelined()) {
-                for (int i = 0; i < keys.size(); i++) {
-                    pipeline.set(keys.get(i), payloads.get(i));
-                }
-                pipeline.sync();
-            }
-            dbTimeNs += System.nanoTime() - start;
-            batchIndex++;
-            ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
-        }
-        return dbTimeNs;
-    }
-
-    private int effectiveBatchSize(InsertContext ctx) {
-        return switch (ctx.mode()) {
-            case SINGLE -> 1;
-            case BATCH -> Math.max(1, ctx.batchSize());
-            case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 10_000);
-        };
+        BulkInsertLoop.Config config = new BulkInsertLoop.Config(
+                BatchSizes.effective(ctx, 10_000),
+                engine(),
+                false,
+                "Redis batch write failed on {} batch {}: {}",
+                null,
+                node.entityName());
+        List<String> lastBatchKeys = new ArrayList<>();
+        return BulkInsertLoop.run(ctx, node, rows, config,
+                (slice, batchIndex, totalBatches) -> {
+                    lastBatchKeys.clear();
+                    List<String> payloads = new ArrayList<>(slice.size());
+                    for (GeneratedRow row : slice) {
+                        String key = entityLowerName + ":" + row.logicalId();
+                        lastBatchKeys.add(key);
+                        payloads.add(objectMapper.writeValueAsString(row.values()));
+                    }
+                    try (Pipeline pipeline = jedis.pipelined()) {
+                        for (int i = 0; i < lastBatchKeys.size(); i++) {
+                            pipeline.set(lastBatchKeys.get(i), payloads.get(i));
+                        }
+                        pipeline.sync();
+                    }
+                    return slice.size();
+                },
+                (row, slice) -> {
+                    String key = entityLowerName + ":" + row.logicalId();
+                    return new RecordedId(node.entityName(), row.logicalId(), key);
+                });
     }
 }

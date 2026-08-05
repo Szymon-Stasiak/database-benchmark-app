@@ -3,19 +3,26 @@ package com.dbagnets.backend.engine.driver.neo4j;
 import com.dbagnets.backend.engine.cascade.CascadeEdge;
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
+import com.dbagnets.backend.engine.driver.BatchSizes;
+import com.dbagnets.backend.engine.driver.CascadeBfsState;
 import com.dbagnets.backend.engine.driver.ConflictDetector;
 import com.dbagnets.backend.engine.driver.DeleteContext;
 import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.DriverValues;
+import com.dbagnets.backend.engine.driver.EntityOutcome;
+import com.dbagnets.backend.engine.driver.InsertAccumulator;
 import com.dbagnets.backend.engine.driver.InsertContext;
 import com.dbagnets.backend.engine.driver.ReadContext;
+import com.dbagnets.backend.engine.driver.ScenarioTimings;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry.RegistryEntry;
 import com.dbagnets.backend.engine.scenario.AggregateParams;
 import com.dbagnets.backend.engine.scenario.KnnParams;
 import com.dbagnets.backend.engine.scenario.RangeParams;
 import com.dbagnets.backend.engine.scenario.ResultCanonicalizer;
 import com.dbagnets.backend.engine.scenario.ScenarioContext;
-import com.dbagnets.backend.engine.scenario.ScenarioResult;
 import com.dbagnets.backend.engine.scenario.TraversalParams;
+import com.dbagnets.backend.engine.schema.LogicalAttribute;
+import com.dbagnets.backend.engine.schema.LogicalEntity;
 import com.dbagnets.backend.engine.timing.RecordedId;
 import com.dbagnets.backend.engine.timing.TimedOperation;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +30,6 @@ import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,37 +45,29 @@ public abstract class BoltDriverBase implements EngineDriver {
     @Override
     public TimedOperation insert(InsertContext ctx) {
         org.neo4j.driver.Driver neo = driverCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long totalDbTimeNs = 0L;
-        long totalRowsAffected = 0L;
-        int totalConflicts = 0;
-        List<RecordedId> recordedIds = new ArrayList<>();
-
+        InsertAccumulator acc = new InsertAccumulator();
+        long extraDbTimeNs = 0L;
         long wireStart = System.nanoTime();
         try (Session session = neo.session()) {
             for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
                 List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
                 if (rows == null || rows.isEmpty()) continue;
-                NodeOutcome nodeOutcome = createNodes(session, ctx, node, rows);
-                totalDbTimeNs += nodeOutcome.dbTimeNs;
-                totalRowsAffected += nodeOutcome.rowsAffected;
-                totalConflicts += nodeOutcome.conflicts;
-                recordedIds.addAll(nodeOutcome.recordedIds);
-
+                EntityOutcome nodeOutcome = createNodes(session, ctx, node, rows);
+                acc.accept(nodeOutcome);
                 for (CascadeEdge edge : node.incomingFromParents()) {
-                    totalDbTimeNs += createRelationships(session, ctx, node, rows, edge);
+                    extraDbTimeNs += createRelationships(session, ctx, node, rows, edge);
                 }
                 ctx.progress().onEntityFinished(node.entityName());
             }
         }
         long wireTimeNs = System.nanoTime() - wireStart;
-
+        TimedOperation base = acc.finish(wireTimeNs);
         return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(totalRowsAffected)
-                .conflictsSkipped(totalConflicts)
-                .recordedIds(recordedIds)
+                .dbTimeNs(base.dbTimeNs() + extraDbTimeNs)
+                .wireTimeNs(base.wireTimeNs())
+                .rowsAffected(base.rowsAffected())
+                .conflictsSkipped(base.conflictsSkipped())
+                .recordedIds(base.recordedIds())
                 .build();
     }
 
@@ -77,20 +75,14 @@ public abstract class BoltDriverBase implements EngineDriver {
     public TimedOperation read(ReadContext ctx) {
         org.neo4j.driver.Driver neo = driverCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         String label = ctx.entityName();
-        String pk = ctx.schema().requireEntity(label).primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + label))
-                .name();
-        com.dbagnets.backend.engine.driver.ReadDepth depth = ctx.readDepth() == null
-                ? com.dbagnets.backend.engine.driver.ReadDepth.NONE : ctx.readDepth();
+        String pk = requiredPkName(ctx.schema(), label, "Entity missing PK: " + label);
+        com.dbagnets.backend.engine.driver.ReadDepth depth = ctx.readDepth() == null ? com.dbagnets.backend.engine.driver.ReadDepth.NONE : ctx.readDepth();
         String cypher;
         if (depth == com.dbagnets.backend.engine.driver.ReadDepth.NONE) {
             cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) RETURN n";
         } else {
-            int maxDepth = depth == com.dbagnets.backend.engine.driver.ReadDepth.ONE_HOP
-                    ? 1
-                    : com.dbagnets.backend.engine.driver.ReadDepth.FULL_CASCADE_MAX_DEPTH;
-            var chain = com.dbagnets.backend.engine.driver.pg.PgScenarios.resolveChain(
-                    ctx.schema(), label, maxDepth);
+            int maxDepth = depth == com.dbagnets.backend.engine.driver.ReadDepth.ONE_HOP ? 1 : com.dbagnets.backend.engine.driver.ReadDepth.FULL_CASCADE_MAX_DEPTH;
+            var chain = com.dbagnets.backend.engine.driver.pg.PgScenarios.resolveChain(ctx.schema(), label, maxDepth);
             if (chain.isEmpty()) {
                 cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) RETURN n";
             } else {
@@ -100,14 +92,9 @@ public abstract class BoltDriverBase implements EngineDriver {
                     relTypes.add((level.parentEntity() + "_" + level.childEntity()).toUpperCase());
                     childLabels.add(level.childEntity());
                 }
-                String relPattern = relTypes.stream().map(t -> "`" + t + "`")
-                        .collect(java.util.stream.Collectors.joining("|"));
-                String labelFilter = childLabels.stream().map(l -> "'" + l + "'")
-                        .collect(java.util.stream.Collectors.joining(", "));
-                cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) "
-                        + "OPTIONAL MATCH (n)-[:" + relPattern + "*1.." + chain.size() + "]->(m) "
-                        + "WHERE m IS NULL OR any(lbl IN labels(m) WHERE lbl IN [" + labelFilter + "]) "
-                        + "RETURN n, collect(DISTINCT m) AS descendants";
+                String relPattern = relTypes.stream().map(t -> "`" + t + "`").collect(java.util.stream.Collectors.joining("|"));
+                String labelFilter = childLabels.stream().map(l -> "'" + l + "'").collect(java.util.stream.Collectors.joining(", "));
+                cypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) " + "OPTIONAL MATCH (n)-[:" + relPattern + "*1.." + chain.size() + "]->(m) " + "WHERE m IS NULL OR any(lbl IN labels(m) WHERE lbl IN [" + labelFilter + "]) " + "RETURN n, collect(DISTINCT m) AS descendants";
             }
         }
 
@@ -115,8 +102,7 @@ public abstract class BoltDriverBase implements EngineDriver {
         long totalDbTimeNs = 0L;
         long rowsRead = 0L;
 
-        boolean cascading = depth != com.dbagnets.backend.engine.driver.ReadDepth.NONE
-                && cypher.contains("collect(DISTINCT m)");
+        boolean cascading = depth != com.dbagnets.backend.engine.driver.ReadDepth.NONE && cypher.contains("collect(DISTINCT m)");
         String collectKey = "descendants";
 
         long wireStart = System.nanoTime();
@@ -146,21 +132,14 @@ public abstract class BoltDriverBase implements EngineDriver {
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsRead)
-                .sampleDbTimeNs(samples)
-                .build();
+        return TimedOperation.builder().dbTimeNs(totalDbTimeNs).wireTimeNs(wireTimeNs).rowsAffected(rowsRead).sampleDbTimeNs(samples).build();
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) {
         org.neo4j.driver.Driver neo = driverCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         String label = ctx.entityName();
-        String pk = ctx.schema().requireEntity(label).primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Entity missing PK: " + label))
-                .name();
+        String pk = requiredPkName(ctx.schema(), label, "Entity missing PK: " + label);
         String rootCypher = "MATCH (n:`" + label + "` {" + pk + ": $id}) DETACH DELETE n";
 
         long[] samples = new long[ctx.targets().size()];
@@ -185,52 +164,28 @@ public abstract class BoltDriverBase implements EngineDriver {
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsAffected)
-                .sampleDbTimeNs(samples)
-                .cascadeDeletedByEntity(cascadeAccumulator)
-                .build();
+        return TimedOperation.builder().dbTimeNs(totalDbTimeNs).wireTimeNs(wireTimeNs).rowsAffected(rowsAffected).sampleDbTimeNs(samples).cascadeDeletedByEntity(cascadeAccumulator).build();
     }
 
-    private void cascadeChildrenBfs(Session session,
-                                     com.dbagnets.backend.engine.schema.LogicalSchema schema,
-                                     String rootLabel,
-                                     Object rootId,
-                                     java.util.Map<String, java.util.List<String>> accumulator) {
-        java.util.Map<String, java.util.List<Object>> byEntity = new java.util.LinkedHashMap<>();
-        byEntity.put(rootLabel, new java.util.ArrayList<>(java.util.List.of(rootId)));
-        java.util.Set<String> visited = new java.util.HashSet<>();
-        java.util.Deque<String> queue = new java.util.ArrayDeque<>();
-        queue.add(rootLabel);
-
-        int safety = 0;
-        while (!queue.isEmpty() && safety++ < 16) {
-            String cur = queue.poll();
-            if (!visited.add(cur)) continue;
-            java.util.List<Object> curIds = byEntity.get(cur);
+    private void cascadeChildrenBfs(Session session, com.dbagnets.backend.engine.schema.LogicalSchema schema, String rootLabel, Object rootId, java.util.Map<String, java.util.List<String>> accumulator) {
+        CascadeBfsState state = new CascadeBfsState(rootLabel, rootId, 16);
+        while (state.hasNext()) {
+            String cur = state.poll();
+            if (!state.visit(cur)) continue;
+            java.util.List<Object> curIds = state.idsFor(cur);
             if (curIds == null || curIds.isEmpty()) continue;
-            String parentPk = schema.findEntity(cur)
-                    .flatMap(e -> e.primaryKey())
-                    .map(a -> a.name())
-                    .orElse(null);
+            String parentPk = pkName(schema, cur);
             if (parentPk == null) continue;
 
             for (var rel : schema.relationships()) {
                 if (!rel.parentEntity().equalsIgnoreCase(cur)) continue;
                 String childLabel = rel.childEntity();
                 if (childLabel.equalsIgnoreCase(cur)) continue;
-                String childPk = schema.findEntity(childLabel)
-                        .flatMap(e -> e.primaryKey())
-                        .map(a -> a.name())
-                        .orElse(null);
+                String childPk = pkName(schema, childLabel);
                 if (childPk == null) continue;
 
                 String relType = (cur + "_" + childLabel).toUpperCase();
-                String cypher = "UNWIND $ids AS pid "
-                        + "MATCH (p:`" + cur + "` {" + parentPk + ": pid})-[:`" + relType + "`]->(c:`" + childLabel + "`) "
-                        + "RETURN DISTINCT c." + childPk + " AS id";
+                String cypher = "UNWIND $ids AS pid " + "MATCH (p:`" + cur + "` {" + parentPk + ": pid})-[:`" + relType + "`]->(c:`" + childLabel + "`) " + "RETURN DISTINCT c." + childPk + " AS id";
                 try {
                     var result = session.run(cypher, Map.of("ids", curIds));
                     java.util.List<Object> collected = new java.util.ArrayList<>();
@@ -238,45 +193,33 @@ public abstract class BoltDriverBase implements EngineDriver {
                         Object v = result.next().get("id").asObject();
                         if (v != null) collected.add(v);
                     }
-                    if (!collected.isEmpty()) {
-                        byEntity.computeIfAbsent(childLabel, k -> new java.util.ArrayList<>()).addAll(collected);
-                        if (!visited.contains(childLabel)) queue.add(childLabel);
-                    }
+                    if (!collected.isEmpty()) state.addChildren(childLabel, collected);
                 } catch (Exception ex) {
                     log.debug("Bolt cascade scan failed for {} → {}: {}", cur, childLabel, ex.getMessage());
                 }
             }
         }
 
-        java.util.List<String> deletionOrder = new java.util.ArrayList<>(byEntity.keySet());
-        java.util.Collections.reverse(deletionOrder);
-        for (String entityName : deletionOrder) {
+        for (String entityName : state.reversedEntityOrder()) {
             if (entityName.equalsIgnoreCase(rootLabel)) continue;
-            java.util.List<Object> ids = byEntity.get(entityName);
+            java.util.List<Object> ids = state.idsFor(entityName);
             if (ids == null || ids.isEmpty()) continue;
-            String childPk = schema.findEntity(entityName)
-                    .flatMap(e -> e.primaryKey())
-                    .map(a -> a.name())
-                    .orElse(null);
+            String childPk = pkName(schema, entityName);
             if (childPk == null) continue;
             String cypher = "UNWIND $ids AS pid MATCH (n:`" + entityName + "` {" + childPk + ": pid}) DETACH DELETE n";
             try {
                 session.run(cypher, Map.of("ids", ids)).consume();
-                accumulator.computeIfAbsent(entityName, k -> new java.util.ArrayList<>())
-                        .addAll(ids.stream().map(String::valueOf).toList());
+                accumulator.computeIfAbsent(entityName, k -> new java.util.ArrayList<>()).addAll(ids.stream().map(String::valueOf).toList());
             } catch (Exception ex) {
                 log.warn("Bolt cascade delete failed for {}: {}", entityName, ex.getMessage());
             }
         }
     }
 
-    private NodeOutcome createNodes(Session session,
-                                     InsertContext ctx,
-                                     CascadeNode node,
-                                     List<GeneratedRow> rows) {
-        NodeOutcome outcome = new NodeOutcome();
+    private EntityOutcome createNodes(Session session, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows) {
+        EntityOutcome outcome = new EntityOutcome();
         String label = node.entityName();
-        int batchSize = effectiveBatchSize(ctx);
+        int batchSize = BatchSizes.effective(ctx, 10_000);
         int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
         String cypher = "UNWIND $batch AS row CREATE (n:`" + label + "`) SET n = row";
 
@@ -309,25 +252,10 @@ public abstract class BoltDriverBase implements EngineDriver {
         return outcome;
     }
 
-    private long createRelationships(Session session,
-                                      InsertContext ctx,
-                                      CascadeNode node,
-                                      List<GeneratedRow> rows,
-                                      CascadeEdge edge) {
+    private long createRelationships(Session session, InsertContext ctx, CascadeNode node, List<GeneratedRow> rows, CascadeEdge edge) {
         String parentLabel = edge.parentEntity();
         String childLabel = node.entityName();
-        String relType = (parentLabel + "_" + childLabel).toUpperCase();
-        String childPk = ctx.schema().requireEntity(childLabel).primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Child entity missing PK: " + childLabel))
-                .name();
-        String parentPk = ctx.schema().requireEntity(parentLabel).primaryKey()
-                .orElseThrow(() -> new IllegalStateException("Parent entity missing PK: " + parentLabel))
-                .name();
-
-        String cypher = "UNWIND $pairs AS pair " +
-                "MATCH (p:`" + parentLabel + "` {" + parentPk + ": pair.parentId}) " +
-                "MATCH (c:`" + childLabel + "` {" + childPk + ": pair.childId}) " +
-                "MERGE (p)-[:`" + relType + "`]->(c)";
+        String cypher = getString(ctx, parentLabel, childLabel);
 
         List<Map<String, Object>> pairs = new ArrayList<>(rows.size());
         for (GeneratedRow row : rows) {
@@ -337,7 +265,7 @@ public abstract class BoltDriverBase implements EngineDriver {
         }
         if (pairs.isEmpty()) return 0L;
 
-        int chunkSize = effectiveBatchSize(ctx);
+        int chunkSize = BatchSizes.effective(ctx, 10_000);
         long totalDbTimeNs = 0L;
         for (int from = 0; from < pairs.size(); from += chunkSize) {
             int to = Math.min(from + chunkSize, pairs.size());
@@ -347,87 +275,52 @@ public abstract class BoltDriverBase implements EngineDriver {
                 session.run(cypher, Map.of("pairs", chunk)).consume();
                 totalDbTimeNs += System.nanoTime() - start;
             } catch (Exception ex) {
-                log.warn("{} relationship MERGE failed {} -> {} chunk [{}, {}): {}",
-                        engine(), parentLabel, childLabel, from, to, ex.getMessage());
+                log.warn("{} relationship MERGE failed {} -> {} chunk [{}, {}): {}", engine(), parentLabel, childLabel, from, to, ex.getMessage());
             }
         }
         return totalDbTimeNs;
     }
 
-    private Map<String, Object> toMap(GeneratedRow row) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : row.values().entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof float[] arr) {
-                List<Double> list = new ArrayList<>(arr.length);
-                for (float f : arr) list.add((double) f);
-                map.put(entry.getKey(), list);
-            } else if (value instanceof java.math.BigDecimal bd) {
-                map.put(entry.getKey(), bd.doubleValue());
-            } else if (value instanceof java.time.Instant ins) {
-                map.put(entry.getKey(), ins.toString());
-            } else if (value instanceof java.time.LocalDate ld) {
-                map.put(entry.getKey(), ld.toString());
-            } else {
-                map.put(entry.getKey(), value);
-            }
-        }
-        return map;
+    private static String getString(InsertContext ctx, String parentLabel, String childLabel) {
+        String relType = (parentLabel + "_" + childLabel).toUpperCase();
+        String childPk = requiredPkName(ctx.schema(), childLabel, "Child entity missing PK: " + childLabel);
+        String parentPk = requiredPkName(ctx.schema(), parentLabel, "Parent entity missing PK: " + parentLabel);
+
+        return "UNWIND $pairs AS pair " + "MATCH (p:`" + parentLabel + "` {" + parentPk + ": pair.parentId}) " + "MATCH (c:`" + childLabel + "` {" + childPk + ": pair.childId}) " + "MERGE (p)-[:`" + relType + "`]->(c)";
     }
 
-    private int effectiveBatchSize(InsertContext ctx) {
-        return switch (ctx.mode()) {
-            case SINGLE -> 1;
-            case BATCH -> Math.max(1, ctx.batchSize());
-            case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 10_000);
-        };
+    private Map<String, Object> toMap(GeneratedRow row) {
+        return DriverValues.rowToMap(row);
     }
 
     @Override
-    public ScenarioOutcome runScenario(ScenarioContext ctx) {
+    public ScenarioOutcome runScenario(ScenarioContext ctx) throws Exception {
         org.neo4j.driver.Driver neo = driverCache.get(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
-
-        long wireStart = System.nanoTime();
-        long dbTimeNs;
-        ScenarioResult result;
         try (Session session = neo.session()) {
-            long start = System.nanoTime();
-            result = switch (ctx.params()) {
+            return ScenarioTimings.execute(() -> switch (ctx.params()) {
                 case AggregateParams p -> {
-                    Map<String, Long> grouped = BoltScenarios.executeAggregate(session, ctx.schema(),
-                            p.parentEntity(), p.childEntity());
+                    Map<String, Long> grouped = BoltScenarios.executeAggregate(session, ctx.schema(), p.parentEntity(), p.childEntity());
                     yield ResultCanonicalizer.build(grouped, grouped.size());
                 }
                 case RangeParams p -> {
-                    long count = BoltScenarios.executeRangeCount(session, ctx.schema(), p.entityName(),
-                            p.attribute(), p.min(), p.max());
+                    long count = BoltScenarios.executeRangeCount(session, ctx.schema(), p.entityName(), p.attribute(), p.min(), p.max());
                     yield ResultCanonicalizer.build(Map.of("count", count), count);
                 }
                 case TraversalParams p -> {
-                    List<String> ids = BoltScenarios.executeTraversal(session, ctx.schema(),
-                            p.startEntity(), p.startLogicalId(), p.depth());
+                    List<String> ids = BoltScenarios.executeTraversal(session, ctx.schema(), p.startEntity(), p.startLogicalId(), p.depth());
                     yield ResultCanonicalizer.build(ids, ids.size());
                 }
-                case KnnParams ignored -> throw new UnsupportedOperationException(
-                        engine() + " does not support VECTOR_KNN");
-            };
-            dbTimeNs = System.nanoTime() - start;
+                case KnnParams ignored ->
+                        throw new UnsupportedOperationException(engine() + " does not support VECTOR_KNN");
+            });
         }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        TimedOperation timed = TimedOperation.builder()
-                .dbTimeNs(dbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(result.rowsReturned())
-                .sampleDbTimeNs(new long[] { dbTimeNs })
-                .build();
-        return new ScenarioOutcome(timed, result);
     }
 
-    private static final class NodeOutcome {
-        long dbTimeNs;
-        long rowsAffected;
-        int conflicts;
-        List<RecordedId> recordedIds = new ArrayList<>();
+    private static String pkName(com.dbagnets.backend.engine.schema.LogicalSchema schema, String entityName) {
+        return schema.findEntity(entityName).flatMap(LogicalEntity::primaryKey).map(LogicalAttribute::name).orElse(null);
+    }
+
+    private static String requiredPkName(com.dbagnets.backend.engine.schema.LogicalSchema schema, String entityName, String errorMessage) {
+        return schema.requireEntity(entityName).primaryKey().orElseThrow(() -> new IllegalStateException(errorMessage)).name();
     }
 }

@@ -15,13 +15,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 @Entity
-@Table(
-        name = "entity_id_registry",
-        indexes = {
-                @Index(name = "idx_registry_benchmark_entity", columnList = "benchmark_id,entity_name"),
-                @Index(name = "idx_registry_database_entity", columnList = "database_id,entity_name")
-        }
-)
+@Table(name = "entity_id_registry", indexes = {@Index(name = "idx_registry_benchmark_entity", columnList = "benchmark_id,entity_name"), @Index(name = "idx_registry_database_entity", columnList = "database_id,entity_name")})
 @IdClass(EntityIdRecord.RecordId.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -48,11 +42,7 @@ public class EntityIdRecord {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    public EntityIdRecord(String benchmarkId,
-                          String databaseId,
-                          String entityName,
-                          String logicalId,
-                          String physicalId) {
+    public EntityIdRecord(String benchmarkId, String databaseId, String entityName, String logicalId, String physicalId) {
         this.benchmarkId = benchmarkId;
         this.databaseId = databaseId;
         this.entityName = entityName;
@@ -77,9 +67,7 @@ public class EntityIdRecord {
         @Override
         public boolean equals(Object o) {
             if (!(o instanceof RecordId other)) return false;
-            return Objects.equals(databaseId, other.databaseId)
-                    && Objects.equals(entityName, other.entityName)
-                    && Objects.equals(logicalId, other.logicalId);
+            return Objects.equals(databaseId, other.databaseId) && Objects.equals(entityName, other.entityName) && Objects.equals(logicalId, other.logicalId);
         }
 
         @Override

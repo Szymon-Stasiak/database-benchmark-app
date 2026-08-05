@@ -1,5 +1,6 @@
 package com.dbagnets.backend.engine.driver.mysql;
 
+import com.dbagnets.backend.engine.driver.SqlInsertStatement;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
 
@@ -11,7 +12,7 @@ public record MysqlInsertStatement(
         String tableName,
         List<LogicalAttribute> orderedColumns,
         String singleRowSql
-) {
+) implements SqlInsertStatement {
 
     public static MysqlInsertStatement of(LogicalEntity entity) {
         String table = quote(entity.name().toLowerCase());

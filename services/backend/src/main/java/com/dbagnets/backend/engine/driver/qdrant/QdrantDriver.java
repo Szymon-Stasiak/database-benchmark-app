@@ -2,22 +2,22 @@ package com.dbagnets.backend.engine.driver.qdrant;
 
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
+import com.dbagnets.backend.engine.driver.BatchSizes;
+import com.dbagnets.backend.engine.driver.BulkInsertLoop;
 import com.dbagnets.backend.engine.driver.DeleteContext;
 import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.EntityOutcome;
+import com.dbagnets.backend.engine.driver.HttpClients;
 import com.dbagnets.backend.engine.driver.InsertContext;
+import com.dbagnets.backend.engine.driver.InsertOuterLoop;
+import com.dbagnets.backend.engine.driver.PerTargetLoop;
 import com.dbagnets.backend.engine.driver.ReadContext;
-import com.dbagnets.backend.engine.registry.EntityIdRegistry.RegistryEntry;
-import com.dbagnets.backend.engine.scenario.AggregateParams;
+import com.dbagnets.backend.engine.driver.VectorAttributes;
 import com.dbagnets.backend.engine.scenario.KnnParams;
-import com.dbagnets.backend.engine.scenario.RangeParams;
 import com.dbagnets.backend.engine.scenario.ResultCanonicalizer;
 import com.dbagnets.backend.engine.scenario.ScenarioContext;
-import com.dbagnets.backend.engine.scenario.ScenarioResult;
-import com.dbagnets.backend.engine.scenario.TraversalParams;
 import com.dbagnets.backend.engine.schema.LogicalAttribute;
-import com.dbagnets.backend.engine.schema.LogicalDataType;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
-import com.dbagnets.backend.engine.timing.RecordedId;
 import com.dbagnets.backend.engine.timing.TimedOperation;
 import com.dbagnets.backend.domain.DatabaseEngine;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,193 +43,74 @@ public class QdrantDriver implements EngineDriver {
     }
 
     @Override
-    public TimedOperation insert(InsertContext ctx) {
-        WebClient client = WebClient.builder()
-                .baseUrl("http://" + ctx.hostAddress() + ":" + ctx.hostPort())
-                .build();
-
-        long totalDbTimeNs = 0L;
-        long totalRowsAffected = 0L;
-        List<RecordedId> recordedIds = new ArrayList<>();
-
-        long wireStart = System.nanoTime();
-        for (CascadeNode node : ctx.plan().nodesInInsertOrder()) {
-            List<GeneratedRow> rows = ctx.rowsByEntity().get(node.entityName());
-            if (rows == null || rows.isEmpty()) continue;
+    public TimedOperation insert(InsertContext ctx) throws Exception {
+        WebClient client = HttpClients.basic(ctx.hostAddress(), ctx.hostPort());
+        return InsertOuterLoop.run(ctx, (node, rows) -> {
             LogicalEntity entity = ctx.schema().requireEntity(node.entityName());
             String collection = node.entityName().toLowerCase();
-            LogicalAttribute vectorAttr = vectorAttribute(entity);
+            LogicalAttribute vectorAttr = VectorAttributes.find(entity);
             if (vectorAttr == null) {
                 log.debug("Qdrant: skipping entity {} without VECTOR attribute", node.entityName());
-                continue;
+                return null;
             }
-            EntityWriteOutcome outcome = upsertEntity(client, ctx, node, entity, collection, vectorAttr, rows);
-            totalDbTimeNs += outcome.dbTimeNs;
-            totalRowsAffected += outcome.rowsAffected;
-            recordedIds.addAll(outcome.recordedIds);
-            ctx.progress().onEntityFinished(node.entityName());
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(totalRowsAffected)
-                .conflictsSkipped(0)
-                .recordedIds(recordedIds)
-                .build();
+            return upsertEntity(client, ctx, node, collection, vectorAttr, rows);
+        });
     }
 
     @Override
     public TimedOperation read(ReadContext ctx) {
-        WebClient client = WebClient.builder()
-                .baseUrl("http://" + ctx.hostAddress() + ":" + ctx.hostPort())
-                .build();
+        WebClient client = HttpClients.basic(ctx.hostAddress(), ctx.hostPort());
         String collection = ctx.entityName().toLowerCase();
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsRead = 0L;
-
-        long wireStart = System.nanoTime();
-        for (int i = 0; i < ctx.targets().size(); i++) {
-            RegistryEntry entry = ctx.targets().get(i);
-            Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
-            try {
-                long start = System.nanoTime();
-                JsonNode response = client.post()
-                        .uri("/collections/{c}/points", collection)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(Map.of("ids", List.of(id), "with_payload", true, "with_vector", false))
-                        .retrieve()
-                        .bodyToMono(JsonNode.class)
-                        .timeout(Duration.ofSeconds(15))
-                        .block();
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (response != null) {
-                    JsonNode result = response.path("result");
-                    if (result.isArray() && result.size() > 0) rowsRead++;
-                }
-            } catch (Exception ex) {
-                log.warn("Qdrant read failed for {}/{}: {}", collection, id, ex.getMessage());
-            }
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsRead)
-                .sampleDbTimeNs(samples)
-                .build();
+        return PerTargetLoop.run(ctx.targets(), "Qdrant read for",
+                e -> collection + "/" + normalizeId(e.physicalId() != null ? e.physicalId() : e.logicalId()),
+                entry -> {
+                    Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
+                    JsonNode response = client.post().uri("/collections/{c}/points", collection).contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("ids", List.of(id), "with_payload", true, "with_vector", false)).retrieve().bodyToMono(JsonNode.class).timeout(Duration.ofSeconds(15)).block();
+                    JsonNode result = response != null ? response.path("result") : null;
+                    return result != null && result.isArray() && !result.isEmpty() ? 1 : 0;
+                });
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) {
-        WebClient client = WebClient.builder()
-                .baseUrl("http://" + ctx.hostAddress() + ":" + ctx.hostPort())
-                .build();
+        WebClient client = HttpClients.basic(ctx.hostAddress(), ctx.hostPort());
         String collection = ctx.entityName().toLowerCase();
-
-        long[] samples = new long[ctx.targets().size()];
-        long totalDbTimeNs = 0L;
-        long rowsAffected = 0L;
-
-        long wireStart = System.nanoTime();
-        for (int i = 0; i < ctx.targets().size(); i++) {
-            RegistryEntry entry = ctx.targets().get(i);
-            Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
-            try {
-                long start = System.nanoTime();
-                JsonNode response = client.post()
-                        .uri("/collections/{c}/points/delete?wait=true", collection)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(Map.of("points", List.of(id)))
-                        .retrieve()
-                        .bodyToMono(JsonNode.class)
-                        .timeout(Duration.ofSeconds(15))
-                        .block();
-                long sampleNs = System.nanoTime() - start;
-                samples[i] = sampleNs;
-                totalDbTimeNs += sampleNs;
-                if (response != null) {
-                    String status = response.path("result").path("status").asText("");
-                    if ("completed".equalsIgnoreCase(status) || "acknowledged".equalsIgnoreCase(status)) {
-                        rowsAffected++;
-                    }
-                }
-            } catch (Exception ex) {
-                log.warn("Qdrant delete failed for {}/{}: {}", collection, id, ex.getMessage());
-            }
-        }
-        long wireTimeNs = System.nanoTime() - wireStart;
-
-        return TimedOperation.builder()
-                .dbTimeNs(totalDbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(rowsAffected)
-                .sampleDbTimeNs(samples)
-                .build();
+        return PerTargetLoop.run(ctx.targets(), "Qdrant delete for",
+                e -> collection + "/" + normalizeId(e.physicalId() != null ? e.physicalId() : e.logicalId()),
+                entry -> {
+                    Object id = normalizeId(entry.physicalId() != null ? entry.physicalId() : entry.logicalId());
+                    JsonNode response = client.post().uri("/collections/{c}/points/delete?wait=true", collection).contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("points", List.of(id))).retrieve().bodyToMono(JsonNode.class).timeout(Duration.ofSeconds(15)).block();
+                    String status = response != null ? response.path("result").path("status").asText("") : "";
+                    return "completed".equalsIgnoreCase(status) || "acknowledged".equalsIgnoreCase(status) ? 1 : 0;
+                });
     }
 
-    private EntityWriteOutcome upsertEntity(WebClient client,
-                                             InsertContext ctx,
-                                             CascadeNode node,
-                                             LogicalEntity entity,
-                                             String collection,
-                                             LogicalAttribute vectorAttr,
-                                             List<GeneratedRow> rows) {
-        EntityWriteOutcome outcome = new EntityWriteOutcome();
-        int batchSize = effectiveBatchSize(ctx);
-        int totalBatches = Math.max(1, (int) Math.ceil((double) rows.size() / batchSize));
-        int batchIndex = 0;
-
-        for (int from = 0; from < rows.size(); from += batchSize) {
-            int to = Math.min(from + batchSize, rows.size());
-            List<GeneratedRow> slice = rows.subList(from, to);
+    private EntityOutcome upsertEntity(WebClient client, InsertContext ctx, CascadeNode node, String collection, LogicalAttribute vectorAttr, List<GeneratedRow> rows) throws Exception {
+        BulkInsertLoop.Config config = new BulkInsertLoop.Config(
+                BatchSizes.effective(ctx, 1_000),
+                engine(),
+                false,
+                "Qdrant upsert failed for {} batch {}: {}",
+                null,
+                collection);
+        return BulkInsertLoop.run(ctx, node, rows, config, (slice, batchIndex, totalBatches) -> {
             List<Map<String, Object>> points = new ArrayList<>(slice.size());
             for (GeneratedRow row : slice) {
                 Object vector = row.get(vectorAttr.name());
                 if (!(vector instanceof float[] arr)) continue;
                 Map<String, Object> point = new LinkedHashMap<>();
                 point.put("id", normalizeId(row.logicalId()));
-                point.put("vector", floatArrayToList(arr));
-                point.put("payload", payloadOf(entity, row, vectorAttr.name()));
+                point.put("vector", VectorAttributes.toList(arr));
+                point.put("payload", payloadOf(row, vectorAttr.name()));
                 points.add(point);
             }
-            if (points.isEmpty()) continue;
-            try {
-                long start = System.nanoTime();
-                client.put()
-                        .uri("/collections/{c}/points?wait=true", collection)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(Map.of("points", points))
-                        .retrieve()
-                        .bodyToMono(JsonNode.class)
-                        .timeout(Duration.ofSeconds(30))
-                        .block();
-                outcome.dbTimeNs += System.nanoTime() - start;
-                outcome.rowsAffected += slice.size();
-                slice.forEach(r -> outcome.recordedIds.add(new RecordedId(node.entityName(), r.logicalId(), r.logicalId())));
-            } catch (Exception ex) {
-                log.warn("Qdrant upsert failed for {} batch {}: {}", collection, batchIndex, ex.getMessage());
-            }
-            batchIndex++;
-            ctx.progress().onBatch(node.entityName(), batchIndex, totalBatches, to, rows.size());
-        }
-        return outcome;
+            if (points.isEmpty()) return 0L;
+            client.put().uri("/collections/{c}/points?wait=true", collection).contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("points", points)).retrieve().bodyToMono(JsonNode.class).timeout(Duration.ofSeconds(30)).block();
+            return slice.size();
+        });
     }
 
-    private LogicalAttribute vectorAttribute(LogicalEntity entity) {
-        return entity.attributes().stream()
-                .filter(a -> a.dataType() == LogicalDataType.VECTOR)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private Map<String, Object> payloadOf(LogicalEntity entity, GeneratedRow row, String vectorColumn) {
+    private Map<String, Object> payloadOf(GeneratedRow row, String vectorColumn) {
         Map<String, Object> payload = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : row.values().entrySet()) {
             if (entry.getKey().equalsIgnoreCase(vectorColumn)) continue;
@@ -253,82 +134,33 @@ public class QdrantDriver implements EngineDriver {
         }
     }
 
-    private List<Float> floatArrayToList(float[] arr) {
-        List<Float> list = new ArrayList<>(arr.length);
-        for (float f : arr) list.add(f);
-        return list;
-    }
-
-    private int effectiveBatchSize(InsertContext ctx) {
-        return switch (ctx.mode()) {
-            case SINGLE -> 1;
-            case BATCH -> Math.max(1, ctx.batchSize());
-            case BULK -> Math.max(1, ctx.batchSize() > 0 ? ctx.batchSize() : 1_000);
-        };
-    }
-
     @Override
-    public ScenarioOutcome runScenario(ScenarioContext ctx) {
+    public ScenarioOutcome runScenario(ScenarioContext ctx) throws Exception {
         if (!(ctx.params() instanceof KnnParams knn)) {
             throw new UnsupportedOperationException(engine() + " only supports VECTOR_KNN");
         }
-        if (ctx.params() instanceof AggregateParams || ctx.params() instanceof RangeParams
-                || ctx.params() instanceof TraversalParams) {
-            throw new UnsupportedOperationException(engine() + " does not support " + ctx.type());
-        }
-        WebClient client = WebClient.builder()
-                .baseUrl("http://" + ctx.hostAddress() + ":" + ctx.hostPort())
-                .build();
-
+        WebClient client = HttpClients.basic(ctx.hostAddress(), ctx.hostPort());
         String collection = knn.entityName().toLowerCase();
         List<Float> queryVec = new ArrayList<>(knn.queryVector().length);
         for (double v : knn.queryVector()) queryVec.add((float) v);
-
-        Map<String, Object> body = Map.of(
-                "vector", queryVec,
-                "limit", knn.topK(),
-                "with_payload", false
-        );
-
-        long wireStart = System.nanoTime();
-        long dbStart = System.nanoTime();
-        JsonNode response = client.post()
-                .uri("/collections/{c}/points/search", collection)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(30));
-        long dbTimeNs = System.nanoTime() - dbStart;
-        long wireTimeNs = System.nanoTime() - wireStart;
+        Map<String, Object> body = Map.of("vector", queryVec, "limit", knn.topK(), "with_payload", false);
 
         List<Map<String, Object>> hits = new ArrayList<>();
-        if (response != null && response.has("result") && response.get("result").isArray()) {
-            for (JsonNode hit : response.get("result")) {
-                String id = hit.has("id") ? hit.get("id").asText() : null;
-                double score = hit.has("score") ? hit.get("score").asDouble() : 0.0;
-                if (id != null) {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("id", id);
-                    entry.put("score", score);
-                    hits.add(entry);
+        return com.dbagnets.backend.engine.driver.ScenarioTimings.execute(() -> {
+            JsonNode response = client.post().uri("/collections/{c}/points/search", collection).contentType(MediaType.APPLICATION_JSON).bodyValue(body).retrieve().bodyToMono(JsonNode.class).block(Duration.ofSeconds(30));
+            if (response != null && response.has("result") && response.get("result").isArray()) {
+                for (JsonNode hit : response.get("result")) {
+                    String id = hit.has("id") ? hit.get("id").asText() : null;
+                    double score = hit.has("score") ? hit.get("score").asDouble() : 0.0;
+                    if (id != null) {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("id", id);
+                        entry.put("score", score);
+                        hits.add(entry);
+                    }
                 }
             }
-        }
-
-        ScenarioResult result = ResultCanonicalizer.build(hits, hits.size());
-        TimedOperation timed = TimedOperation.builder()
-                .dbTimeNs(dbTimeNs)
-                .wireTimeNs(wireTimeNs)
-                .rowsAffected(hits.size())
-                .sampleDbTimeNs(new long[] { dbTimeNs })
-                .build();
-        return new ScenarioOutcome(timed, result);
-    }
-
-    private static final class EntityWriteOutcome {
-        long dbTimeNs;
-        long rowsAffected;
-        List<RecordedId> recordedIds = new ArrayList<>();
+            return ResultCanonicalizer.build(hits, hits.size());
+        });
     }
 }
