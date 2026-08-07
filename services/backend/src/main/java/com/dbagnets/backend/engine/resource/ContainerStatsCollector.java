@@ -35,7 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class ContainerStatsCollector {
 
-    private static final long SAMPLE_INTERVAL_MS = 250L;
+    private static final long SAMPLE_INTERVAL_MS = 100L;
     private static final int CONSECUTIVE_FAILURE_LIMIT = 3;
 
     private final DockerService dockerService;
@@ -61,7 +61,7 @@ public class ContainerStatsCollector {
                 new Session(
                         benchmarkId, runId, resultId, databaseId, dbName, containerId, operation);
         sessions.put(resultId, session);
-        tickSync(session);
+        primeBaseline(session);
         ScheduledFuture<?> task =
                 scheduler.scheduleAtFixedRate(
                         () -> tick(session),
@@ -70,6 +70,20 @@ public class ContainerStatsCollector {
                         TimeUnit.MILLISECONDS);
         session.task.set(task);
         return new Handle(resultId);
+    }
+
+    private void primeBaseline(Session session) {
+        try {
+            Statistics stats = fetchSingleStat(session.containerId);
+            if (stats != null) {
+                session.lastStats.set(stats);
+            }
+        } catch (Exception e) {
+            log.debug(
+                    "Baseline stats fetch failed for container {}: {}",
+                    session.containerId,
+                    e.getMessage());
+        }
     }
 
     public ResourceMetricsSummary stop(Handle handle) {

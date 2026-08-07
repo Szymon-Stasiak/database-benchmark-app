@@ -25,6 +25,7 @@ import com.dbagnets.backend.benchmark.setup.port.ContainerManagementPort;
 import com.dbagnets.backend.domain.BenchmarkStatus;
 import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.domain.DatabaseType;
+import com.dbagnets.backend.engine.driver.support.ConnectionCacheRegistry;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
@@ -47,6 +48,8 @@ class BenchmarkOperationsServiceTest {
     @Mock DataSizeProbe dataSizeProbe;
 
     @Mock EntityIdRegistry entityIdRegistry;
+
+    @Mock ConnectionCacheRegistry connectionCacheRegistry;
 
     @InjectMocks BenchmarkOperationsService operations;
 
@@ -158,6 +161,7 @@ class BenchmarkOperationsServiceTest {
         assertThat(db.getHostPort()).isNull();
         assertThat(db.getStatus()).isEqualTo(DatabaseStatus.SCRIPT_READY);
         assertThat(db.getBaselineSizeBytes()).isNull();
+        verify(connectionCacheRegistry).evictAll(db.getId());
         verify(deployment).redeployAsync("bench-1abcdef0");
     }
 

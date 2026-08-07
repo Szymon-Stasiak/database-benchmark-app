@@ -1,121 +1,92 @@
-# DBagnets
+# script-creator
 
-Agent-loop application that generates database initialization scripts using LLMs via LiteLLM (100+ providers). Supports two modes: single-database generation and multi-database benchmark mode with a shared logical schema.
+Python + FastAPI service that turns a **free-text idea** and a **list of database targets** into:
 
-## Modes
+1. A validated, technology-independent **`LogicalSchema`**.
+2. One **initialization script** per target database, faithful to the schema.
 
-### Single-Database Mode
+Every step is a LangGraph agent loop with generate → validate → refine, running LLM calls through LiteLLM (any provider). The result is deterministic-looking scripts that the backend can ingest, run against fresh containers, and use to shape identical logical data across every engine.
 
-Generates a single initialization script for one database target. The agent loop generates the script, validates it (syntax, version compatibility, depth, topic, completeness, best practices), and refines it until all validators pass.
+This service **does not measure benchmark time**. That is the backend's job. What this service does is upstream of the timing pipeline: it produces the shared logical model that the backend uses to generate rows and drive all engines from a single source of truth.
 
-```bash
-# PostgreSQL - movie management system
-python -m dbagnets.main \
-  --db-type relational \
-  --db-name postgresql \
-  --db-version 16 \
-  --idea "movie management system with actors, directors, genres and reviews" \
-  --depth 4 \
-  --output init.sql
+---
 
-# Neo4j - social network
-python -m dbagnets.main \
-  --db-type graph \
-  --db-name neo4j \
-  --db-version 5.0 \
-  --idea "social network for developers with projects, skills and companies" \
-  --depth 3 \
-  --output social.cypher
+## Two-phase pipeline
 
-# Milvus - image search
-python -m dbagnets.main \
-  --db-type vector \
-  --db-name milvus \
-  --db-version 2.3 \
-  --idea "image similarity search engine with tags and categories" \
-  --depth 2 \
-  --output images.py
-```
+### Phase A — Logical schema (agent loop)
 
-### Benchmark Mode (Multi-Database)
+Input: `idea` (free text) + `depth` (longest chain of relationships) + `targets` (list).
 
-Generates equivalent scripts for multiple database technologies from a single invocation. The pipeline works in two phases:
+An agent generates a `LogicalSchema` — entities, attributes, data types, relationships. Validators check:
 
-1. **Phase 1 — Logical Schema**: An agent generates a technology-independent schema (entities, relationships, data types, constraints). It is validated through a loop with deterministic checks (depth via graph algorithm) and LLM validators (topic, completeness, relationships). The validated schema is saved as `schema.json`.
+- **Deterministic depth check** — graph traversal over the relationship DAG confirms the longest chain matches the requested `depth`.
+- **Topic coverage** — LLM validator: do the entities plausibly cover the requested idea?
+- **Completeness** — LLM validator: are there enough entities, and do relationships form a coherent world?
+- **FK reconciliation** (`orchestrators/fk_reconciler.py`) — every relationship references a real entity/attribute; missing FK columns get added, orphaned references get pruned.
 
-2. **Phase 2 — Parallel Script Generation**: For each target database, an independent agent loop generates a script that faithfully implements the logical schema. Each script is validated for syntax, version compatibility, depth, best practices, and schema compliance (correct entities, equivalent data types, matching indexes and constraints).
+The loop refines the schema until every validator passes or `max_iterations` is hit. Validated schema is emitted as `schema.json` (source of truth) and also returned in the API response.
 
-```bash
-# Generate equivalent scripts for PostgreSQL, Neo4j, and MongoDB
-python -m dbagnets.main \
-  --idea "movie management system with actors, directors, genres and reviews" \
-  --depth 4 \
-  --target relational:postgresql:16 \
-  --target graph:neo4j:5.0 \
-  --target document:mongodb:7.0 \
-  --output-dir ./benchmark_output
+### Phase B — Per-target scripts (parallel agent loops)
 
-# With a different model and custom iteration limit
-python -m dbagnets.main \
-  --idea "e-commerce platform with products, orders, customers and shipping" \
-  --depth 4 \
-  --target relational:postgresql:16 \
-  --target relational:mysql:8.0 \
-  --target graph:neo4j:5.0 \
-  --target document:mongodb:7.0 \
-  --target vector:milvus:2.3 \
-  --model openai/gpt-4o \
-  --max-iterations 5 \
-  --output-dir ./ecommerce_benchmark
-```
+For each requested target, an independent agent loop generates the initialization script. The loop is `orchestrators/script.py` and runs one instance per target — all in parallel via `ThreadPoolExecutor`.
 
-Output directory structure:
-```
-benchmark_output/
-  schema.json              # Validated logical schema (source of truth)
-  postgresql_16.sql        # PostgreSQL initialization script
-  neo4j_5.0.cypher         # Neo4j initialization script
-  mongodb_7.0.js           # MongoDB initialization script
-```
+Per-target validators (all subclass `agents/base.py`):
 
-### API Mode (FastAPI)
+- **Syntax** — engine-native parser check (SQL / Cypher / MongoDB shell / native HTTP body).
+- **Version compatibility** — script uses features supported by the requested version (no `MERGE` on Postgres <15, no `withClause` on old Neo4j, no time-series functions on generic Postgres, ...).
+- **Depth** — same graph algorithm as Phase A applied to the engine-native artifact.
+- **Best practices** — index coverage on FK columns, `NOT NULL` on required attributes, primary key on every table/collection, unique constraints on natural keys.
+- **Schema compliance** — the artifact contains every entity, every attribute, every relationship from the validated `LogicalSchema`, with equivalent data types per the engine's mapping table (`models/type_mapping.py`).
 
-Run as a microservice and send requests via HTTP.
+Validators run in parallel per target (default). `--sequential` forces serial execution for debugging.
+
+Every validator returns a `ValidationResult(status, feedback, suggested_fixes)`. Failures short-circuit into the next generation pass with **only** the failing feedback and the previous script — full history is deliberately not sent to keep prompt sizes lean and iteration count low.
+
+---
+
+## LLM plumbing
+
+- **LiteLLM** — one call site, any provider. `--model vertex_ai/claude-sonnet-4-6` (default) / `anthropic/claude-sonnet-4-6` / `openai/gpt-4o` / `bedrock/anthropic.claude-3-5-sonnet-...`.
+- **Structured output** — every agent uses `BaseAgent._call_llm_structured(prompt, schema=PydanticModel)`, which under the hood forces LiteLLM tool-calling with the Pydantic schema. The provider returns already-validated JSON. **No fragile regex parsing, no hallucinated formats.**
+- Pydantic schemas live in `models/llm_schemas.py`.
+
+---
+
+## Public API
 
 ```bash
-# Start the server
-uvicorn dbagnets.api:app --host 0.0.0.0 --port 8000
+uvicorn dbagnets.api:app --host 0.0.0.0 --port 8001
 ```
 
-**POST /generate**
+Also started automatically by the repo-root `./start.sh` on port `8001`.
 
-```bash
-curl -X POST http://localhost:8000/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "idea": "movie management system with actors, directors, genres and reviews",
-    "depth": 4,
-    "targets": [
-      {"db_type": "relational", "db_name": "postgresql", "db_version": "16"},
-      {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"},
-      {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"}
-    ],
-    "model": "vertex_ai/claude-sonnet-4-6",
-    "max_iterations": 10
-  }'
+### `POST /generate`
+
+```json
+{
+  "idea": "movie management system with actors, directors, genres and reviews",
+  "depth": 4,
+  "targets": [
+    {"db_type": "relational", "db_name": "postgresql", "db_version": "16"},
+    {"db_type": "graph", "db_name": "neo4j", "db_version": "5.0"},
+    {"db_type": "document", "db_name": "mongodb", "db_version": "7.0"}
+  ],
+  "model": "vertex_ai/claude-sonnet-4-6",
+  "max_iterations": 10
+}
 ```
 
-Example response:
+Response:
 
 ```json
 {
   "success": true,
   "logical_schema": {
-    "idea": "movie management system with actors, directors, genres and reviews",
+    "idea": "...",
     "depth": 4,
     "depth_chain": ["genre", "movie", "review", "user", "watchlist"],
-    "entities": ["..."],
-    "relationships": ["..."]
+    "entities": [/* LogicalEntity[] */],
+    "relationships": [/* LogicalRelationship[] */]
   },
   "scripts": [
     {
@@ -125,76 +96,115 @@ Example response:
       "container": {
         "docker_image": "postgres:16",
         "default_port": 5432,
-        "environment": {
-          "POSTGRES_PASSWORD": "postgres",
-          "POSTGRES_DB": "benchmark"
-        }
+        "environment": {"POSTGRES_PASSWORD": "postgres", "POSTGRES_DB": "benchmark"}
       },
-      "script": "CREATE TABLE genre (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  name VARCHAR(100) NOT NULL UNIQUE,\n  ...\n);\n...",
+      "script": "CREATE TABLE genre (...);\n...",
       "success": true,
       "iterations_used": 3
-    },
-    {
-      "db_type": "graph",
-      "db_name": "neo4j",
-      "db_version": "5.0",
-      "container": {
-        "docker_image": "neo4j:5.0",
-        "default_port": 7687,
-        "environment": {
-          "NEO4J_AUTH": "neo4j/benchmark"
-        }
-      },
-      "script": "CREATE CONSTRAINT genre_name_unique FOR (g:Genre) REQUIRE g.name IS UNIQUE;\n...",
-      "success": true,
-      "iterations_used": 2
-    },
-    {
-      "db_type": "document",
-      "db_name": "mongodb",
-      "db_version": "7.0",
-      "container": {
-        "docker_image": "mongo:7.0",
-        "default_port": 27017,
-        "environment": {}
-      },
-      "script": "db.createCollection('genres', {\n  validator: { $jsonSchema: { ... } }\n});\n...",
-      "success": true,
-      "iterations_used": 4
     }
   ]
 }
 ```
 
-Interactive API docs are available at `http://localhost:8000/docs` (Swagger UI).
+Interactive docs: `http://localhost:8001/docs`.
 
-## Options
+---
+
+## CLI
+
+```bash
+# Single database
+python -m dbagnets.main \
+  --db-type relational --db-name postgresql --db-version 16 \
+  --idea "movie management system" --depth 4 --output init.sql
+
+# Multi-database benchmark
+python -m dbagnets.main \
+  --idea "e-commerce platform with orders and customers" \
+  --depth 4 \
+  --target relational:postgresql:16 \
+  --target graph:neo4j:5.0 \
+  --target document:mongodb:7.0 \
+  --output-dir ./out
+```
+
+Output layout in benchmark mode:
+
+```
+out/
+  schema.json              # validated LogicalSchema — source of truth
+  postgresql_16.sql
+  neo4j_5.0.cypher
+  mongodb_7.0.js
+```
+
+Full flag reference:
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--idea` | What the database is for (free text). **Required.** | — |
-| `--depth` | Relationship depth — longest chain of relationships between entities. **Required.** | — |
-| `--target` | Target database in `TYPE:NAME:VERSION` format (e.g. `relational:postgresql:16`). Repeatable. Activates benchmark mode. | — |
-| `--db-type` | Database type (single-DB mode). One of: `relational`, `graph`, `vector`, `document`, `key_value`, `time_series`. | — |
-| `--db-name` | Database engine name, e.g. `postgresql`, `neo4j`, `milvus` (single-DB mode). | — |
-| `--db-version` | Database engine version, e.g. `16`, `5.0`, `2.3` (single-DB mode). | — |
-| `--output` | Save script to file (single-DB mode). Without this flag, the script is printed to stdout. | stdout |
-| `--output-dir` | Output directory for benchmark mode. Saves `schema.json` and per-target scripts. Without this flag, output is printed to stdout. | stdout |
-| `--max-iterations` | Maximum agent loop iterations before giving up. | `10` |
-| `--model` | LiteLLM model string. Supports any provider: `vertex_ai/claude-sonnet-4-6`, `anthropic/claude-sonnet-4-6`, `openai/gpt-4o`, etc. | `vertex_ai/claude-sonnet-4-6` |
-| `--sequential` | Run validators sequentially instead of in parallel. Useful for debugging. | parallel |
-| `-v`, `--verbose` | Enable debug logging (prompts, token counts, timing details). | off |
+| `--idea` | What the database is for. **Required.** | — |
+| `--depth` | Longest relationship chain. **Required.** | — |
+| `--target TYPE:NAME:VERSION` | Add a target. Repeatable. Activates benchmark mode. | — |
+| `--db-type` / `--db-name` / `--db-version` | Single-DB mode | — |
+| `--output` / `--output-dir` | File / directory | stdout |
+| `--model` | LiteLLM model string | `vertex_ai/claude-sonnet-4-6` |
+| `--max-iterations` | Agent-loop iteration ceiling | `10` |
+| `--sequential` | Force serial validators | parallel |
+| `-v` / `--verbose` | Debug logging | off |
 
-## Supported Database Types
+---
 
-| Type | Example engines | Script format |
-|------|----------------|---------------|
-| `relational` | PostgreSQL, MySQL, SQLite | `.sql` |
-| `graph` | Neo4j, Amazon Neptune | `.cypher` |
-| `vector` | Milvus, Qdrant | `.py` |
-| `document` | MongoDB, CouchDB | `.js` |
-| `key_value` | Redis, DynamoDB | `.redis` |
-| `time_series` | TimescaleDB, InfluxDB | `.sql` |
+## Supported paradigms
+
+| Type          | Example engines                   | Artifact format |
+|---------------|-----------------------------------|-----------------|
+| `relational`  | PostgreSQL, MySQL                 | `.sql`          |
+| `graph`       | Neo4j, ArangoDB, Memgraph         | `.cypher`       |
+| `document`    | MongoDB, CouchDB, Elasticsearch   | `.js` / bulk    |
+| `vector`      | Qdrant, Weaviate                  | `.py`           |
+| `key_value`   | Redis, DynamoDB, etcd             | `.redis` / json |
+| `time_series` | TimescaleDB, InfluxDB, QuestDB    | `.sql` / line   |
+
+Adding a new engine: drop a profile into `models/profiles/`, add its type mapping in `models/type_mapping.py`, and register the validators it needs — no orchestrator changes.
+
+---
+
+## Code shape
+
+```
+src/dbagnets/
+  api.py                    — FastAPI app + endpoints
+  main.py                   — CLI entry point
+  agents/
+    base.py                 — abstract agent contract, _call_llm_structured
+    schema/                 — Phase-A agents (schema generator, validators)
+    script/                 — Phase-B agents (per-engine script generators, validators)
+  orchestrators/
+    pipeline.py             — top-level: schema phase → parallel script phase
+    schema.py               — LangGraph StateGraph for Phase A
+    script.py               — LangGraph StateGraph for Phase B
+    fk_reconciler.py        — reconciles relationships against entity attributes
+    validator_runner.py     — parallel ThreadPoolExecutor over validators
+  models/
+    schema.py               — LogicalSchema / LogicalEntity / LogicalAttribute / ...
+    llm_schemas.py          — Pydantic schemas used for tool-calling
+    type_mapping.py         — LogicalDataType → engine-native type per profile
+    profiles/               — per-engine profile files
+    state.py                — LangGraph state carriers
+```
+
+---
+
+## Design rules
+
+- **Prompts are first-class code.** Version them, test them, measure their output.
+- **Parallel by default.** Validators, per-target script generation, LLM calls — all concurrent.
+- **Fail fast, fail loud.** Every validator returns actionable feedback. Vague feedback wastes iterations.
+- **Small prompts.** Send only the failing feedback + previous artifact. Never the full history.
+- **No fragile parsing.** All LLM output flows through Pydantic-typed tool calls.
+- **Dependency injection.** Agents receive their model string via constructors; adding a new provider is one arg away.
+
+---
 
 ## Tests
 

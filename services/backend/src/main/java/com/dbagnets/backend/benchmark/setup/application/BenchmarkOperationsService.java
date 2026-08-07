@@ -9,6 +9,7 @@ import com.dbagnets.backend.benchmark.result.application.DataSizeProbe;
 import com.dbagnets.backend.benchmark.setup.port.ContainerManagementPort;
 import com.dbagnets.backend.domain.BenchmarkStatus;
 import com.dbagnets.backend.domain.DatabaseStatus;
+import com.dbagnets.backend.engine.driver.support.ConnectionCacheRegistry;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
@@ -29,6 +30,7 @@ public class BenchmarkOperationsService {
     private final BenchmarkDeploymentService deployment;
     private final DataSizeProbe dataSizeProbe;
     private final EntityIdRegistry entityIdRegistry;
+    private final ConnectionCacheRegistry connectionCacheRegistry;
 
     public void redeployBenchmark(String benchmarkId) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
@@ -98,6 +100,7 @@ public class BenchmarkOperationsService {
                 db.setHostPort(null);
             }
             containerManager.removeContainersByNamePrefix(benchmarkPrefix + db.getDbName());
+            connectionCacheRegistry.evictAll(db.getId());
             dataSizeProbe.invalidate(db.getId());
             entityIdRegistry.evictAllForDatabase(db.getId());
             db.setStatus(DatabaseStatus.SCRIPT_READY);
