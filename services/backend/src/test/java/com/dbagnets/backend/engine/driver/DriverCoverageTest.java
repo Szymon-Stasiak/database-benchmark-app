@@ -8,6 +8,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.dbagnets.backend.domain.DatabaseEngine;
+import com.dbagnets.backend.engine.driver.api.EngineDriver;
 
 class DriverCoverageTest {
 
