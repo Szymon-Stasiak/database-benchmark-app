@@ -25,34 +25,10 @@ public final class ScenarioApplicability {
 
     private static Map<ScenarioType, Set<DatabaseEngine>> buildSupportMatrix() {
         EnumMap<ScenarioType, Set<DatabaseEngine>> map = new EnumMap<>(ScenarioType.class);
-        map.put(ScenarioType.AGGREGATE_GROUP_COUNT, EnumSet.of(
-                DatabaseEngine.POSTGRESQL,
-                DatabaseEngine.TIMESCALEDB,
-                DatabaseEngine.QUESTDB,
-                DatabaseEngine.MYSQL,
-                DatabaseEngine.MONGODB,
-                DatabaseEngine.NEO4J,
-                DatabaseEngine.MEMGRAPH
-        ));
-        map.put(ScenarioType.RANGE_FILTER, EnumSet.of(
-                DatabaseEngine.POSTGRESQL,
-                DatabaseEngine.TIMESCALEDB,
-                DatabaseEngine.QUESTDB,
-                DatabaseEngine.MYSQL,
-                DatabaseEngine.MONGODB,
-                DatabaseEngine.NEO4J,
-                DatabaseEngine.MEMGRAPH
-        ));
-        map.put(ScenarioType.GRAPH_TRAVERSAL, EnumSet.of(
-                DatabaseEngine.POSTGRESQL,
-                DatabaseEngine.MYSQL,
-                DatabaseEngine.MONGODB,
-                DatabaseEngine.NEO4J,
-                DatabaseEngine.MEMGRAPH
-        ));
-        map.put(ScenarioType.VECTOR_KNN, EnumSet.of(
-                DatabaseEngine.QDRANT
-        ));
+        map.put(ScenarioType.AGGREGATE_GROUP_COUNT, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.TIMESCALEDB, DatabaseEngine.QUESTDB, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
+        map.put(ScenarioType.RANGE_FILTER, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.TIMESCALEDB, DatabaseEngine.QUESTDB, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
+        map.put(ScenarioType.GRAPH_TRAVERSAL, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
+        map.put(ScenarioType.VECTOR_KNN, EnumSet.of(DatabaseEngine.QDRANT));
         return map;
     }
 }

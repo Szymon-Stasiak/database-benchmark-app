@@ -7,7 +7,7 @@ import com.dbagnets.backend.benchmark.setup.port.ScriptGenerationPort;
 import com.dbagnets.backend.domain.BenchmarkStatus;
 import com.dbagnets.backend.domain.DatabaseEngine;
 import com.dbagnets.backend.domain.DatabaseStatus;
-import com.dbagnets.backend.engine.driver.ConnectionCacheRegistry;
+import com.dbagnets.backend.engine.driver.support.ConnectionCacheRegistry;
 import com.dbagnets.backend.infrastructure.docker.ContainerSpec;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;

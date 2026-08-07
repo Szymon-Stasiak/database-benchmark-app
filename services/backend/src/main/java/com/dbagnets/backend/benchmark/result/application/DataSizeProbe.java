@@ -1,7 +1,7 @@
 package com.dbagnets.backend.benchmark.result.application;
 
 import com.dbagnets.backend.benchmark.result.api.dto.DatabaseSizeResponse;
-import com.dbagnets.backend.engine.driver.redis.RedisPoolCache;
+import com.dbagnets.backend.engine.driver.engines.redis.RedisPoolCache;
 import com.dbagnets.backend.infrastructure.docker.DockerService;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.infrastructure.size.EngineDataDir;

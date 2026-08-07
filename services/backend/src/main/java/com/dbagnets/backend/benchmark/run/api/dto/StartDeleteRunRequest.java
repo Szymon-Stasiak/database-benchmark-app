@@ -1,7 +1,7 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.engine.driver.DeletionMode;
-import com.dbagnets.backend.engine.driver.InsertMode;
+import com.dbagnets.backend.engine.driver.api.DeletionMode;
+import com.dbagnets.backend.engine.driver.api.InsertMode;
 import com.dbagnets.backend.engine.registry.SelectionStrategy;
 
 import java.util.List;

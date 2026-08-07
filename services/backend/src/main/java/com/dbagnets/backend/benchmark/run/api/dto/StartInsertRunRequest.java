@@ -1,6 +1,6 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.engine.driver.InsertMode;
+import com.dbagnets.backend.engine.driver.api.InsertMode;
 
 import java.util.List;
 

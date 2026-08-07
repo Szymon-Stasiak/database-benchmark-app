@@ -6,7 +6,7 @@ import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
 import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 import com.dbagnets.backend.benchmark.run.persistence.OperationType;
 import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
-import com.dbagnets.backend.engine.driver.EngineDriver;
+import com.dbagnets.backend.engine.driver.api.EngineDriver;
 import com.dbagnets.backend.benchmark.run.api.dto.PreparedScenarioRunResponse;
 import com.dbagnets.backend.benchmark.run.api.dto.ScenarioResultResponse;
 import com.dbagnets.backend.benchmark.run.api.dto.StartScenarioRunRequest;
