@@ -169,6 +169,15 @@ function rowForEntity(
   evt: BatchProgressEvent | undefined,
   dbStatus: InsertStatus,
 ): ProgressRowData {
+  if (!evt && (dbStatus === "SUCCESS" || dbStatus === "PARTIAL")) {
+    return { key: entityName, entityName, done: 1, total: 1, status: "SUCCESS" }
+  }
+  if (!evt && dbStatus === "FAILED") {
+    return { key: entityName, entityName, done: 0, total: 1, status: "FAILED" }
+  }
+  if (!evt && dbStatus === "SKIPPED") {
+    return { key: entityName, entityName, done: 0, total: 1, status: "SKIPPED" }
+  }
   const done = evt?.recordsDone ?? 0
   const total = evt?.recordsTotal ?? 0
   return {

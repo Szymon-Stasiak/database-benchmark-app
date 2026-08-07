@@ -1,5 +1,7 @@
+import { useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart3 } from "lucide-react"
+import { DownloadTableButton } from "@/components/benchmark/DownloadTableButton"
 import type { ResourceMetricsFields } from "@/types/resource"
 
 interface ResultLike extends ResourceMetricsFields {
@@ -12,6 +14,7 @@ interface Props {
 }
 
 export function ResourceSummaryTable({ results }: Props) {
+  const tableRef = useRef<HTMLDivElement | null>(null)
   const rows = results.filter((r) => (r.resourceSampleCount ?? 0) > 0)
   if (rows.length === 0) {
     return null
@@ -19,13 +22,16 @@ export function ResourceSummaryTable({ results }: Props) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base inline-flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          Resource usage summary
-        </CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base inline-flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Resource usage summary
+          </CardTitle>
+          <DownloadTableButton containerRef={tableRef} tableName="resource-summary" />
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div ref={tableRef} className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-border">

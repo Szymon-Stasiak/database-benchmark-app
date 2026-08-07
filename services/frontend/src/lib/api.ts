@@ -5,6 +5,7 @@ import type {
   LogsResponse,
 } from "@/types/benchmark"
 import type {
+  BatchProgressEvent,
   CascadePreviewRequest,
   CascadePreviewResponse,
   DatabaseSizeResponse,
@@ -237,6 +238,9 @@ export const insertApi = {
 
   getResourceTimeline: (runId: string, resultId: string) =>
     apiFetch<ResourceSample[]>(`/api/insert-runs/${runId}/results/${resultId}/resource-timeline`),
+
+  getProgressSnapshot: (runId: string) =>
+    apiFetch<BatchProgressEvent[]>(`/api/insert-runs/${runId}/progress-snapshot`),
 }
 
 export const readApi = {

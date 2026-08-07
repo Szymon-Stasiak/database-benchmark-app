@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, CheckCircle2, Clock, Loader2, MinusCircle, XCircle } from "lucide-react"
@@ -43,6 +43,22 @@ const FALLBACK_STATUS_CFG = STATUS_CONFIG.PENDING
 export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [progress, setProgress] = useState<Map<string, BatchProgressEvent>>(new Map())
   const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    insertApi.getProgressSnapshot(run.id).then((events) => {
+      if (cancelled || events.length === 0) return
+      setProgress((prev) => {
+        const next = new Map(prev)
+        for (const evt of events) {
+          const key = progressKey(evt.databaseId, evt.entityName)
+          if (!next.has(key)) next.set(key, evt)
+        }
+        return next
+      })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [run.id])
 
   useInsertRunEvents(benchmarkId, run.id, {
     onRunStatus: (status) => onRunStatusChange(run.id, status),

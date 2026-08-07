@@ -69,8 +69,19 @@ echo "Starting frontend on :5173..."
 ) &
 PIDS+=($!)
 
+(
+    for i in {1..60}; do
+        if curl -sf -o /dev/null -w "" http://localhost:8080/api/user 2>/dev/null; then
+            echo ">>> backend ready on :8080 (after ${i}x2s)"
+            exit 0
+        fi
+        sleep 2
+    done
+    echo ">>> backend still not responding after 120s — check logs"
+) &
+
 echo ""
-echo "All services starting:"
+echo "All services starting (backend needs ~30-45s to warm up):"
 echo "  frontend        → http://localhost:5173"
 echo "  backend         → http://localhost:8080"
 echo "  script-creator  → http://localhost:8001"

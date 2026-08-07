@@ -28,7 +28,7 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
   const [entityName, setEntityName] = useState<string>(entities[0]?.name ?? "")
   const [sampleSize, setSampleSize] = useState<number>(100)
   const [iterations, setIterations] = useState<number>(1)
-  const [includeChildren, setIncludeChildren] = useState<boolean>(true)
+  const [readDepth, setReadDepth] = useState<"NONE" | "ONE_HOP" | "FULL_CASCADE">("ONE_HOP")
   const [mode, setMode] = useState<OperationMode>("SINGLE")
   const [selectedDbIds, setSelectedDbIds] = useState<Set<string>>(new Set())
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -75,7 +75,8 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
     await onSubmit({
       entityName,
       sampleSize,
-      includeChildren,
+      includeChildren: readDepth !== "NONE",
+      readDepth,
       mode,
       iterations,
       databaseIds: Array.from(selectedDbIds),
@@ -145,19 +146,29 @@ export function ReadRunForm({ entities, databases, loading, registry, onSubmit }
           </div>
 
           <div className="space-y-1.5">
-            <Label>Include children (1 hop)</Label>
-            <button
-              type="button"
-              onClick={() => setIncludeChildren((v) => !v)}
-              className={cn(
-                "w-full rounded-md border px-3 py-2 text-sm text-left transition-all",
-                includeChildren
-                  ? "border-primary bg-primary/5 ring-1 ring-primary"
-                  : "border-border hover:border-foreground/30",
-              )}
-            >
-              {includeChildren ? "Children joined via 1 relationship hop" : "PK lookup only"}
-            </button>
+            <Label>Read depth</Label>
+            <div className="grid grid-cols-1 gap-1">
+              {([
+                { value: "NONE", title: "PK only", desc: "Just the entity by primary key" },
+                { value: "ONE_HOP", title: "+ 1 hop", desc: "Entity + direct children (single FK hop)" },
+                { value: "FULL_CASCADE", title: "+ full cascade", desc: "Entity + all descendants through schema (up to 5 levels)" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setReadDepth(opt.value)}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-xs text-left transition-all",
+                    readDepth === opt.value
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:border-foreground/30",
+                  )}
+                >
+                  <div className="font-medium">{opt.title}</div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

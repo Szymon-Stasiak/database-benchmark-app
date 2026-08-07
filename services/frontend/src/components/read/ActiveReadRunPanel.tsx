@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { DownloadTableButton } from "@/components/benchmark/DownloadTableButton"
 import { CheckCircle2, Clock, Loader2, XCircle, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useReadRunEvents } from "@/hooks/useReadRunEvents"
@@ -93,12 +94,17 @@ export function ActiveReadRunPanel({ benchmarkId, run, onRunStatusChange, onResu
 }
 
 function ResultsTable({ results }: { results: ReadResultResponse[] }) {
+  const tableRef = useRef<HTMLDivElement | null>(null)
   if (results.length === 0) {
     return <p className="text-sm text-muted-foreground">Waiting for results…</p>
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="space-y-1">
+      <div className="flex justify-end">
+        <DownloadTableButton containerRef={tableRef} tableName="read-results" />
+      </div>
+      <div ref={tableRef} className="overflow-x-auto">
+        <table className="w-full text-sm">
         <thead className="text-xs text-muted-foreground border-b">
           <tr>
             <th className="text-left py-2 px-2">Database</th>
@@ -133,7 +139,8 @@ function ResultsTable({ results }: { results: ReadResultResponse[] }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   )
 }

@@ -3,11 +3,13 @@ import type { OperationMode } from "./delete"
 import type { ResourceMetricsFields } from "./resource"
 
 export type ReadStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL" | "FAILED" | "SKIPPED"
+export type ReadDepth = "NONE" | "ONE_HOP" | "FULL_CASCADE"
 
 export interface StartReadRunRequest {
   entityName: string
   sampleSize?: number | null
   includeChildren?: boolean | null
+  readDepth?: ReadDepth | null
   selectionStrategy?: SelectionStrategy | null
   mode?: OperationMode | null
   iterations?: number | null

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser, Search, BarChart3, Package } from "lucide-react"
+import { ArrowLeft, RefreshCw, Loader2, Info, Trash2, FlaskConical, Eraser, Search, BarChart3, Package, Beaker } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
@@ -385,6 +385,15 @@ export default function BenchmarkDetailPage() {
           >
             <BarChart3 className="h-5 w-5 mr-2" />
             View Comparison
+          </Button>
+          <Button
+            onClick={() => navigate(`/benchmarks/${benchmark.id}/scenarios`)}
+            disabled={!benchmark.databases.some((db) => db.status === "RUNNING")}
+            variant="outline"
+            className="h-10 px-6 text-sm font-semibold shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Beaker className="h-5 w-5 mr-2" />
+            Run Scenarios
           </Button>
           <Button
             onClick={() => navigate(`/benchmarks/${benchmark.id}/deletes`)}
