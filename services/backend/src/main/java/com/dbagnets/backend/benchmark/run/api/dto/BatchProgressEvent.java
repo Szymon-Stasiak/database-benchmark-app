@@ -8,6 +8,4 @@ public record BatchProgressEvent(
         int batchIndex,
         int batchCount,
         long recordsDone,
-        long recordsTotal
-) {
-}
+        long recordsTotal) {}

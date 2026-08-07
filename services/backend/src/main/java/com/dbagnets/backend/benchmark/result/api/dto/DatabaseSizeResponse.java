@@ -8,6 +8,4 @@ public record DatabaseSizeResponse(
         Long baselineBytes,
         Long dataBytes,
         String sizeHuman,
-        boolean available
-) {
-}
+        boolean available) {}

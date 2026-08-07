@@ -1,12 +1,14 @@
 package com.dbagnets.backend.shared.config;
 
-import com.dbagnets.backend.shared.security.CurrentUserArgumentResolver;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.util.List;
+import com.dbagnets.backend.shared.security.CurrentUserArgumentResolver;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @RequiredArgsConstructor

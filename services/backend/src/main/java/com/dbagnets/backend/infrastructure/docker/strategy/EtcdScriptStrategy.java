@@ -1,6 +1,7 @@
 package com.dbagnets.backend.infrastructure.docker.strategy;
 
 import com.dbagnets.backend.infrastructure.docker.DockerService;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -10,7 +11,10 @@ public class EtcdScriptStrategy implements ScriptExecutionStrategy {
     public void waitForReady(DockerService docker, String containerId, int hostPort) {
         for (int i = 0; i < 30; i++) {
             String result = docker.execInContainer(containerId, "etcdctl", "endpoint", "health");
-            if (result.contains("healthy")) { log.info("etcd is ready"); return; }
+            if (result.contains("healthy")) {
+                log.info("etcd is ready");
+                return;
+            }
             sleep(2000);
         }
         throw new RuntimeException("etcd did not become ready in time");
@@ -29,6 +33,10 @@ public class EtcdScriptStrategy implements ScriptExecutionStrategy {
     }
 
     private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

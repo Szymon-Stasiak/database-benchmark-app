@@ -1,10 +1,12 @@
 package com.dbagnets.backend.infrastructure.docker;
 
-import com.dbagnets.backend.infrastructure.docker.strategy.*;
+import org.springframework.stereotype.Service;
+
 import com.dbagnets.backend.benchmark.setup.port.ScriptExecutionPort;
+import com.dbagnets.backend.infrastructure.docker.strategy.*;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
@@ -32,8 +34,8 @@ public class ScriptExecutor implements ScriptExecutionPort {
             case "arangodb" -> new ArangoScriptStrategy();
             case "etcd" -> new EtcdScriptStrategy();
             case "questdb" -> new QuestdbScriptStrategy();
-            case "elasticsearch", "couchdb", "qdrant", "weaviate",
-                 "influxdb", "dynamodb" -> new HttpApiScriptStrategy(dbName);
+            case "elasticsearch", "couchdb", "qdrant", "weaviate", "influxdb", "dynamodb" ->
+                    new HttpApiScriptStrategy(dbName);
             default -> throw new IllegalArgumentException("Unsupported database: " + dbName);
         };
     }

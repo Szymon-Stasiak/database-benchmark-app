@@ -1,5 +1,24 @@
 package com.dbagnets.backend.benchmark.run.application;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResultRepository;
 import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
@@ -12,23 +31,6 @@ import com.dbagnets.backend.engine.timing.TimedOperation;
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 import com.dbagnets.backend.shared.event.BenchmarkEventPort;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.transaction.support.TransactionTemplate;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
 public abstract class AbstractRunOrchestrator {
 
@@ -38,15 +40,23 @@ public abstract class AbstractRunOrchestrator {
     protected String hostAddress;
 
     @Autowired protected BenchmarkRepository benchmarkRepository;
+
     @Autowired protected BenchmarkRunRepository runRepository;
+
     @Autowired protected BenchmarkResultRepository resultRepository;
+
     @Autowired protected BenchmarkEventPort sse;
+
     @Autowired protected ObjectMapper objectMapper;
+
     @Autowired protected TransactionTemplate transactionTemplate;
+
     @Autowired protected ContainerStatsCollector statsCollector;
+
     @Autowired protected BenchmarkRunSupport runSupport;
 
-    protected final ExecutorService asyncExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
+    protected final ExecutorService asyncExecutor =
+            Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
 
     protected abstract String runStatusEventName();
 
@@ -57,12 +67,16 @@ public abstract class AbstractRunOrchestrator {
     protected abstract String runLabel();
 
     protected void broadcastRunStatus(String benchmarkId, BenchmarkRun run) {
-        sse.sendEvent(benchmarkId, runStatusEventName(),
+        sse.sendEvent(
+                benchmarkId,
+                runStatusEventName(),
                 Map.of("runId", run.getId(), "status", run.getStatus().name()));
     }
 
     protected void broadcastResult(String benchmarkId, String runId, BenchmarkResult result) {
-        sse.sendEvent(benchmarkId, resultStatusEventName(),
+        sse.sendEvent(
+                benchmarkId,
+                resultStatusEventName(),
                 Map.of("runId", runId, "result", toResultResponse(result)));
     }
 
@@ -87,13 +101,14 @@ public abstract class AbstractRunOrchestrator {
     }
 
     protected void markRunFailed(String benchmarkId, String runId) {
-        transactionTemplate.executeWithoutResult(s -> {
-            BenchmarkRun run = runRepository.findById(runId).orElseThrow();
-            run.setStatus(RunStatus.FAILED);
-            run.setFinishedAt(Instant.now());
-            runRepository.save(run);
-            broadcastRunStatus(benchmarkId, run);
-        });
+        transactionTemplate.executeWithoutResult(
+                s -> {
+                    BenchmarkRun run = runRepository.findById(runId).orElseThrow();
+                    run.setStatus(RunStatus.FAILED);
+                    run.setFinishedAt(Instant.now());
+                    runRepository.save(run);
+                    broadcastRunStatus(benchmarkId, run);
+                });
     }
 
     protected void wrapExecute(String benchmarkId, String runId, Runnable body) {
@@ -108,7 +123,9 @@ public abstract class AbstractRunOrchestrator {
     protected void fanOut(BenchmarkRun run, Consumer<String> perResult) {
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (BenchmarkResult result : run.getResults()) {
-            futures.add(CompletableFuture.runAsync(() -> perResult.accept(result.getId()), asyncExecutor));
+            futures.add(
+                    CompletableFuture.runAsync(
+                            () -> perResult.accept(result.getId()), asyncExecutor));
         }
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
     }
@@ -135,36 +152,60 @@ public abstract class AbstractRunOrchestrator {
         r.setSamplesRecorded(stats.sampleCount());
     }
 
-    protected void persistSuccess(String benchmarkId, String runId, String resultId,
-                                  TimedOperation timed, Consumer<BenchmarkResult> extra) {
-        transactionTemplate.executeWithoutResult(s -> {
-            BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
-            applyCoreTimings(r, timed);
-            applyPercentiles(r, timed);
-            extra.accept(r);
-            resultRepository.save(r);
-            broadcastResult(benchmarkId, runId, r);
-        });
+    protected void persistSuccess(
+            String benchmarkId,
+            String runId,
+            String resultId,
+            TimedOperation timed,
+            Consumer<BenchmarkResult> extra) {
+        transactionTemplate.executeWithoutResult(
+                s -> {
+                    BenchmarkResult r = resultRepository.findById(resultId).orElseThrow();
+                    applyCoreTimings(r, timed);
+                    applyPercentiles(r, timed);
+                    extra.accept(r);
+                    resultRepository.save(r);
+                    broadcastResult(benchmarkId, runId, r);
+                });
     }
 
-    protected void runDatabaseOperation(String benchmarkId, String runId, String resultId, String operationLabel,
-                                         ThrowingConsumer<BenchmarkRunSupport.DatabaseContext> body) {
+    protected void runDatabaseOperation(
+            String benchmarkId,
+            String runId,
+            String resultId,
+            String operationLabel,
+            ThrowingConsumer<BenchmarkRunSupport.DatabaseContext> body) {
         Optional<BenchmarkRunSupport.DatabaseContext> ctxOpt =
-                runSupport.resolveDatabaseContext(benchmarkId, resultId, resultBroadcast(benchmarkId, runId));
+                runSupport.resolveDatabaseContext(
+                        benchmarkId, resultId, resultBroadcast(benchmarkId, runId));
         if (ctxOpt.isEmpty()) return;
         BenchmarkRunSupport.DatabaseContext ctx = ctxOpt.get();
         BenchmarkDatabase db = ctx.db();
         runSupport.markStarted(resultId, resultBroadcast(benchmarkId, runId));
-        ContainerStatsCollector.Handle statsHandle = statsCollector.start(
-                benchmarkId, runId, resultId, db.getId(), db.getDbName(), db.getContainerId(), operationLabel);
+        ContainerStatsCollector.Handle statsHandle =
+                statsCollector.start(
+                        benchmarkId,
+                        runId,
+                        resultId,
+                        db.getId(),
+                        db.getDbName(),
+                        db.getContainerId(),
+                        operationLabel);
         try {
             body.accept(ctx);
         } catch (Exception ex) {
-            log.error("{} failed for db {} run {}: {}", operationLabel, db.getDbName(), runId, ex.getMessage(), ex);
+            log.error(
+                    "{} failed for db {} run {}: {}",
+                    operationLabel,
+                    db.getDbName(),
+                    runId,
+                    ex.getMessage(),
+                    ex);
             runSupport.markFailed(resultId, ex.getMessage(), resultBroadcast(benchmarkId, runId));
         } finally {
             ResourceMetricsSummary summary = statsCollector.stop(statsHandle);
-            runSupport.persistResourceSummary(resultId, summary, resultBroadcast(benchmarkId, runId));
+            runSupport.persistResourceSummary(
+                    resultId, summary, resultBroadcast(benchmarkId, runId));
         }
     }
 

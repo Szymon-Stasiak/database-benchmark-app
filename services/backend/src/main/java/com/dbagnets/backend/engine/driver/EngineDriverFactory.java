@@ -1,16 +1,17 @@
 package com.dbagnets.backend.engine.driver;
 
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.stereotype.Component;
+
 import com.dbagnets.backend.domain.DatabaseEngine;
 import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.engine.driver.api.DriverResolution;
 import com.dbagnets.backend.engine.driver.api.EngineDriver;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
-import org.springframework.stereotype.Component;
-
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Component
 public class EngineDriverFactory {
@@ -40,7 +41,9 @@ public class EngineDriverFactory {
         } catch (IllegalArgumentException e) {
             return new DriverResolution.Skipped("Unknown engine: " + db.getDbName());
         }
-        if (!supports(engine) || db.getStatus() != DatabaseStatus.RUNNING || db.getHostPort() == null) {
+        if (!supports(engine)
+                || db.getStatus() != DatabaseStatus.RUNNING
+                || db.getHostPort() == null) {
             return new DriverResolution.Skipped("Engine not supported or container not running");
         }
         return new DriverResolution.Resolved(driverFor(engine).orElseThrow());

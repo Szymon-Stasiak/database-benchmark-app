@@ -1,10 +1,10 @@
 package com.dbagnets.backend.benchmark.setup.api.dto;
 
-import com.dbagnets.backend.shared.entity.Benchmark;
-import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
-
 import java.time.Instant;
 import java.util.List;
+
+import com.dbagnets.backend.shared.entity.Benchmark;
+import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 
 public record BenchmarkResponse(
         String id,
@@ -12,8 +12,7 @@ public record BenchmarkResponse(
         String status,
         Instant createdAt,
         String logicalSchema,
-        List<DatabaseResponse> databases
-) {
+        List<DatabaseResponse> databases) {
     public record DatabaseResponse(
             String id,
             String dbType,
@@ -21,8 +20,7 @@ public record BenchmarkResponse(
             String dbVersion,
             String status,
             Integer hostPort,
-            String errorMessage
-    ) {
+            String errorMessage) {
         public static DatabaseResponse from(BenchmarkDatabase db) {
             return new DatabaseResponse(
                     db.getId(),
@@ -31,8 +29,7 @@ public record BenchmarkResponse(
                     db.getDbVersion(),
                     db.getStatus().name(),
                     db.getHostPort(),
-                    db.getErrorMessage()
-            );
+                    db.getErrorMessage());
         }
     }
 
@@ -43,9 +40,6 @@ public record BenchmarkResponse(
                 benchmark.getStatus().name(),
                 benchmark.getCreatedAt(),
                 benchmark.getLogicalSchema(),
-                benchmark.getDatabases().stream()
-                        .map(DatabaseResponse::from)
-                        .toList()
-        );
+                benchmark.getDatabases().stream().map(DatabaseResponse::from).toList());
     }
 }

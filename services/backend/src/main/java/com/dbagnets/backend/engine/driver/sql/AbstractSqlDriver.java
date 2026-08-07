@@ -1,5 +1,19 @@
 package com.dbagnets.backend.engine.driver.sql;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.dbagnets.backend.engine.cascade.CascadeNode;
 import com.dbagnets.backend.engine.datagen.GeneratedRow;
 import com.dbagnets.backend.engine.driver.api.DeleteContext;
@@ -18,18 +32,6 @@ import com.dbagnets.backend.engine.schema.LogicalAttribute;
 import com.dbagnets.backend.engine.schema.LogicalEntity;
 import com.dbagnets.backend.engine.timing.RecordedId;
 import com.dbagnets.backend.engine.timing.TimedOperation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public abstract class AbstractSqlDriver implements EngineDriver {
 
@@ -47,7 +49,13 @@ public abstract class AbstractSqlDriver implements EngineDriver {
 
     protected abstract String engineLogName();
 
-    protected long fetchDescendantsForRead(Connection conn, com.dbagnets.backend.engine.schema.LogicalSchema schema, Object rootId, ReadContext ctx, LogicalEntity entity) throws SQLException {
+    protected long fetchDescendantsForRead(
+            Connection conn,
+            com.dbagnets.backend.engine.schema.LogicalSchema schema,
+            Object rootId,
+            ReadContext ctx,
+            LogicalEntity entity)
+            throws SQLException {
         return 0L;
     }
 
@@ -74,7 +82,12 @@ public abstract class AbstractSqlDriver implements EngineDriver {
     public TimedOperation read(ReadContext ctx) throws Exception {
         DataSource ds = dataSource(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
-        LogicalAttribute pk = entity.primaryKey().orElseThrow(() -> new IllegalStateException("Entity " + entity.name() + " has no primary key"));
+        LogicalAttribute pk =
+                entity.primaryKey()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Entity " + entity.name() + " has no primary key"));
         InsertMode mode = ctx.mode() == null ? InsertMode.SINGLE : ctx.mode();
 
         long[] samples = new long[ctx.targets().size()];
@@ -85,7 +98,8 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         try (Connection conn = ds.getConnection()) {
             conn.setReadOnly(true);
             if (mode == InsertMode.BULK && !ctx.targets().isEmpty()) {
-                List<Object> ids = ctx.targets().stream().map(t -> (Object) t.physicalId()).toList();
+                List<Object> ids =
+                        ctx.targets().stream().map(t -> (Object) t.physicalId()).toList();
                 long start = System.nanoTime();
                 rowsRead = SqlCascadeDeleter.readBulk(conn, entity, pk, ids, dialect());
                 long elapsedNs = System.nanoTime() - start;
@@ -102,7 +116,9 @@ public abstract class AbstractSqlDriver implements EngineDriver {
                         binder().bind(ps, 1, pk, entry.physicalId());
                         long start = System.nanoTime();
                         long n = SqlSupport.executeSelectCount(ps);
-                        n += fetchDescendantsForRead(conn, ctx.schema(), entry.physicalId(), ctx, entity);
+                        n +=
+                                fetchDescendantsForRead(
+                                        conn, ctx.schema(), entry.physicalId(), ctx, entity);
                         long sampleNs = System.nanoTime() - start;
                         samples[i] = sampleNs;
                         totalDbTimeNs += sampleNs;
@@ -113,17 +129,28 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
-        return TimedOperation.builder().dbTimeNs(totalDbTimeNs).wireTimeNs(wireTimeNs).rowsAffected(rowsRead).sampleDbTimeNs(samples).build();
+        return TimedOperation.builder()
+                .dbTimeNs(totalDbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(rowsRead)
+                .sampleDbTimeNs(samples)
+                .build();
     }
 
     @Override
     public TimedOperation delete(DeleteContext ctx) throws Exception {
         DataSource ds = dataSource(ctx.databaseId(), ctx.hostAddress(), ctx.hostPort());
         LogicalEntity entity = ctx.schema().requireEntity(ctx.entityName());
-        LogicalAttribute pk = entity.primaryKey().orElseThrow(() -> new IllegalStateException("Entity " + entity.name() + " has no primary key"));
+        LogicalAttribute pk =
+                entity.primaryKey()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Entity " + entity.name() + " has no primary key"));
 
         InsertMode mode = ctx.mode() == null ? InsertMode.SINGLE : ctx.mode();
-        DeletionMode deletionMode = ctx.deletionMode() == null ? DeletionMode.NATIVE : ctx.deletionMode();
+        DeletionMode deletionMode =
+                ctx.deletionMode() == null ? DeletionMode.NATIVE : ctx.deletionMode();
         boolean cascade = deletionMode == DeletionMode.WITH_CHILDREN;
         boolean orphan = deletionMode == DeletionMode.ROOT_ONLY;
         boolean forcePerRow = cascade || mode == InsertMode.SINGLE;
@@ -148,16 +175,34 @@ public abstract class AbstractSqlDriver implements EngineDriver {
                     int rootDeleted = 0;
                     try {
                         if (cascade) {
-                            Map<String, List<Object>> cascaded = SqlCascadeDeleter.cascadeChildrenOf(conn, ctx.schema(), entity.name(), entry.physicalId(), dialect());
+                            Map<String, List<Object>> cascaded =
+                                    SqlCascadeDeleter.cascadeChildrenOf(
+                                            conn,
+                                            ctx.schema(),
+                                            entity.name(),
+                                            entry.physicalId(),
+                                            dialect());
                             for (var e : cascaded.entrySet()) {
-                                cascadeAccumulator.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).addAll(e.getValue().stream().map(String::valueOf).toList());
+                                cascadeAccumulator
+                                        .computeIfAbsent(e.getKey(), k -> new ArrayList<>())
+                                        .addAll(
+                                                e.getValue().stream()
+                                                        .map(String::valueOf)
+                                                        .toList());
                             }
                         }
-                        rootDeleted = SqlCascadeDeleter.deleteRoot(conn, entity, pk, entry.physicalId(), dialect());
+                        rootDeleted =
+                                SqlCascadeDeleter.deleteRoot(
+                                        conn, entity, pk, entry.physicalId(), dialect());
                         conn.commit();
                     } catch (SQLException ex) {
                         SqlSupport.safeRollback(conn);
-                        log.warn("{} delete failed for {}/{}: {}", engineLogName(), entity.name(), entry.physicalId(), ex.getMessage());
+                        log.warn(
+                                "{} delete failed for {}/{}: {}",
+                                engineLogName(),
+                                entity.name(),
+                                entry.physicalId(),
+                                ex.getMessage());
                     }
                     long sampleNs = System.nanoTime() - start;
                     samples[i] = sampleNs;
@@ -165,15 +210,26 @@ public abstract class AbstractSqlDriver implements EngineDriver {
                     if (rootDeleted > 0) rowsAffected += rootDeleted;
                 }
             } else {
-                List<Object> ids = ctx.targets().stream().map(t -> (Object) t.physicalId()).toList();
+                List<Object> ids =
+                        ctx.targets().stream().map(t -> (Object) t.physicalId()).toList();
                 long start = System.nanoTime();
                 int affected = 0;
                 try {
-                    affected = mode == InsertMode.BULK ? SqlCascadeDeleter.deleteRootBulk(conn, entity, pk, ids, dialect()) : SqlCascadeDeleter.deleteRootBatch(conn, entity, pk, ids, dialect());
+                    affected =
+                            mode == InsertMode.BULK
+                                    ? SqlCascadeDeleter.deleteRootBulk(
+                                            conn, entity, pk, ids, dialect())
+                                    : SqlCascadeDeleter.deleteRootBatch(
+                                            conn, entity, pk, ids, dialect());
                     conn.commit();
                 } catch (SQLException ex) {
                     SqlSupport.safeRollback(conn);
-                    log.warn("{} {} delete failed for {}: {}", engineLogName(), mode, entity.name(), ex.getMessage());
+                    log.warn(
+                            "{} {} delete failed for {}: {}",
+                            engineLogName(),
+                            mode,
+                            entity.name(),
+                            ex.getMessage());
                 }
                 long elapsedNs = System.nanoTime() - start;
                 long perItem = ctx.targets().isEmpty() ? 0 : elapsedNs / ctx.targets().size();
@@ -184,10 +240,18 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         }
         long wireTimeNs = System.nanoTime() - wireStart;
 
-        return TimedOperation.builder().dbTimeNs(totalDbTimeNs).wireTimeNs(wireTimeNs).rowsAffected(rowsAffected).sampleDbTimeNs(samples).cascadeDeletedByEntity(cascadeAccumulator).build();
+        return TimedOperation.builder()
+                .dbTimeNs(totalDbTimeNs)
+                .wireTimeNs(wireTimeNs)
+                .rowsAffected(rowsAffected)
+                .sampleDbTimeNs(samples)
+                .cascadeDeletedByEntity(cascadeAccumulator)
+                .build();
     }
 
-    protected EntityOutcome insertEntity(Connection conn, LogicalEntity entity, List<GeneratedRow> rows, InsertContext ctx) throws SQLException {
+    protected EntityOutcome insertEntity(
+            Connection conn, LogicalEntity entity, List<GeneratedRow> rows, InsertContext ctx)
+            throws SQLException {
         SqlInsertStatement stmt = buildInsertStatement(entity);
         EntityOutcome outcome = new EntityOutcome();
 
@@ -201,11 +265,21 @@ public abstract class AbstractSqlDriver implements EngineDriver {
                 BatchOutcome batchResult = executeBatchTimed(conn, stmt, slice, ctx.mode());
                 outcome.rowsAffected += batchResult.rowsAffected();
                 outcome.dbTimeNs += batchResult.dbTimeNs();
-                slice.forEach(r -> outcome.recordedIds.add(new RecordedId(entity.name(), r.logicalId(), r.logicalId())));
+                slice.forEach(
+                        r ->
+                                outcome.recordedIds.add(
+                                        new RecordedId(
+                                                entity.name(), r.logicalId(), r.logicalId())));
             } catch (Exception ex) {
                 if (ConflictDetector.isConflict(engine(), ex)) {
                     outcome.conflicts += slice.size();
-                    log.warn("{} conflict on entity {} batch {}/{}: {}", engineLogName(), entity.name(), batchIndex, totalBatches, ex.getMessage());
+                    log.warn(
+                            "{} conflict on entity {} batch {}/{}: {}",
+                            engineLogName(),
+                            entity.name(),
+                            batchIndex,
+                            totalBatches,
+                            ex.getMessage());
                 } else {
                     throw ex;
                 }
@@ -216,7 +290,9 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         return outcome;
     }
 
-    private BatchOutcome executeBatchTimed(Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice, InsertMode mode) throws SQLException {
+    private BatchOutcome executeBatchTimed(
+            Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice, InsertMode mode)
+            throws SQLException {
         if (slice.isEmpty()) return new BatchOutcome(0L, 0L);
         return switch (mode) {
             case SINGLE -> singleTimed(conn, stmt, slice);
@@ -225,7 +301,9 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         };
     }
 
-    private BatchOutcome singleTimed(Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
+    private BatchOutcome singleTimed(
+            Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice)
+            throws SQLException {
         long dbTimeNs = 0L;
         long affected = 0L;
         try (PreparedStatement ps = conn.prepareStatement(stmt.singleRowSql())) {
@@ -240,7 +318,9 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         return new BatchOutcome(dbTimeNs, affected);
     }
 
-    private BatchOutcome batchTimed(Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
+    private BatchOutcome batchTimed(
+            Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice)
+            throws SQLException {
         long affected = 0L;
         try (PreparedStatement ps = conn.prepareStatement(stmt.singleRowSql())) {
             for (GeneratedRow row : slice) {
@@ -257,7 +337,9 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         }
     }
 
-    private BatchOutcome bulkTimed(Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice) throws SQLException {
+    private BatchOutcome bulkTimed(
+            Connection conn, SqlInsertStatement stmt, List<GeneratedRow> slice)
+            throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(stmt.multiRowSql(slice.size()))) {
             int colCount = stmt.orderedColumns().size();
             for (int i = 0; i < slice.size(); i++) {
@@ -270,13 +352,14 @@ public abstract class AbstractSqlDriver implements EngineDriver {
         }
     }
 
-    private void bindRow(PreparedStatement ps, List<LogicalAttribute> cols, GeneratedRow row, int offset) throws SQLException {
+    private void bindRow(
+            PreparedStatement ps, List<LogicalAttribute> cols, GeneratedRow row, int offset)
+            throws SQLException {
         for (int i = 0; i < cols.size(); i++) {
             LogicalAttribute attr = cols.get(i);
             binder().bind(ps, offset + i + 1, attr, row.get(attr.name()));
         }
     }
 
-    private record BatchOutcome(long dbTimeNs, long rowsAffected) {
-    }
+    private record BatchOutcome(long dbTimeNs, long rowsAffected) {}
 }

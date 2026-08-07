@@ -1,6 +1,7 @@
 package com.dbagnets.backend.infrastructure.docker.strategy;
 
 import com.dbagnets.backend.infrastructure.docker.DockerService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,14 +15,31 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
         for (int i = 0; i < 60; i++) {
             try {
                 if ("memgraph".equals(dbName)) {
-                    String result = docker.execInContainer(containerId, "mgconsole", "--execute", "RETURN 1;");
-                    if (result.contains("1")) { log.info("Memgraph is ready"); return; }
+                    String result =
+                            docker.execInContainer(
+                                    containerId, "mgconsole", "--execute", "RETURN 1;");
+                    if (result.contains("1")) {
+                        log.info("Memgraph is ready");
+                        return;
+                    }
                 } else {
-                    String result = docker.execInContainer(containerId, "cypher-shell", "-u", "neo4j", "-p", "benchmark", "RETURN 1;");
-                    if (result.contains("1")) { log.info("Neo4j is ready"); return; }
+                    String result =
+                            docker.execInContainer(
+                                    containerId,
+                                    "cypher-shell",
+                                    "-u",
+                                    "neo4j",
+                                    "-p",
+                                    "benchmark",
+                                    "RETURN 1;");
+                    if (result.contains("1")) {
+                        log.info("Neo4j is ready");
+                        return;
+                    }
                 }
             } catch (Exception e) {
-                if (i % 10 == 9) log.debug("{} not ready yet (attempt {}): {}", dbName, i + 1, e.getMessage());
+                if (i % 10 == 9)
+                    log.debug("{} not ready yet (attempt {}): {}", dbName, i + 1, e.getMessage());
             }
             sleep(2000);
         }
@@ -34,21 +52,28 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
         if ("memgraph".equals(dbName)) {
             result = docker.execWithStdin(containerId, script, "mgconsole");
         } else {
-            result = docker.execWithStdin(containerId, script,
-                "cypher-shell", "-u", "neo4j", "-p", "benchmark",
-                "--database", "neo4j",
-                "--fail-fast");
+            result =
+                    docker.execWithStdin(
+                            containerId,
+                            script,
+                            "cypher-shell",
+                            "-u",
+                            "neo4j",
+                            "-p",
+                            "benchmark",
+                            "--database",
+                            "neo4j",
+                            "--fail-fast");
         }
 
         if (result != null && containsError(result)) {
-            String firstError = result.lines()
-                .filter(this::isErrorLine)
-                .findFirst()
-                .orElse(result);
+            String firstError = result.lines().filter(this::isErrorLine).findFirst().orElse(result);
             throw new RuntimeException(dbName + " init script failed: " + firstError);
         }
-        log.info("{} script executed cleanly ({} chars output)", dbName,
-            result == null ? 0 : result.length());
+        log.info(
+                "{} script executed cleanly ({} chars output)",
+                dbName,
+                result == null ? 0 : result.length());
     }
 
     private boolean containsError(String output) {
@@ -58,13 +83,17 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
     private boolean isErrorLine(String line) {
         String trimmed = line.stripLeading();
         return trimmed.startsWith("Neo.ClientError")
-            || trimmed.startsWith("Neo.DatabaseError")
-            || trimmed.startsWith("Neo.TransientError")
-            || trimmed.toLowerCase().startsWith("error:")
-            || trimmed.toLowerCase().contains("syntax error");
+                || trimmed.startsWith("Neo.DatabaseError")
+                || trimmed.startsWith("Neo.TransientError")
+                || trimmed.toLowerCase().startsWith("error:")
+                || trimmed.toLowerCase().contains("syntax error");
     }
 
     private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

@@ -1,13 +1,12 @@
 package com.dbagnets.backend.engine.driver.sql;
 
-import com.dbagnets.backend.engine.schema.LogicalDataType;
-
 import java.sql.Types;
+
+import com.dbagnets.backend.engine.schema.LogicalDataType;
 
 public final class SqlTypes {
 
-    private SqlTypes() {
-    }
+    private SqlTypes() {}
 
     public static int jdbcType(LogicalDataType type, int uuidJsonVectorType) {
         return switch (type) {

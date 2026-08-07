@@ -1,6 +1,7 @@
 package com.dbagnets.backend.infrastructure.docker.strategy;
 
 import com.dbagnets.backend.infrastructure.docker.DockerService;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -10,7 +11,10 @@ public class RedisScriptStrategy implements ScriptExecutionStrategy {
     public void waitForReady(DockerService docker, String containerId, int hostPort) {
         for (int i = 0; i < 30; i++) {
             String result = docker.execInContainer(containerId, "redis-cli", "PING");
-            if (result.contains("PONG")) { log.info("Redis is ready"); return; }
+            if (result.contains("PONG")) {
+                log.info("Redis is ready");
+                return;
+            }
             sleep(2000);
         }
         throw new RuntimeException("Redis did not become ready in time");
@@ -21,14 +25,12 @@ public class RedisScriptStrategy implements ScriptExecutionStrategy {
         String result = docker.execWithStdin(containerId, script, "redis-cli");
 
         if (result != null && containsError(result)) {
-            String firstError = result.lines()
-                .filter(this::isErrorLine)
-                .findFirst()
-                .orElse(result);
+            String firstError = result.lines().filter(this::isErrorLine).findFirst().orElse(result);
             throw new RuntimeException("Redis init script failed: " + firstError);
         }
-        log.info("Redis script executed cleanly ({} chars output)",
-            result == null ? 0 : result.length());
+        log.info(
+                "Redis script executed cleanly ({} chars output)",
+                result == null ? 0 : result.length());
     }
 
     private boolean containsError(String output) {
@@ -38,12 +40,16 @@ public class RedisScriptStrategy implements ScriptExecutionStrategy {
     private boolean isErrorLine(String line) {
         String trimmed = line.stripLeading();
         return trimmed.startsWith("(error)")
-            || trimmed.startsWith("ERR ")
-            || trimmed.startsWith("WRONGTYPE")
-            || trimmed.startsWith("NOAUTH");
+                || trimmed.startsWith("ERR ")
+                || trimmed.startsWith("WRONGTYPE")
+                || trimmed.startsWith("NOAUTH");
     }
 
     private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

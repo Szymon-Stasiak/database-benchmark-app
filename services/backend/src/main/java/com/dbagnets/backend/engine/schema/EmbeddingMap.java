@@ -22,11 +22,13 @@ public final class EmbeddingMap {
         if (mappings == null || mappings.isEmpty()) {
             return empty();
         }
-        Map<String, EmbeddingMapping> indexed = mappings.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        m -> m.entityName().toLowerCase(Locale.ROOT),
-                        m -> m,
-                        (a, b) -> a));
+        Map<String, EmbeddingMapping> indexed =
+                mappings.stream()
+                        .collect(
+                                Collectors.toUnmodifiableMap(
+                                        m -> m.entityName().toLowerCase(Locale.ROOT),
+                                        m -> m,
+                                        (a, b) -> a));
         return new EmbeddingMap(indexed);
     }
 

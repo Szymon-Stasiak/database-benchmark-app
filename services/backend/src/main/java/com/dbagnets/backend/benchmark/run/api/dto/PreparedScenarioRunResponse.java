@@ -7,8 +7,7 @@ public record PreparedScenarioRunResponse(
         String benchmarkId,
         String scenarioType,
         String status,
-        List<Applicability> applicability
-) {
-    public record Applicability(String databaseId, String dbName, boolean applicable, String reason) {
-    }
+        List<Applicability> applicability) {
+    public record Applicability(
+            String databaseId, String dbName, boolean applicable, String reason) {}
 }

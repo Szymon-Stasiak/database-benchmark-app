@@ -1,9 +1,10 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
+import java.time.Instant;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.time.Instant;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 
 public record ScenarioResultResponse(
         String id,
@@ -29,8 +30,7 @@ public record ScenarioResultResponse(
         Long memoryBytesMax,
         Long memoryBytesMean,
         Long memoryBytesP95,
-        Integer resourceSampleCount
-) {
+        Integer resourceSampleCount) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int PREVIEW_MAX_LENGTH = 4096;
 
@@ -65,9 +65,8 @@ public record ScenarioResultResponse(
 
     private static Object parsePreview(String json) {
         if (json == null || json.isBlank()) return null;
-        String truncated = json.length() > PREVIEW_MAX_LENGTH
-                ? json.substring(0, PREVIEW_MAX_LENGTH)
-                : json;
+        String truncated =
+                json.length() > PREVIEW_MAX_LENGTH ? json.substring(0, PREVIEW_MAX_LENGTH) : json;
         try {
             return MAPPER.readTree(truncated);
         } catch (Exception e) {

@@ -1,25 +1,27 @@
 package com.dbagnets.backend.benchmark.result.application;
 
-import com.dbagnets.backend.benchmark.result.api.dto.DatabaseSizeResponse;
-import com.dbagnets.backend.engine.driver.engines.redis.RedisPoolCache;
-import com.dbagnets.backend.infrastructure.docker.DockerService;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
-import com.dbagnets.backend.infrastructure.size.EngineDataDir;
-import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
-import com.dbagnets.backend.domain.DatabaseEngine;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import com.dbagnets.backend.benchmark.result.api.dto.DatabaseSizeResponse;
+import com.dbagnets.backend.domain.DatabaseEngine;
+import com.dbagnets.backend.engine.driver.engines.redis.RedisPoolCache;
+import com.dbagnets.backend.infrastructure.docker.DockerService;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
+import com.dbagnets.backend.infrastructure.size.EngineDataDir;
+import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 @Slf4j
 @Component
@@ -39,9 +41,12 @@ public class DataSizeProbe {
     private final ConcurrentHashMap<String, CachedSize> cache = new ConcurrentHashMap<>();
 
     public List<DatabaseSizeResponse> getDatabaseSizes(String benchmarkId) {
-        return benchmarkRepository.findById(benchmarkId)
-                .orElseThrow(() -> new NoSuchElementException("Benchmark not found: " + benchmarkId))
-                .getDatabases().stream()
+        return benchmarkRepository
+                .findById(benchmarkId)
+                .orElseThrow(
+                        () -> new NoSuchElementException("Benchmark not found: " + benchmarkId))
+                .getDatabases()
+                .stream()
                 .map(this::buildSizeResponse)
                 .toList();
     }
@@ -50,8 +55,15 @@ public class DataSizeProbe {
         Long size = sizeOf(db, hostAddress);
         Long baseline = db.getBaselineSizeBytes();
         Long delta = (size != null && baseline != null) ? Math.max(0L, size - baseline) : null;
-        return new DatabaseSizeResponse(db.getId(), db.getDbName(), db.getDbVersion(),
-                size, baseline, delta, humanize(size), size != null);
+        return new DatabaseSizeResponse(
+                db.getId(),
+                db.getDbName(),
+                db.getDbVersion(),
+                size,
+                baseline,
+                delta,
+                humanize(size),
+                size != null);
     }
 
     public Long sizeOf(BenchmarkDatabase db, String hostAddress) {

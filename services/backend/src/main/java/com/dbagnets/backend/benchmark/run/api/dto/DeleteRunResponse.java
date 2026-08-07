@@ -1,9 +1,9 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-
 import java.time.Instant;
 import java.util.List;
+
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
 
 public record DeleteRunResponse(
         String id,
@@ -14,12 +14,11 @@ public record DeleteRunResponse(
         String status,
         Instant createdAt,
         Instant finishedAt,
-        List<DeleteResultResponse> results
-) {
-    public static DeleteRunResponse from(BenchmarkRun run, Integer sampleSize, Boolean includeChildren) {
-        List<DeleteResultResponse> resultDtos = run.getResults().stream()
-                .map(DeleteResultResponse::from)
-                .toList();
+        List<DeleteResultResponse> results) {
+    public static DeleteRunResponse from(
+            BenchmarkRun run, Integer sampleSize, Boolean includeChildren) {
+        List<DeleteResultResponse> resultDtos =
+                run.getResults().stream().map(DeleteResultResponse::from).toList();
         return new DeleteRunResponse(
                 run.getId(),
                 run.getBenchmarkId(),

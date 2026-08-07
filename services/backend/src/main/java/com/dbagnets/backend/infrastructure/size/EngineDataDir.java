@@ -1,13 +1,14 @@
 package com.dbagnets.backend.infrastructure.size;
 
-import com.dbagnets.backend.domain.DatabaseEngine;
-
 import java.util.EnumMap;
 import java.util.Map;
 
+import com.dbagnets.backend.domain.DatabaseEngine;
+
 public final class EngineDataDir {
 
-    private static final Map<DatabaseEngine, String> DATA_DIRS = new EnumMap<>(DatabaseEngine.class);
+    private static final Map<DatabaseEngine, String> DATA_DIRS =
+            new EnumMap<>(DatabaseEngine.class);
 
     static {
         DATA_DIRS.put(DatabaseEngine.POSTGRESQL, "/var/lib/postgresql/data");
@@ -27,8 +28,7 @@ public final class EngineDataDir {
         DATA_DIRS.put(DatabaseEngine.QUESTDB, "/var/lib/questdb");
     }
 
-    private EngineDataDir() {
-    }
+    private EngineDataDir() {}
 
     public static String forEngine(DatabaseEngine engine) {
         return DATA_DIRS.get(engine);

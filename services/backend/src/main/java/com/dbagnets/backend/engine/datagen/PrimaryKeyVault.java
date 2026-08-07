@@ -7,7 +7,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public final class PrimaryKeyVault {
 
-    private final ConcurrentHashMap<String, CopyOnWriteArrayList<String>> pksByEntity = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<String>> pksByEntity =
+            new ConcurrentHashMap<>();
 
     public void append(String entityName, String pk) {
         pksByEntity.computeIfAbsent(entityName, k -> new CopyOnWriteArrayList<>()).add(pk);
@@ -21,8 +22,9 @@ public final class PrimaryKeyVault {
         CopyOnWriteArrayList<String> pks = pksByEntity.get(entityName);
         if (pks == null || pks.isEmpty()) {
             throw new IllegalStateException(
-                    "No primary keys available for parent entity '" + entityName +
-                            "'. CascadePlanner ordering must ensure parents are generated before children.");
+                    "No primary keys available for parent entity '"
+                            + entityName
+                            + "'. CascadePlanner ordering must ensure parents are generated before children.");
         }
         return pks.get(ThreadLocalRandom.current().nextInt(pks.size()));
     }

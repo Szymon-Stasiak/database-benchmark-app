@@ -1,12 +1,12 @@
 package com.dbagnets.backend.engine.scenario;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class ResultCanonicalizerTest {
 
@@ -36,9 +36,10 @@ class ResultCanonicalizerTest {
 
     @Test
     void nestedStructuresSorted() {
-        Map<String, Object> nested = Map.of(
-                "outer", Map.of("z", 1, "a", 2),
-                "list", List.of(Map.of("b", 1, "a", 2)));
+        Map<String, Object> nested =
+                Map.of(
+                        "outer", Map.of("z", 1, "a", 2),
+                        "list", List.of(Map.of("b", 1, "a", 2)));
         String canonical = ResultCanonicalizer.canonicalize(nested);
         assertThat(canonical.indexOf("\"a\":2")).isLessThan(canonical.indexOf("\"z\":1"));
     }

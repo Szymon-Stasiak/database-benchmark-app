@@ -1,11 +1,12 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
+import java.time.Instant;
+import java.util.Map;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.time.Instant;
-import java.util.Map;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 
 public record DeleteResultResponse(
         String id,
@@ -35,17 +36,18 @@ public record DeleteResultResponse(
         Long memoryBytesMax,
         Long memoryBytesMean,
         Long memoryBytesP95,
-        Integer resourceSampleCount
-) {
+        Integer resourceSampleCount) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final TypeReference<Map<String, Integer>> BREAKDOWN_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Integer>> BREAKDOWN_TYPE =
+            new TypeReference<>() {};
     private static final long NS_PER_US = 1_000L;
     private static final long NS_PER_MS = 1_000_000L;
 
     public static DeleteResultResponse from(BenchmarkResult r) {
-        Long delta = (r.getDataSizeBefore() != null && r.getDataSizeAfter() != null)
-                ? r.getDataSizeAfter() - r.getDataSizeBefore()
-                : null;
+        Long delta =
+                (r.getDataSizeBefore() != null && r.getDataSizeAfter() != null)
+                        ? r.getDataSizeAfter() - r.getDataSizeBefore()
+                        : null;
         Map<String, Integer> breakdown = parseBreakdown(r.getCascadeBreakdownJson());
         return new DeleteResultResponse(
                 r.getId(),

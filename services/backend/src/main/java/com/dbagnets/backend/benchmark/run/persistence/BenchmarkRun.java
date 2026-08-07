@@ -1,5 +1,9 @@
 package com.dbagnets.backend.benchmark.run.persistence;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,19 +16,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-
 @Entity
-@Table(name = "benchmark_runs", indexes = {
-        @Index(name = "idx_runs_benchmark_type", columnList = "benchmark_id, operation_type")
-})
+@Table(
+        name = "benchmark_runs",
+        indexes = {
+            @Index(name = "idx_runs_benchmark_type", columnList = "benchmark_id, operation_type")
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BenchmarkRun {
@@ -101,7 +104,11 @@ public class BenchmarkRun {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
-    @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(
+            mappedBy = "run",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.EAGER)
     private List<BenchmarkResult> results = new ArrayList<>();
 
     public BenchmarkRun(String benchmarkId, OperationType operationType) {

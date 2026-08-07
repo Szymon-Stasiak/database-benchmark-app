@@ -1,13 +1,11 @@
 package com.dbagnets.backend.engine.schema;
 
+import java.util.List;
+import java.util.Optional;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LogicalSchema(
@@ -16,8 +14,7 @@ public record LogicalSchema(
         @JsonProperty("depth_chain") List<String> depthChain,
         @JsonProperty("entities") List<LogicalEntity> entities,
         @JsonProperty("relationships") List<LogicalRelationship> relationships,
-        @JsonProperty("data_size_hints") List<DataSizeHint> dataSizeHints
-) {
+        @JsonProperty("data_size_hints") List<DataSizeHint> dataSizeHints) {
     @JsonCreator
     public LogicalSchema {
         entities = entities == null ? List.of() : List.copyOf(entities);
@@ -32,8 +29,9 @@ public record LogicalSchema(
     }
 
     public LogicalEntity requireEntity(String name) {
-        return findEntity(name).orElseThrow(
-                () -> new IllegalArgumentException("Entity not found in schema: " + name));
+        return findEntity(name)
+                .orElseThrow(
+                        () -> new IllegalArgumentException("Entity not found in schema: " + name));
     }
 
     public List<LogicalRelationship> relationshipsTargeting(String childEntity) {

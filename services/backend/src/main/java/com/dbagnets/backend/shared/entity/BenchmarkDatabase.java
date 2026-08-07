@@ -1,14 +1,16 @@
 package com.dbagnets.backend.shared.entity;
 
+import java.time.Instant;
+
+import jakarta.persistence.*;
+
 import com.dbagnets.backend.domain.DatabaseStatus;
 import com.dbagnets.backend.domain.DatabaseType;
-import jakarta.persistence.*;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.Instant;
 
 @Entity
 @Table(name = "benchmark_databases")
@@ -63,7 +65,6 @@ public class BenchmarkDatabase {
     @Setter
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
-
 
     @Setter
     @Column(name = "baseline_size_bytes")

@@ -1,15 +1,17 @@
 package com.dbagnets.backend.benchmark.setup.application;
 
-import com.dbagnets.backend.benchmark.setup.api.dto.BenchmarkResponse;
-import com.dbagnets.backend.benchmark.setup.internal.BenchmarkBundleService;
-import com.dbagnets.backend.domain.DatabaseStatus;
-import com.dbagnets.backend.domain.DatabaseType;
-import com.dbagnets.backend.engine.registry.EntityIdRegistry;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
-import com.dbagnets.backend.shared.entity.Benchmark;
-import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
-import com.dbagnets.backend.shared.entity.User;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,26 +22,29 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import com.dbagnets.backend.benchmark.setup.api.dto.BenchmarkResponse;
+import com.dbagnets.backend.benchmark.setup.internal.BenchmarkBundleService;
+import com.dbagnets.backend.domain.DatabaseStatus;
+import com.dbagnets.backend.domain.DatabaseType;
+import com.dbagnets.backend.engine.registry.EntityIdRegistry;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
+import com.dbagnets.backend.shared.entity.Benchmark;
+import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
+import com.dbagnets.backend.shared.entity.User;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class BenchmarkLifecycleServiceTest {
 
     @Mock BenchmarkRepository benchmarkRepository;
+
     @Mock BenchmarkDatabaseRepository databaseRepository;
+
     @Mock BenchmarkBundleService bundleService;
+
     @Mock BenchmarkDeploymentService deployment;
+
     @Mock EntityIdRegistry entityIdRegistry;
 
     @InjectMocks BenchmarkLifecycleService lifecycle;

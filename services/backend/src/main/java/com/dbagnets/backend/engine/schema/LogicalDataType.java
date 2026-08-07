@@ -1,8 +1,8 @@
 package com.dbagnets.backend.engine.schema;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-
 import java.util.Arrays;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
 
 public enum LogicalDataType {
     STRING,
@@ -25,6 +25,7 @@ public enum LogicalDataType {
         return Arrays.stream(values())
                 .filter(t -> t.name().equalsIgnoreCase(value))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown logical data type: " + value));
+                .orElseThrow(
+                        () -> new IllegalArgumentException("Unknown logical data type: " + value));
     }
 }

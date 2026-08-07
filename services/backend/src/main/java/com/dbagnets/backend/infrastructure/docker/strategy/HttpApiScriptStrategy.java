@@ -1,13 +1,15 @@
 package com.dbagnets.backend.infrastructure.docker.strategy;
 
-import com.dbagnets.backend.infrastructure.docker.DockerService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.reactive.function.client.WebClient;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.springframework.web.reactive.function.client.WebClient;
+
+import com.dbagnets.backend.infrastructure.docker.DockerService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -36,8 +38,12 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
 
         for (int i = 0; i < READINESS_MAX_ATTEMPTS; i++) {
             try {
-                String response = client.get().uri(healthPath)
-                    .retrieve().bodyToMono(String.class).block(READINESS_REQUEST_TIMEOUT);
+                String response =
+                        client.get()
+                                .uri(healthPath)
+                                .retrieve()
+                                .bodyToMono(String.class)
+                                .block(READINESS_REQUEST_TIMEOUT);
                 if (response != null) {
                     log.info("{} is ready on port {}", dbName, hostPort);
                     return;
@@ -67,13 +73,20 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
         for (int i = 0; i < chunks.size(); i++) {
             String chunk = chunks.get(i);
             try {
-                client.post().uri("/_bulk")
-                    .header("Content-Type", "application/x-ndjson")
-                    .bodyValue(chunk)
-                    .retrieve().bodyToMono(String.class)
-                    .block(CHUNK_REQUEST_TIMEOUT);
+                client.post()
+                        .uri("/_bulk")
+                        .header("Content-Type", "application/x-ndjson")
+                        .bodyValue(chunk)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block(CHUNK_REQUEST_TIMEOUT);
             } catch (Exception e) {
-                log.warn("Bulk chunk {}/{} failed ({} bytes): {}", i + 1, chunks.size(), chunk.length(), e.getMessage());
+                log.warn(
+                        "Bulk chunk {}/{} failed ({} bytes): {}",
+                        i + 1,
+                        chunks.size(),
+                        chunk.length(),
+                        e.getMessage());
                 sendLineByLineFallback(client, chunk);
             }
         }
@@ -85,10 +98,12 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
             String trimmed = line.trim();
             if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
             try {
-                client.post().uri("/_scripts/" + trimmed.hashCode())
-                    .bodyValue(trimmed)
-                    .retrieve().bodyToMono(String.class)
-                    .block(FALLBACK_REQUEST_TIMEOUT);
+                client.post()
+                        .uri("/_scripts/" + trimmed.hashCode())
+                        .bodyValue(trimmed)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block(FALLBACK_REQUEST_TIMEOUT);
             } catch (Exception ex) {
                 log.warn("ES command failed: {}", trimmed);
             }
@@ -97,10 +112,12 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
 
     private void executeGeneric(WebClient client, String script) {
         try {
-            client.post().uri("/")
-                .bodyValue(script)
-                .retrieve().bodyToMono(String.class)
-                .block(CHUNK_REQUEST_TIMEOUT);
+            client.post()
+                    .uri("/")
+                    .bodyValue(script)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block(CHUNK_REQUEST_TIMEOUT);
         } catch (Exception e) {
             log.warn("Generic HTTP execution failed for {}: {}", dbName, e.getMessage());
         }
@@ -109,9 +126,9 @@ public class HttpApiScriptStrategy implements ScriptExecutionStrategy {
 
     private WebClient buildClient(int hostPort) {
         return WebClient.builder()
-            .baseUrl("http://localhost:" + hostPort)
-            .codecs(c -> c.defaultCodecs().maxInMemorySize(MAX_BUFFER_MB * BYTES_PER_MB))
-            .build();
+                .baseUrl("http://localhost:" + hostPort)
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(MAX_BUFFER_MB * BYTES_PER_MB))
+                .build();
     }
 
     private String healthPathFor(String dbName) {

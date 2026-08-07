@@ -11,16 +11,10 @@ public record ComparisonReportResponse(
         List<InsertSummary> insertSummary,
         List<ReadSummary> readSummary,
         List<DeleteSummary> deleteSummary,
-        List<RadarScore> radarScores
-) {
+        List<RadarScore> radarScores) {
 
     public record DatabaseDescriptor(
-            String databaseId,
-            String dbName,
-            String dbVersion,
-            String engineCategory
-    ) {
-    }
+            String databaseId, String dbName, String dbVersion, String engineCategory) {}
 
     public record InsertSummary(
             String databaseId,
@@ -33,9 +27,7 @@ public record ComparisonReportResponse(
             Double avgThroughputRps,
             long totalConflicts,
             int successCount,
-            int failedCount
-    ) {
-    }
+            int failedCount) {}
 
     public record ReadSummary(
             String databaseId,
@@ -48,9 +40,7 @@ public record ComparisonReportResponse(
             Double avgMeanDbTimeUs,
             Double avgWireTimeMs,
             int successCount,
-            int failedCount
-    ) {
-    }
+            int failedCount) {}
 
     public record DeleteSummary(
             String databaseId,
@@ -62,9 +52,7 @@ public record ComparisonReportResponse(
             Double avgP99DbTimeUs,
             Long totalSizeFreedBytes,
             int successCount,
-            int failedCount
-    ) {
-    }
+            int failedCount) {}
 
     public record RadarScore(
             String databaseId,
@@ -73,7 +61,5 @@ public record ComparisonReportResponse(
             double readSpeed,
             double deleteSpeed,
             double sizeEfficiency,
-            double consistency
-    ) {
-    }
+            double consistency) {}
 }

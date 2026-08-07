@@ -2,8 +2,8 @@ package com.dbagnets.backend.engine.scenario;
 
 import java.util.Arrays;
 
-public record KnnParams(String entityName, String vectorAttribute, double[] queryVector,
-                        int topK) implements ScenarioParams {
+public record KnnParams(String entityName, String vectorAttribute, double[] queryVector, int topK)
+        implements ScenarioParams {
 
     public static final int MAX_TOP_K = 1000;
 
@@ -37,7 +37,10 @@ public record KnnParams(String entityName, String vectorAttribute, double[] quer
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (!(obj instanceof KnnParams other)) return false;
-        return topK == other.topK && entityName.equals(other.entityName) && vectorAttribute.equals(other.vectorAttribute) && Arrays.equals(queryVector, other.queryVector);
+        return topK == other.topK
+                && entityName.equals(other.entityName)
+                && vectorAttribute.equals(other.vectorAttribute)
+                && Arrays.equals(queryVector, other.queryVector);
     }
 
     @Override

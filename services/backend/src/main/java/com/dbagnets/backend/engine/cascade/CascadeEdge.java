@@ -4,8 +4,7 @@ public record CascadeEdge(
         String parentEntity,
         String childEntity,
         String fkColumnInChild,
-        double parentToChildRatio
-) {
+        double parentToChildRatio) {
     public CascadeEdge {
         if (parentToChildRatio <= 0) {
             throw new IllegalArgumentException("parentToChildRatio must be positive");

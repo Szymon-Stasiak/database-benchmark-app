@@ -9,9 +9,7 @@ public record EmbeddingMapping(
         @JsonProperty("entity_name") String entityName,
         @JsonProperty("is_embedded") boolean isEmbedded,
         @JsonProperty("parent_entity") String parentEntity,
-        @JsonProperty("field_name") String fieldName
-) {
+        @JsonProperty("field_name") String fieldName) {
     @JsonCreator
-    public EmbeddingMapping {
-    }
+    public EmbeddingMapping {}
 }

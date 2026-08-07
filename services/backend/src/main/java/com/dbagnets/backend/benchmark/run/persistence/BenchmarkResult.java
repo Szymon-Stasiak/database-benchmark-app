@@ -1,5 +1,7 @@
 package com.dbagnets.backend.benchmark.run.persistence;
 
+import java.time.Instant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,18 +14,19 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.Instant;
-
 @Entity
-@Table(name = "benchmark_results", indexes = {
-        @Index(name = "idx_results_run", columnList = "run_id"),
-        @Index(name = "idx_results_database", columnList = "database_id")
-})
+@Table(
+        name = "benchmark_results",
+        indexes = {
+            @Index(name = "idx_results_run", columnList = "run_id"),
+            @Index(name = "idx_results_database", columnList = "database_id")
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BenchmarkResult {

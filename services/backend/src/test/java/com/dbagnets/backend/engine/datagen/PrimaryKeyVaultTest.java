@@ -1,6 +1,7 @@
 package com.dbagnets.backend.engine.datagen;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -10,8 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class PrimaryKeyVaultTest {
 
@@ -49,15 +49,16 @@ class PrimaryKeyVaultTest {
         CountDownLatch latch = new CountDownLatch(threads);
 
         for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    for (int j = 0; j < perThread; j++) {
-                        vault.append("E", UUID.randomUUID().toString());
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
+            pool.submit(
+                    () -> {
+                        try {
+                            for (int j = 0; j < perThread; j++) {
+                                vault.append("E", UUID.randomUUID().toString());
+                            }
+                        } finally {
+                            latch.countDown();
+                        }
+                    });
         }
         latch.await(5, TimeUnit.SECONDS);
         pool.shutdown();

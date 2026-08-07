@@ -1,16 +1,18 @@
 package com.dbagnets.backend.shared.config;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
-import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.time.Instant;
+
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
+import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -26,11 +28,13 @@ public class StaleRunCleanup implements CommandLineRunner {
     public void run(String... args) {
         int patched = 0;
         for (BenchmarkRun run : runRepository.findAll()) {
-            if (run.getStatus() != RunStatus.RUNNING && run.getStatus() != RunStatus.PENDING) continue;
+            if (run.getStatus() != RunStatus.RUNNING && run.getStatus() != RunStatus.PENDING)
+                continue;
             run.setStatus(RunStatus.FAILED);
             if (run.getFinishedAt() == null) run.setFinishedAt(Instant.now());
             for (BenchmarkResult result : run.getResults()) {
-                if (result.getStatus() == RunStatus.RUNNING || result.getStatus() == RunStatus.PENDING) {
+                if (result.getStatus() == RunStatus.RUNNING
+                        || result.getStatus() == RunStatus.PENDING) {
                     result.setStatus(RunStatus.FAILED);
                     if (result.getErrorMessage() == null) result.setErrorMessage(STALE_MESSAGE);
                     if (result.getFinishedAt() == null) result.setFinishedAt(Instant.now());

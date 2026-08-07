@@ -1,13 +1,5 @@
 package com.dbagnets.backend.engine.datagen;
 
-import com.dbagnets.backend.engine.cascade.CascadeEdge;
-import com.dbagnets.backend.engine.cascade.CascadeNode;
-import com.dbagnets.backend.engine.cascade.CascadePlan;
-import com.dbagnets.backend.engine.schema.LogicalAttribute;
-import com.dbagnets.backend.engine.schema.LogicalEntity;
-import com.dbagnets.backend.engine.schema.LogicalSchema;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -15,6 +7,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.stereotype.Component;
+
+import com.dbagnets.backend.engine.cascade.CascadeEdge;
+import com.dbagnets.backend.engine.cascade.CascadeNode;
+import com.dbagnets.backend.engine.cascade.CascadePlan;
+import com.dbagnets.backend.engine.schema.LogicalAttribute;
+import com.dbagnets.backend.engine.schema.LogicalEntity;
+import com.dbagnets.backend.engine.schema.LogicalSchema;
 
 @Component
 public class RecordBuilder {
@@ -29,7 +30,8 @@ public class RecordBuilder {
         this.fakerCatalog = fakerCatalog;
     }
 
-    public Map<String, List<GeneratedRow>> generateAll(LogicalSchema schema, CascadePlan plan, PrimaryKeyVault vault) {
+    public Map<String, List<GeneratedRow>> generateAll(
+            LogicalSchema schema, CascadePlan plan, PrimaryKeyVault vault) {
         Map<String, List<GeneratedRow>> rowsByEntity = new LinkedHashMap<>();
         for (CascadeNode node : plan.nodesInInsertOrder()) {
             LogicalEntity entity = schema.requireEntity(node.entityName());
@@ -43,7 +45,8 @@ public class RecordBuilder {
         return rowsByEntity;
     }
 
-    public GeneratedRow generateOne(LogicalEntity entity, Map<String, String> fkColumnToParent, PrimaryKeyVault vault) {
+    public GeneratedRow generateOne(
+            LogicalEntity entity, Map<String, String> fkColumnToParent, PrimaryKeyVault vault) {
         LinkedHashMap<String, Object> values = new LinkedHashMap<>(entity.attributes().size());
         String logicalId = null;
         for (LogicalAttribute attr : entity.attributes()) {

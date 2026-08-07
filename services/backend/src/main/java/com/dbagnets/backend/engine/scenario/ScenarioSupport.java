@@ -15,10 +15,20 @@ public final class ScenarioSupport {
         };
     }
 
-    public static LogicalRelationship findRelationship(LogicalSchema schema, String parent, String child) {
+    public static LogicalRelationship findRelationship(
+            LogicalSchema schema, String parent, String child) {
         return schema.relationships().stream()
-                .filter(r -> r.parentEntity().equalsIgnoreCase(parent) && r.childEntity().equalsIgnoreCase(child))
+                .filter(
+                        r ->
+                                r.parentEntity().equalsIgnoreCase(parent)
+                                        && r.childEntity().equalsIgnoreCase(child))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("No relationship found between parent=" + parent + " and child=" + child));
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "No relationship found between parent="
+                                                + parent
+                                                + " and child="
+                                                + child));
     }
 }

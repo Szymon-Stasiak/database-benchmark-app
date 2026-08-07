@@ -12,7 +12,8 @@ public interface BenchmarkEventPort {
 
     void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status);
 
-    void broadcastDatabaseStatus(String benchmarkId, String databaseId, Object status, String errorMessage);
+    void broadcastDatabaseStatus(
+            String benchmarkId, String databaseId, Object status, String errorMessage);
 
     void broadcastDatabasePortAssigned(String benchmarkId, String databaseId, int hostPort);
 }

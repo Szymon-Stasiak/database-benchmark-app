@@ -1,11 +1,12 @@
 package com.dbagnets.backend.engine.schema;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 class LogicalSchemaLoaderTest {
 
@@ -18,7 +19,8 @@ class LogicalSchemaLoaderTest {
 
     @Test
     void parsesMinimalSchema() {
-        String json = """
+        String json =
+                """
             {
               "idea": "movies",
               "depth": 2,
@@ -47,7 +49,8 @@ class LogicalSchemaLoaderTest {
 
     @Test
     void parsesRelationshipsWithCardinality() {
-        String json = """
+        String json =
+                """
             {
               "idea": "t",
               "depth": 1,
@@ -63,7 +66,8 @@ class LogicalSchemaLoaderTest {
         LogicalSchema schema = loader.parse(json);
 
         assertThat(schema.relationships()).hasSize(1);
-        assertThat(schema.relationships().get(0).cardinality()).isEqualTo(RelationshipCardinality.ONE_TO_MANY);
+        assertThat(schema.relationships().get(0).cardinality())
+                .isEqualTo(RelationshipCardinality.ONE_TO_MANY);
         assertThat(schema.relationshipsTargeting("B")).hasSize(1);
     }
 

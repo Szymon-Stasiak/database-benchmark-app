@@ -1,18 +1,17 @@
 package com.dbagnets.backend.engine.schema;
 
+import java.util.List;
+import java.util.Optional;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import java.util.List;
-import java.util.Optional;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LogicalEntity(
         @JsonProperty("name") String name,
         @JsonProperty("description") String description,
-        @JsonProperty("attributes") List<LogicalAttribute> attributes
-) {
+        @JsonProperty("attributes") List<LogicalAttribute> attributes) {
     @JsonCreator
     public LogicalEntity {
         if (name == null || name.isBlank()) {

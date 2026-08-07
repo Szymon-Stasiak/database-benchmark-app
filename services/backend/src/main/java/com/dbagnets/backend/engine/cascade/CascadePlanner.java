@@ -1,9 +1,5 @@
 package com.dbagnets.backend.engine.cascade;
 
-import com.dbagnets.backend.engine.schema.LogicalRelationship;
-import com.dbagnets.backend.engine.schema.LogicalSchema;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +11,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.stereotype.Component;
+
+import com.dbagnets.backend.engine.schema.LogicalRelationship;
+import com.dbagnets.backend.engine.schema.LogicalSchema;
+
 @Component
 public class CascadePlanner {
 
@@ -22,7 +23,10 @@ public class CascadePlanner {
         return plan(schema, leafChoices, Map.of());
     }
 
-    public CascadePlan plan(LogicalSchema schema, List<LeafChoice> leafChoices, Map<String, Double> ratioOverrides) {
+    public CascadePlan plan(
+            LogicalSchema schema,
+            List<LeafChoice> leafChoices,
+            Map<String, Double> ratioOverrides) {
         if (leafChoices == null || leafChoices.isEmpty()) {
             throw new IllegalArgumentException("At least one leaf entity must be chosen");
         }
@@ -48,7 +52,8 @@ public class CascadePlanner {
             for (LogicalRelationship rel : parents) {
                 String parentName = rel.parentEntity();
                 String fk = ForeignKeyResolver.resolve(schema, rel);
-                double ratio = ratioOverrides.getOrDefault(rel.name(), rel.cardinality().defaultRatio());
+                double ratio =
+                        ratioOverrides.getOrDefault(rel.name(), rel.cardinality().defaultRatio());
 
                 long parentCount = (long) Math.ceil(childCount / ratio);
                 derived.merge(parentName, parentCount, Math::max);
@@ -64,10 +69,11 @@ public class CascadePlanner {
         List<String> ordered = topologicalSort(derived.keySet(), schema);
         List<CascadeNode> nodes = new ArrayList<>(ordered.size());
         for (String entity : ordered) {
-            nodes.add(new CascadeNode(
-                    entity,
-                    derived.getOrDefault(entity, 0L),
-                    incomingByChild.getOrDefault(entity, List.of())));
+            nodes.add(
+                    new CascadeNode(
+                            entity,
+                            derived.getOrDefault(entity, 0L),
+                            incomingByChild.getOrDefault(entity, List.of())));
         }
         return new CascadePlan(nodes);
     }
@@ -105,7 +111,8 @@ public class CascadePlanner {
             }
         }
         if (order.size() != nodes.size()) {
-            throw new IllegalStateException("Cycle detected in entity relationships; cascade planning is undefined");
+            throw new IllegalStateException(
+                    "Cycle detected in entity relationships; cascade planning is undefined");
         }
         return order;
     }

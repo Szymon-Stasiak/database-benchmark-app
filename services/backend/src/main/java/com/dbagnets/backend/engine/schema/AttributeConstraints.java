@@ -8,12 +8,10 @@ public record AttributeConstraints(
         @JsonProperty("is_unique") boolean isUnique,
         @JsonProperty("is_nullable") boolean isNullable,
         @JsonProperty("is_indexed") boolean isIndexed,
-        @JsonProperty("default_value") String defaultValue
-) {
+        @JsonProperty("default_value") String defaultValue) {
     public static final AttributeConstraints NONE =
             new AttributeConstraints(false, false, true, false, null);
 
     @JsonCreator
-    public AttributeConstraints {
-    }
+    public AttributeConstraints {}
 }

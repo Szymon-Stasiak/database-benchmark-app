@@ -1,10 +1,10 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
+import java.util.List;
+
 import com.dbagnets.backend.engine.driver.api.InsertMode;
 import com.dbagnets.backend.engine.driver.api.ReadDepth;
 import com.dbagnets.backend.engine.registry.SelectionStrategy;
-
-import java.util.List;
 
 public record StartReadRunRequest(
         String entityName,
@@ -14,8 +14,8 @@ public record StartReadRunRequest(
         SelectionStrategy selectionStrategy,
         InsertMode mode,
         Integer iterations,
-        List<String> databaseIds
-) implements EntityRunRequest {
+        List<String> databaseIds)
+        implements EntityRunRequest {
     private static final int DEFAULT_ITERATIONS = 1;
     private static final int MAX_ITERATIONS = 50;
 

@@ -7,8 +7,7 @@ import java.sql.SQLException;
 
 public final class SqlSupport {
 
-    private SqlSupport() {
-    }
+    private SqlSupport() {}
 
     public static void safeRollback(Connection conn) {
         try {

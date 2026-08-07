@@ -42,15 +42,16 @@ public interface SseEvents {
         return Map.of(PAYLOAD_BENCHMARK_ID, benchmarkId, PAYLOAD_STATUS, status);
     }
 
-    static Map<String, Object> databaseStatusPayload(String benchmarkId, String databaseId, Object status) {
+    static Map<String, Object> databaseStatusPayload(
+            String benchmarkId, String databaseId, Object status) {
         return Map.of(
                 PAYLOAD_BENCHMARK_ID, benchmarkId,
                 PAYLOAD_DATABASE_ID, databaseId,
-                PAYLOAD_STATUS, status
-        );
+                PAYLOAD_STATUS, status);
     }
 
-    static Map<String, Object> databaseStatusPayload(String benchmarkId, String databaseId, Object status, String errorMessage) {
+    static Map<String, Object> databaseStatusPayload(
+            String benchmarkId, String databaseId, Object status, String errorMessage) {
         if (errorMessage == null) {
             return databaseStatusPayload(benchmarkId, databaseId, status);
         }
@@ -58,15 +59,14 @@ public interface SseEvents {
                 PAYLOAD_BENCHMARK_ID, benchmarkId,
                 PAYLOAD_DATABASE_ID, databaseId,
                 PAYLOAD_STATUS, status,
-                PAYLOAD_ERROR_MESSAGE, errorMessage
-        );
+                PAYLOAD_ERROR_MESSAGE, errorMessage);
     }
 
-    static Map<String, Object> databasePortAssignedPayload(String benchmarkId, String databaseId, int hostPort) {
+    static Map<String, Object> databasePortAssignedPayload(
+            String benchmarkId, String databaseId, int hostPort) {
         return Map.of(
                 PAYLOAD_BENCHMARK_ID, benchmarkId,
                 PAYLOAD_DATABASE_ID, databaseId,
-                PAYLOAD_HOST_PORT, hostPort
-        );
+                PAYLOAD_HOST_PORT, hostPort);
     }
 }

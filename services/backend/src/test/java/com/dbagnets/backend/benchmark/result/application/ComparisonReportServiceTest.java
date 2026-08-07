@@ -1,16 +1,15 @@
 package com.dbagnets.backend.benchmark.result.application;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
-import com.dbagnets.backend.benchmark.run.persistence.OperationType;
-import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResultRepository;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
-import com.dbagnets.backend.benchmark.result.api.dto.ComparisonReportResponse;
-import com.dbagnets.backend.shared.entity.Benchmark;
-import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
-import com.dbagnets.backend.domain.DatabaseType;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,15 +17,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import com.dbagnets.backend.benchmark.result.api.dto.ComparisonReportResponse;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
+import com.dbagnets.backend.benchmark.run.persistence.OperationType;
+import com.dbagnets.backend.benchmark.run.persistence.RunStatus;
+import com.dbagnets.backend.domain.DatabaseType;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
+import com.dbagnets.backend.shared.entity.Benchmark;
+import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 
 @ExtendWith(MockitoExtension.class)
 class ComparisonReportServiceTest {
@@ -34,10 +34,10 @@ class ComparisonReportServiceTest {
     private static final String BENCHMARK_ID = "bench-1";
 
     @Mock private BenchmarkRepository benchmarkRepository;
+
     @Mock private BenchmarkRunRepository runRepository;
 
-    @InjectMocks
-    private ComparisonReportService service;
+    @InjectMocks private ComparisonReportService service;
 
     private BenchmarkDatabase pg;
     private BenchmarkDatabase mongo;
@@ -52,50 +52,87 @@ class ComparisonReportServiceTest {
         lenient().when(benchmark.getId()).thenReturn(BENCHMARK_ID);
         lenient().when(benchmark.getTopic()).thenReturn("Movies");
         lenient().when(benchmark.getDatabases()).thenReturn(List.of(pg, mongo, neo4j));
-        lenient().when(benchmarkRepository.findById(BENCHMARK_ID)).thenReturn(Optional.of(benchmark));
+        lenient()
+                .when(benchmarkRepository.findById(BENCHMARK_ID))
+                .thenReturn(Optional.of(benchmark));
     }
 
     @Test
     void throwsWhenBenchmarkMissing() {
         when(benchmarkRepository.findById("nope")).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.build("nope"))
-                .isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.build("nope")).isInstanceOf(NoSuchElementException.class);
     }
 
     @Test
     void emitsPerDatabaseSummariesEvenWithoutRuns() {
-        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID)).thenReturn(List.of());
+        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
+                .thenReturn(List.of());
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
 
-        assertThat(report.databases()).extracting(ComparisonReportResponse.DatabaseDescriptor::dbName)
+        assertThat(report.databases())
+                .extracting(ComparisonReportResponse.DatabaseDescriptor::dbName)
                 .containsExactly("postgresql", "mongodb", "neo4j");
-        assertThat(report.insertSummary()).hasSize(3).allSatisfy(s -> {
-            assertThat(s.totalRuns()).isZero();
-            assertThat(s.totalRowsInserted()).isZero();
-            assertThat(s.avgDbTimeMs()).isNull();
-        });
-        assertThat(report.radarScores()).hasSize(3).allSatisfy(s -> {
-            assertThat(s.insertSpeed()).isZero();
-            assertThat(s.consistency()).isZero();
-        });
+        assertThat(report.insertSummary())
+                .hasSize(3)
+                .allSatisfy(
+                        s -> {
+                            assertThat(s.totalRuns()).isZero();
+                            assertThat(s.totalRowsInserted()).isZero();
+                            assertThat(s.avgDbTimeMs()).isNull();
+                        });
+        assertThat(report.radarScores())
+                .hasSize(3)
+                .allSatisfy(
+                        s -> {
+                            assertThat(s.insertSpeed()).isZero();
+                            assertThat(s.consistency()).isZero();
+                        });
     }
 
     @Test
     void insertSummaryAggregatesRowsConflictsAndAverages() {
-        BenchmarkRun runA = insertRun(
-                successInsert("db-pg", "postgresql", 1000L, 50_000_000L, 80_000_000L, 30_000_000L, 0, 1000L),
-                successInsert("db-mongo", "mongodb", 1000L, 30_000_000L, 90_000_000L, 60_000_000L, 0, 1000L));
-        BenchmarkRun runB = insertRun(
-                successInsert("db-pg", "postgresql", 500L, 40_000_000L, 70_000_000L, 30_000_000L, 2, 500L),
-                failedInsert("db-mongo", "mongodb", "boom"));
+        BenchmarkRun runA =
+                insertRun(
+                        successInsert(
+                                "db-pg",
+                                "postgresql",
+                                1000L,
+                                50_000_000L,
+                                80_000_000L,
+                                30_000_000L,
+                                0,
+                                1000L),
+                        successInsert(
+                                "db-mongo",
+                                "mongodb",
+                                1000L,
+                                30_000_000L,
+                                90_000_000L,
+                                60_000_000L,
+                                0,
+                                1000L));
+        BenchmarkRun runB =
+                insertRun(
+                        successInsert(
+                                "db-pg",
+                                "postgresql",
+                                500L,
+                                40_000_000L,
+                                70_000_000L,
+                                30_000_000L,
+                                2,
+                                500L),
+                        failedInsert("db-mongo", "mongodb", "boom"));
 
         when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
                 .thenReturn(List.of(runA, runB));
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
-        ComparisonReportResponse.InsertSummary pgSummary = findByDb(report.insertSummary(), "db-pg");
-        ComparisonReportResponse.InsertSummary mongoSummary = findByDb(report.insertSummary(), "db-mongo");
+        ComparisonReportResponse.InsertSummary pgSummary =
+                findByDb(report.insertSummary(), "db-pg");
+        ComparisonReportResponse.InsertSummary mongoSummary =
+                findByDb(report.insertSummary(), "db-mongo");
 
         assertThat(pgSummary.totalRuns()).isEqualTo(2);
         assertThat(pgSummary.totalRowsInserted()).isEqualTo(1500L);
@@ -113,11 +150,29 @@ class ComparisonReportServiceTest {
 
     @Test
     void readSummaryAveragesPercentilesInMicroseconds() {
-        BenchmarkRun run = readRun(
-                successRead("db-pg", "postgresql", 100L, 100, 1_000_000L, 2_000_000L, 3_000_000L, 1_500_000L),
-                successRead("db-pg", "postgresql", 100L, 100, 3_000_000L, 4_000_000L, 5_000_000L, 3_500_000L));
+        BenchmarkRun run =
+                readRun(
+                        successRead(
+                                "db-pg",
+                                "postgresql",
+                                100L,
+                                100,
+                                1_000_000L,
+                                2_000_000L,
+                                3_000_000L,
+                                1_500_000L),
+                        successRead(
+                                "db-pg",
+                                "postgresql",
+                                100L,
+                                100,
+                                3_000_000L,
+                                4_000_000L,
+                                5_000_000L,
+                                3_500_000L));
 
-        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID)).thenReturn(List.of(run));
+        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
+                .thenReturn(List.of(run));
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
         ComparisonReportResponse.ReadSummary pgSummary = findByDb(report.readSummary(), "db-pg");
@@ -130,14 +185,33 @@ class ComparisonReportServiceTest {
 
     @Test
     void deleteSummaryComputesSizeFreedFromBeforeAfter() {
-        BenchmarkRun run = deleteRun(
-                successDelete("db-pg", "postgresql", 50L, 10_000_000L, 20_000_000L, 30_000_000L, 1_000_000L, 500_000L),
-                successDelete("db-pg", "postgresql", 25L, 5_000_000L, 10_000_000L, 15_000_000L, 500_000L, 250_000L));
+        BenchmarkRun run =
+                deleteRun(
+                        successDelete(
+                                "db-pg",
+                                "postgresql",
+                                50L,
+                                10_000_000L,
+                                20_000_000L,
+                                30_000_000L,
+                                1_000_000L,
+                                500_000L),
+                        successDelete(
+                                "db-pg",
+                                "postgresql",
+                                25L,
+                                5_000_000L,
+                                10_000_000L,
+                                15_000_000L,
+                                500_000L,
+                                250_000L));
 
-        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID)).thenReturn(List.of(run));
+        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
+                .thenReturn(List.of(run));
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
-        ComparisonReportResponse.DeleteSummary pgSummary = findByDb(report.deleteSummary(), "db-pg");
+        ComparisonReportResponse.DeleteSummary pgSummary =
+                findByDb(report.deleteSummary(), "db-pg");
 
         assertThat(pgSummary.totalRowsDeleted()).isEqualTo(75L);
         assertThat(pgSummary.totalSizeFreedBytes()).isEqualTo(750_000L);
@@ -145,15 +219,66 @@ class ComparisonReportServiceTest {
 
     @Test
     void radarRewardsLowerLatencyAndHigherThroughput() {
-        BenchmarkRun ins = insertRun(
-                successInsert("db-pg", "postgresql", 1000L, 50_000_000L, 60_000_000L, 10_000_000L, 0, 200L),
-                successInsert("db-mongo", "mongodb", 1000L, 50_000_000L, 60_000_000L, 10_000_000L, 0, 100L));
-        BenchmarkRun rd = readRun(
-                successRead("db-pg", "postgresql", 100L, 100, 1_000_000L, 2_000_000L, 3_000_000L, 1_500_000L),
-                successRead("db-mongo", "mongodb", 100L, 100, 4_000_000L, 8_000_000L, 12_000_000L, 6_000_000L));
-        BenchmarkRun del = deleteRun(
-                successDelete("db-pg", "postgresql", 50L, 5_000_000L, 10_000_000L, 15_000_000L, 1_000L, 0L),
-                successDelete("db-mongo", "mongodb", 50L, 10_000_000L, 20_000_000L, 30_000_000L, 1_000L, 0L));
+        BenchmarkRun ins =
+                insertRun(
+                        successInsert(
+                                "db-pg",
+                                "postgresql",
+                                1000L,
+                                50_000_000L,
+                                60_000_000L,
+                                10_000_000L,
+                                0,
+                                200L),
+                        successInsert(
+                                "db-mongo",
+                                "mongodb",
+                                1000L,
+                                50_000_000L,
+                                60_000_000L,
+                                10_000_000L,
+                                0,
+                                100L));
+        BenchmarkRun rd =
+                readRun(
+                        successRead(
+                                "db-pg",
+                                "postgresql",
+                                100L,
+                                100,
+                                1_000_000L,
+                                2_000_000L,
+                                3_000_000L,
+                                1_500_000L),
+                        successRead(
+                                "db-mongo",
+                                "mongodb",
+                                100L,
+                                100,
+                                4_000_000L,
+                                8_000_000L,
+                                12_000_000L,
+                                6_000_000L));
+        BenchmarkRun del =
+                deleteRun(
+                        successDelete(
+                                "db-pg",
+                                "postgresql",
+                                50L,
+                                5_000_000L,
+                                10_000_000L,
+                                15_000_000L,
+                                1_000L,
+                                0L),
+                        successDelete(
+                                "db-mongo",
+                                "mongodb",
+                                50L,
+                                10_000_000L,
+                                20_000_000L,
+                                30_000_000L,
+                                1_000L,
+                                0L));
 
         when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
                 .thenReturn(List.of(ins, rd, del));
@@ -177,29 +302,41 @@ class ComparisonReportServiceTest {
 
     @Test
     void radarHandlesAllNullsWithoutDivisionByZero() {
-        BenchmarkRun run = readRun(
-                pendingRead("db-pg", "postgresql"),
-                pendingRead("db-mongo", "mongodb"));
+        BenchmarkRun run =
+                readRun(pendingRead("db-pg", "postgresql"), pendingRead("db-mongo", "mongodb"));
 
-        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID)).thenReturn(List.of(run));
+        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
+                .thenReturn(List.of(run));
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
 
-        assertThat(report.radarScores()).allSatisfy(s -> {
-            assertThat(s.insertSpeed()).isFinite().isZero();
-            assertThat(s.readSpeed()).isFinite().isZero();
-            assertThat(s.deleteSpeed()).isFinite().isZero();
-            assertThat(s.sizeEfficiency()).isFinite().isZero();
-        });
+        assertThat(report.radarScores())
+                .allSatisfy(
+                        s -> {
+                            assertThat(s.insertSpeed()).isFinite().isZero();
+                            assertThat(s.readSpeed()).isFinite().isZero();
+                            assertThat(s.deleteSpeed()).isFinite().isZero();
+                            assertThat(s.sizeEfficiency()).isFinite().isZero();
+                        });
     }
 
     @Test
     void consistencyReflectsSuccessRatio() {
-        BenchmarkRun run = insertRun(
-                successInsert("db-pg", "postgresql", 100L, 1_000_000L, 2_000_000L, 1_000_000L, 0, 100L),
-                failedInsert("db-pg", "postgresql", "fail"));
+        BenchmarkRun run =
+                insertRun(
+                        successInsert(
+                                "db-pg",
+                                "postgresql",
+                                100L,
+                                1_000_000L,
+                                2_000_000L,
+                                1_000_000L,
+                                0,
+                                100L),
+                        failedInsert("db-pg", "postgresql", "fail"));
 
-        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID)).thenReturn(List.of(run));
+        when(runRepository.findByBenchmarkIdOrderByCreatedAtDesc(BENCHMARK_ID))
+                .thenReturn(List.of(run));
 
         ComparisonReportResponse report = service.build(BENCHMARK_ID);
         ComparisonReportResponse.RadarScore pgRadar = findByDb(report.radarScores(), "db-pg");
@@ -234,8 +371,15 @@ class ComparisonReportServiceTest {
         return run;
     }
 
-    private BenchmarkResult successInsert(String dbId, String dbName, long rows, long dbNs, long wireNs,
-                                          long overheadNs, int conflicts, long durationMs) {
+    private BenchmarkResult successInsert(
+            String dbId,
+            String dbName,
+            long rows,
+            long dbNs,
+            long wireNs,
+            long overheadNs,
+            int conflicts,
+            long durationMs) {
         BenchmarkResult r = new BenchmarkResult(dbId, dbName);
         r.setStatus(RunStatus.SUCCESS);
         r.setRowsAffected(rows);
@@ -255,8 +399,15 @@ class ComparisonReportServiceTest {
         return r;
     }
 
-    private BenchmarkResult successRead(String dbId, String dbName, long rowsRead, int samples,
-                                         long p50, long p95, long p99, long mean) {
+    private BenchmarkResult successRead(
+            String dbId,
+            String dbName,
+            long rowsRead,
+            int samples,
+            long p50,
+            long p95,
+            long p99,
+            long mean) {
         BenchmarkResult r = new BenchmarkResult(dbId, dbName);
         r.setStatus(RunStatus.SUCCESS);
         r.setRowsAffected(rowsRead);
@@ -274,8 +425,15 @@ class ComparisonReportServiceTest {
         return r;
     }
 
-    private BenchmarkResult successDelete(String dbId, String dbName, long rows, long p50, long p95, long p99,
-                                          long sizeBefore, long sizeAfter) {
+    private BenchmarkResult successDelete(
+            String dbId,
+            String dbName,
+            long rows,
+            long p50,
+            long p95,
+            long p99,
+            long sizeBefore,
+            long sizeAfter) {
         BenchmarkResult r = new BenchmarkResult(dbId, dbName);
         r.setStatus(RunStatus.SUCCESS);
         r.setRowsAffected(rows);

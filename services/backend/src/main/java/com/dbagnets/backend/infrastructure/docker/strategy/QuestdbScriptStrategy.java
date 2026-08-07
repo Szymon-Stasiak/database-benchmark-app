@@ -1,12 +1,13 @@
 package com.dbagnets.backend.infrastructure.docker.strategy;
 
-import com.dbagnets.backend.infrastructure.docker.DockerService;
-import lombok.extern.slf4j.Slf4j;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.Properties;
+
+import com.dbagnets.backend.infrastructure.docker.DockerService;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class QuestdbScriptStrategy implements ScriptExecutionStrategy {
@@ -19,7 +20,7 @@ public class QuestdbScriptStrategy implements ScriptExecutionStrategy {
     public void waitForReady(DockerService docker, String containerId, int hostPort) {
         for (int i = 0; i < 60; i++) {
             try (Connection conn = connect(hostPort);
-                 Statement stmt = conn.createStatement()) {
+                    Statement stmt = conn.createStatement()) {
                 stmt.execute("SELECT 1");
                 log.info("QuestDB ready on PG-wire port {}", hostPort);
                 return;
@@ -33,7 +34,7 @@ public class QuestdbScriptStrategy implements ScriptExecutionStrategy {
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
         try (Connection conn = connect(hostPort);
-             Statement stmt = conn.createStatement()) {
+                Statement stmt = conn.createStatement()) {
             for (String raw : script.split(";")) {
                 String sql = raw.trim();
                 if (sql.isEmpty() || sql.startsWith("--")) continue;
@@ -63,6 +64,10 @@ public class QuestdbScriptStrategy implements ScriptExecutionStrategy {
     }
 
     private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

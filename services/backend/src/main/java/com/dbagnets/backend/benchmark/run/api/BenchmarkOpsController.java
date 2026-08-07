@@ -1,21 +1,22 @@
 package com.dbagnets.backend.benchmark.run.api;
 
-import com.dbagnets.backend.benchmark.run.application.BenchmarkRunSupport;
-import com.dbagnets.backend.benchmark.run.application.EntitySamplerService;
-import com.dbagnets.backend.benchmark.run.application.delete.DeleteRunOrchestrator;
-import com.dbagnets.backend.benchmark.run.application.insert.InsertProgressTracker;
-import com.dbagnets.backend.benchmark.run.application.insert.InsertRunOrchestrator;
-import com.dbagnets.backend.benchmark.run.application.read.ReadRunOrchestrator;
-import com.dbagnets.backend.benchmark.run.application.scenario.ScenarioApplicabilityService;
-import com.dbagnets.backend.benchmark.run.application.scenario.ScenarioRunOrchestrator;
-import com.dbagnets.backend.benchmark.run.internal.CascadePreviewService;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
-import com.dbagnets.backend.benchmark.run.persistence.OperationType;
-import com.dbagnets.backend.benchmark.result.application.ComparisonReportService;
-import com.dbagnets.backend.benchmark.result.application.DataSizeProbe;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.dbagnets.backend.benchmark.result.api.dto.ComparisonReportResponse;
 import com.dbagnets.backend.benchmark.result.api.dto.DatabaseSizeResponse;
+import com.dbagnets.backend.benchmark.result.application.ComparisonReportService;
+import com.dbagnets.backend.benchmark.result.application.DataSizeProbe;
 import com.dbagnets.backend.benchmark.run.api.dto.BatchProgressEvent;
 import com.dbagnets.backend.benchmark.run.api.dto.CascadePreviewRequest;
 import com.dbagnets.backend.benchmark.run.api.dto.CascadePreviewResponse;
@@ -30,22 +31,23 @@ import com.dbagnets.backend.benchmark.run.api.dto.StartDeleteRunRequest;
 import com.dbagnets.backend.benchmark.run.api.dto.StartInsertRunRequest;
 import com.dbagnets.backend.benchmark.run.api.dto.StartReadRunRequest;
 import com.dbagnets.backend.benchmark.run.api.dto.StartScenarioRunRequest;
+import com.dbagnets.backend.benchmark.run.application.BenchmarkRunSupport;
+import com.dbagnets.backend.benchmark.run.application.EntitySamplerService;
+import com.dbagnets.backend.benchmark.run.application.delete.DeleteRunOrchestrator;
+import com.dbagnets.backend.benchmark.run.application.insert.InsertProgressTracker;
+import com.dbagnets.backend.benchmark.run.application.insert.InsertRunOrchestrator;
+import com.dbagnets.backend.benchmark.run.application.read.ReadRunOrchestrator;
+import com.dbagnets.backend.benchmark.run.application.scenario.ScenarioApplicabilityService;
+import com.dbagnets.backend.benchmark.run.application.scenario.ScenarioRunOrchestrator;
+import com.dbagnets.backend.benchmark.run.internal.CascadePreviewService;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRunRepository;
+import com.dbagnets.backend.benchmark.run.persistence.OperationType;
 import com.dbagnets.backend.engine.registry.EntityIdRegistry;
 import com.dbagnets.backend.engine.resource.ResourceSample;
 import com.dbagnets.backend.engine.schema.LogicalSchema;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequiredArgsConstructor
@@ -73,25 +75,36 @@ public class BenchmarkOpsController {
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/cascade-preview")
-    public CascadePreviewResponse previewCascade(@PathVariable String benchmarkId, @RequestBody CascadePreviewRequest request) {
+    public CascadePreviewResponse previewCascade(
+            @PathVariable String benchmarkId, @RequestBody CascadePreviewRequest request) {
         LogicalSchema schema = runSupport.loadSchema(benchmarkId);
         return cascadePreviewService.previewFromRequest(schema, request);
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/insert-runs")
-    public ResponseEntity<InsertRunResponse> startInsertRun(@PathVariable String benchmarkId, @RequestBody StartInsertRunRequest request) {
+    public ResponseEntity<InsertRunResponse> startInsertRun(
+            @PathVariable String benchmarkId, @RequestBody StartInsertRunRequest request) {
         BenchmarkRun run = insertOrchestrator.startRun(benchmarkId, request);
         return ResponseEntity.ok(InsertRunResponse.from(run));
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/insert-runs")
     public List<InsertRunResponse> listInsertRuns(@PathVariable String benchmarkId) {
-        return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.INSERT).stream().map(InsertRunResponse::from).toList();
+        return runRepository
+                .findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(
+                        benchmarkId, OperationType.INSERT)
+                .stream()
+                .map(InsertRunResponse::from)
+                .toList();
     }
 
     @GetMapping("/insert-runs/{runId}")
     public InsertRunResponse getInsertRun(@PathVariable String runId) {
-        BenchmarkRun run = runRepository.findById(runId).orElseThrow(() -> new NoSuchElementException("Insert run not found: " + runId));
+        BenchmarkRun run =
+                runRepository
+                        .findById(runId)
+                        .orElseThrow(
+                                () -> new NoSuchElementException("Insert run not found: " + runId));
         return InsertRunResponse.from(run);
     }
 
@@ -101,7 +114,8 @@ public class BenchmarkOpsController {
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/read-runs/prepare")
-    public PreparedRunResponse prepareReadRun(@PathVariable String benchmarkId, @RequestBody StartReadRunRequest request) {
+    public PreparedRunResponse prepareReadRun(
+            @PathVariable String benchmarkId, @RequestBody StartReadRunRequest request) {
         return readOrchestrator.prepareRun(benchmarkId, request);
     }
 
@@ -112,30 +126,44 @@ public class BenchmarkOpsController {
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/read-runs")
-    public ResponseEntity<ReadRunResponse> startReadRun(@PathVariable String benchmarkId, @RequestBody StartReadRunRequest request) {
+    public ResponseEntity<ReadRunResponse> startReadRun(
+            @PathVariable String benchmarkId, @RequestBody StartReadRunRequest request) {
         BenchmarkRun run = readOrchestrator.startRun(benchmarkId, request);
-        return ResponseEntity.ok(ReadRunResponse.from(run, request.sampleSize(), request.includeChildren()));
+        return ResponseEntity.ok(
+                ReadRunResponse.from(run, request.sampleSize(), request.includeChildren()));
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/read-runs")
     public List<ReadRunResponse> listReadRuns(@PathVariable String benchmarkId) {
-        return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.READ).stream().map(r -> ReadRunResponse.from(r, null, null)).toList();
+        return runRepository
+                .findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(
+                        benchmarkId, OperationType.READ)
+                .stream()
+                .map(r -> ReadRunResponse.from(r, null, null))
+                .toList();
     }
 
     @GetMapping("/read-runs/{runId}")
     public ReadRunResponse getReadRun(@PathVariable String runId) {
-        BenchmarkRun run = runRepository.findById(runId).orElseThrow(() -> new NoSuchElementException("Read run not found: " + runId));
+        BenchmarkRun run =
+                runRepository
+                        .findById(runId)
+                        .orElseThrow(
+                                () -> new NoSuchElementException("Read run not found: " + runId));
         return ReadRunResponse.from(run, null, null);
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/delete-runs")
-    public ResponseEntity<DeleteRunResponse> startDeleteRun(@PathVariable String benchmarkId, @RequestBody StartDeleteRunRequest request) {
+    public ResponseEntity<DeleteRunResponse> startDeleteRun(
+            @PathVariable String benchmarkId, @RequestBody StartDeleteRunRequest request) {
         BenchmarkRun run = deleteOrchestrator.startRun(benchmarkId, request);
-        return ResponseEntity.ok(DeleteRunResponse.from(run, request.sampleSize(), request.includeChildren()));
+        return ResponseEntity.ok(
+                DeleteRunResponse.from(run, request.sampleSize(), request.includeChildren()));
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/delete-runs/prepare")
-    public PreparedRunResponse prepareDeleteRun(@PathVariable String benchmarkId, @RequestBody StartDeleteRunRequest request) {
+    public PreparedRunResponse prepareDeleteRun(
+            @PathVariable String benchmarkId, @RequestBody StartDeleteRunRequest request) {
         return deleteOrchestrator.prepareRun(benchmarkId, request);
     }
 
@@ -148,17 +176,34 @@ public class BenchmarkOpsController {
     @GetMapping("/benchmarks/{benchmarkId}/registry-summary")
     public List<Map<String, Object>> getRegistrySummary(@PathVariable String benchmarkId) {
         LogicalSchema schema = runSupport.loadSchema(benchmarkId);
-        return schema.entities().stream().map(e -> Map.<String, Object>of("entityName", e.name(), "availableIds", registryService.countLogicalIds(benchmarkId, e.name()))).toList();
+        return schema.entities().stream()
+                .map(
+                        e ->
+                                Map.<String, Object>of(
+                                        "entityName",
+                                        e.name(),
+                                        "availableIds",
+                                        registryService.countLogicalIds(benchmarkId, e.name())))
+                .toList();
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/delete-runs")
     public List<DeleteRunResponse> listDeleteRuns(@PathVariable String benchmarkId) {
-        return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.DELETE).stream().map(r -> DeleteRunResponse.from(r, null, null)).toList();
+        return runRepository
+                .findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(
+                        benchmarkId, OperationType.DELETE)
+                .stream()
+                .map(r -> DeleteRunResponse.from(r, null, null))
+                .toList();
     }
 
     @GetMapping("/delete-runs/{runId}")
     public DeleteRunResponse getDeleteRun(@PathVariable String runId) {
-        BenchmarkRun run = runRepository.findById(runId).orElseThrow(() -> new NoSuchElementException("Delete run not found: " + runId));
+        BenchmarkRun run =
+                runRepository
+                        .findById(runId)
+                        .orElseThrow(
+                                () -> new NoSuchElementException("Delete run not found: " + runId));
         return DeleteRunResponse.from(run, null, null);
     }
 
@@ -168,7 +213,8 @@ public class BenchmarkOpsController {
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/scenario-runs/prepare")
-    public PreparedScenarioRunResponse prepareScenarioRun(@PathVariable String benchmarkId, @RequestBody StartScenarioRunRequest request) {
+    public PreparedScenarioRunResponse prepareScenarioRun(
+            @PathVariable String benchmarkId, @RequestBody StartScenarioRunRequest request) {
         return scenarioOrchestrator.prepareRun(benchmarkId, request);
     }
 
@@ -179,25 +225,39 @@ public class BenchmarkOpsController {
     }
 
     @PostMapping("/benchmarks/{benchmarkId}/scenario-runs")
-    public ResponseEntity<ScenarioRunResponse> startScenarioRun(@PathVariable String benchmarkId, @RequestBody StartScenarioRunRequest request) {
+    public ResponseEntity<ScenarioRunResponse> startScenarioRun(
+            @PathVariable String benchmarkId, @RequestBody StartScenarioRunRequest request) {
         BenchmarkRun run = scenarioOrchestrator.startRun(benchmarkId, request);
         return ResponseEntity.ok(ScenarioRunResponse.from(run));
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/scenario-runs")
     public List<ScenarioRunResponse> listScenarioRuns(@PathVariable String benchmarkId) {
-        return runRepository.findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(benchmarkId, OperationType.SCENARIO).stream().map(ScenarioRunResponse::from).toList();
+        return runRepository
+                .findByBenchmarkIdAndOperationTypeOrderByCreatedAtDesc(
+                        benchmarkId, OperationType.SCENARIO)
+                .stream()
+                .map(ScenarioRunResponse::from)
+                .toList();
     }
 
     @GetMapping("/scenario-runs/{runId}")
     public ScenarioRunResponse getScenarioRun(@PathVariable String runId) {
-        BenchmarkRun run = runRepository.findById(runId).orElseThrow(() -> new NoSuchElementException("Scenario run not found: " + runId));
+        BenchmarkRun run =
+                runRepository
+                        .findById(runId)
+                        .orElseThrow(
+                                () ->
+                                        new NoSuchElementException(
+                                                "Scenario run not found: " + runId));
         return ScenarioRunResponse.from(run);
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/entities/{entityName}/sample-id")
-    public Map<String, String> sampleEntityId(@PathVariable String benchmarkId, @PathVariable String entityName,
-                                              @RequestParam(required = false, defaultValue = "false") boolean withChildren) {
+    public Map<String, String> sampleEntityId(
+            @PathVariable String benchmarkId,
+            @PathVariable String entityName,
+            @RequestParam(required = false, defaultValue = "false") boolean withChildren) {
         if (withChildren) {
             String id = entitySamplerService.sampleParentIdWithChildren(benchmarkId, entityName);
             if (id != null) return Map.of("logicalId", id);
@@ -209,12 +269,22 @@ public class BenchmarkOpsController {
     @GetMapping("/benchmarks/{benchmarkId}/relationships")
     public List<Map<String, Object>> listRelationships(@PathVariable String benchmarkId) {
         LogicalSchema schema = runSupport.loadSchema(benchmarkId);
-        return schema.relationships().stream().map(r -> Map.<String, Object>of(
-                "name", r.name() == null ? "" : r.name(),
-                "parentEntity", r.parentEntity(),
-                "childEntity", r.childEntity(),
-                "fkColumnInChild", r.fkColumnInChild() == null ? "" : r.fkColumnInChild(),
-                "cardinality", r.cardinality() == null ? "" : r.cardinality().name())).toList();
+        return schema.relationships().stream()
+                .map(
+                        r ->
+                                Map.<String, Object>of(
+                                        "name", r.name() == null ? "" : r.name(),
+                                        "parentEntity", r.parentEntity(),
+                                        "childEntity", r.childEntity(),
+                                        "fkColumnInChild",
+                                                r.fkColumnInChild() == null
+                                                        ? ""
+                                                        : r.fkColumnInChild(),
+                                        "cardinality",
+                                                r.cardinality() == null
+                                                        ? ""
+                                                        : r.cardinality().name()))
+                .toList();
     }
 
     @GetMapping("/benchmarks/{benchmarkId}/scenario-applicability")
@@ -223,22 +293,26 @@ public class BenchmarkOpsController {
     }
 
     @GetMapping("/scenario-runs/{runId}/results/{resultId}/resource-timeline")
-    public List<ResourceSample> getScenarioResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+    public List<ResourceSample> getScenarioResourceTimeline(
+            @PathVariable String runId, @PathVariable String resultId) {
         return runSupport.loadResourceTimeline(runId, resultId, OperationType.SCENARIO);
     }
 
     @GetMapping("/insert-runs/{runId}/results/{resultId}/resource-timeline")
-    public List<ResourceSample> getInsertResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+    public List<ResourceSample> getInsertResourceTimeline(
+            @PathVariable String runId, @PathVariable String resultId) {
         return runSupport.loadResourceTimeline(runId, resultId, OperationType.INSERT);
     }
 
     @GetMapping("/read-runs/{runId}/results/{resultId}/resource-timeline")
-    public List<ResourceSample> getReadResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+    public List<ResourceSample> getReadResourceTimeline(
+            @PathVariable String runId, @PathVariable String resultId) {
         return runSupport.loadResourceTimeline(runId, resultId, OperationType.READ);
     }
 
     @GetMapping("/delete-runs/{runId}/results/{resultId}/resource-timeline")
-    public List<ResourceSample> getDeleteResourceTimeline(@PathVariable String runId, @PathVariable String resultId) {
+    public List<ResourceSample> getDeleteResourceTimeline(
+            @PathVariable String runId, @PathVariable String resultId) {
         return runSupport.loadResourceTimeline(runId, resultId, OperationType.DELETE);
     }
 

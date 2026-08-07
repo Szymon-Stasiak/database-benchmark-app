@@ -1,5 +1,25 @@
 package com.dbagnets.backend.benchmark.setup.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
+
 import com.dbagnets.backend.benchmark.result.application.DataSizeProbe;
 import com.dbagnets.backend.benchmark.setup.port.ContainerManagementPort;
 import com.dbagnets.backend.domain.BenchmarkStatus;
@@ -11,35 +31,21 @@ import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.shared.entity.Benchmark;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 import com.dbagnets.backend.shared.entity.User;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class BenchmarkOperationsServiceTest {
 
     @Mock BenchmarkRepository benchmarkRepository;
+
     @Mock BenchmarkDatabaseRepository databaseRepository;
+
     @Mock ContainerManagementPort containerManager;
+
     @Mock BenchmarkDeploymentService deployment;
+
     @Mock DataSizeProbe dataSizeProbe;
+
     @Mock EntityIdRegistry entityIdRegistry;
 
     @InjectMocks BenchmarkOperationsService operations;

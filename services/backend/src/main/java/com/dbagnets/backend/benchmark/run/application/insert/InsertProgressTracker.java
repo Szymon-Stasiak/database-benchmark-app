@@ -1,12 +1,13 @@
 package com.dbagnets.backend.benchmark.run.application.insert;
 
-import com.dbagnets.backend.benchmark.run.api.dto.BatchProgressEvent;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.stereotype.Service;
+
+import com.dbagnets.backend.benchmark.run.api.dto.BatchProgressEvent;
 
 @Service
 public class InsertProgressTracker {

@@ -1,18 +1,17 @@
 package com.dbagnets.backend.engine.scenario;
 
-import com.dbagnets.backend.domain.DatabaseEngine;
-
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.dbagnets.backend.domain.DatabaseEngine;
+
 public final class ScenarioApplicability {
 
     private static final Map<ScenarioType, Set<DatabaseEngine>> SUPPORT = buildSupportMatrix();
 
-    private ScenarioApplicability() {
-    }
+    private ScenarioApplicability() {}
 
     public static boolean isApplicable(ScenarioType type, DatabaseEngine engine) {
         Set<DatabaseEngine> supported = SUPPORT.get(type);
@@ -25,9 +24,34 @@ public final class ScenarioApplicability {
 
     private static Map<ScenarioType, Set<DatabaseEngine>> buildSupportMatrix() {
         EnumMap<ScenarioType, Set<DatabaseEngine>> map = new EnumMap<>(ScenarioType.class);
-        map.put(ScenarioType.AGGREGATE_GROUP_COUNT, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.TIMESCALEDB, DatabaseEngine.QUESTDB, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
-        map.put(ScenarioType.RANGE_FILTER, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.TIMESCALEDB, DatabaseEngine.QUESTDB, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
-        map.put(ScenarioType.GRAPH_TRAVERSAL, EnumSet.of(DatabaseEngine.POSTGRESQL, DatabaseEngine.MYSQL, DatabaseEngine.MONGODB, DatabaseEngine.NEO4J, DatabaseEngine.MEMGRAPH));
+        map.put(
+                ScenarioType.AGGREGATE_GROUP_COUNT,
+                EnumSet.of(
+                        DatabaseEngine.POSTGRESQL,
+                        DatabaseEngine.TIMESCALEDB,
+                        DatabaseEngine.QUESTDB,
+                        DatabaseEngine.MYSQL,
+                        DatabaseEngine.MONGODB,
+                        DatabaseEngine.NEO4J,
+                        DatabaseEngine.MEMGRAPH));
+        map.put(
+                ScenarioType.RANGE_FILTER,
+                EnumSet.of(
+                        DatabaseEngine.POSTGRESQL,
+                        DatabaseEngine.TIMESCALEDB,
+                        DatabaseEngine.QUESTDB,
+                        DatabaseEngine.MYSQL,
+                        DatabaseEngine.MONGODB,
+                        DatabaseEngine.NEO4J,
+                        DatabaseEngine.MEMGRAPH));
+        map.put(
+                ScenarioType.GRAPH_TRAVERSAL,
+                EnumSet.of(
+                        DatabaseEngine.POSTGRESQL,
+                        DatabaseEngine.MYSQL,
+                        DatabaseEngine.MONGODB,
+                        DatabaseEngine.NEO4J,
+                        DatabaseEngine.MEMGRAPH));
         map.put(ScenarioType.VECTOR_KNN, EnumSet.of(DatabaseEngine.QDRANT));
         return map;
     }

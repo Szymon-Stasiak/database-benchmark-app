@@ -1,9 +1,11 @@
 package com.dbagnets.backend.engine.schema;
 
+import org.springframework.stereotype.Component;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
@@ -13,7 +15,8 @@ public class LogicalSchemaLoader {
 
     public LogicalSchema parse(String json) {
         if (json == null || json.isBlank()) {
-            throw new IllegalStateException("Logical schema JSON is empty — benchmark scripts may not have finished generating yet");
+            throw new IllegalStateException(
+                    "Logical schema JSON is empty — benchmark scripts may not have finished generating yet");
         }
         try {
             return objectMapper.readValue(json, LogicalSchema.class);

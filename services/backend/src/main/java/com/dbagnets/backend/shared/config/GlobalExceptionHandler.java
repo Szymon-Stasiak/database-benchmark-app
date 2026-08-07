@@ -1,14 +1,15 @@
 package com.dbagnets.backend.shared.config;
 
+import java.util.Map;
+import java.util.NoSuchElementException;
+
 import jakarta.validation.ConstraintViolationException;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.Map;
-import java.util.NoSuchElementException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -27,16 +28,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult().getFieldErrors().stream()
-                .findFirst()
-                .map(err -> err.getField() + ": " + err.getDefaultMessage())
-                .orElse("validation failed");
+        String message =
+                e.getBindingResult().getFieldErrors().stream()
+                        .findFirst()
+                        .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                        .orElse("validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", "validation_failed", "message", message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<Map<String, String>> handleConstraintViolation(ConstraintViolationException e) {
+    public ResponseEntity<Map<String, String>> handleConstraintViolation(
+            ConstraintViolationException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", "validation_failed", "message", safeMessage(e)));
     }

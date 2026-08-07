@@ -3,11 +3,7 @@ package com.dbagnets.backend.benchmark.run.internal;
 import java.util.List;
 
 public record RunPreview(
-        String rootEntity,
-        int sampleSize,
-        long availablePool,
-        List<CascadeImpact> cascade
-) {
+        String rootEntity, int sampleSize, long availablePool, List<CascadeImpact> cascade) {
 
     public record CascadeImpact(
             String entity,
@@ -16,7 +12,5 @@ public record RunPreview(
             String cardinality,
             double ratio,
             long estimatedRowsAffected,
-            int depth
-    ) {
-    }
+            int depth) {}
 }

@@ -1,9 +1,9 @@
 package com.dbagnets.backend.engine.scenario;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class ScenarioParamsTest {
 
@@ -59,27 +59,28 @@ class ScenarioParamsTest {
 
     @Test
     void knnParamsRejectInvalidTopK() {
-        assertThatThrownBy(() -> new KnnParams("Product", "embedding", new double[]{0.1}, 0))
+        assertThatThrownBy(() -> new KnnParams("Product", "embedding", new double[] {0.1}, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new KnnParams("Product", "embedding", new double[]{0.1}, 100_000))
+        assertThatThrownBy(() -> new KnnParams("Product", "embedding", new double[] {0.1}, 100_000))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void sealedHierarchyExhaustivePatternMatch() {
         ScenarioParams[] all = {
-                new AggregateParams("Order", "Customer"),
-                new RangeParams("Order", "amount", 0.0, 100.0),
-                new TraversalParams("Customer", "id-1", 3),
-                new KnnParams("Product", "embedding", new double[]{0.1, 0.2}, 5)
+            new AggregateParams("Order", "Customer"),
+            new RangeParams("Order", "amount", 0.0, 100.0),
+            new TraversalParams("Customer", "id-1", 3),
+            new KnnParams("Product", "embedding", new double[] {0.1, 0.2}, 5)
         };
         for (ScenarioParams p : all) {
-            String label = switch (p) {
-                case AggregateParams ignored -> "agg";
-                case RangeParams ignored -> "range";
-                case TraversalParams ignored -> "trav";
-                case KnnParams ignored -> "knn";
-            };
+            String label =
+                    switch (p) {
+                        case AggregateParams ignored -> "agg";
+                        case RangeParams ignored -> "range";
+                        case TraversalParams ignored -> "trav";
+                        case KnnParams ignored -> "knn";
+                    };
             assertThat(label).isNotBlank();
         }
     }

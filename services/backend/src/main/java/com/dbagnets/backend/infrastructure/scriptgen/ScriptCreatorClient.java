@@ -1,13 +1,15 @@
 package com.dbagnets.backend.infrastructure.scriptgen;
 
-import com.dbagnets.backend.benchmark.setup.port.ScriptGenerationPort;
-import lombok.extern.slf4j.Slf4j;
+import java.time.Duration;
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
-import java.util.List;
+import com.dbagnets.backend.benchmark.setup.port.ScriptGenerationPort;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
@@ -28,22 +30,29 @@ public class ScriptCreatorClient implements ScriptGenerationPort {
             @Value("${script-creator.generate-path}") String generatePath,
             @Value("${script-creator.max-iterations}") int maxIterations,
             @Value("${script-creator.timeout-minutes}") int timeoutMinutes) {
-        this.webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .codecs(configurer -> configurer.defaultCodecs()
-                        .maxInMemorySize(MAX_RESPONSE_BODY_MB * BYTES_PER_MB))
-                .build();
+        this.webClient =
+                WebClient.builder()
+                        .baseUrl(baseUrl)
+                        .codecs(
+                                configurer ->
+                                        configurer
+                                                .defaultCodecs()
+                                                .maxInMemorySize(
+                                                        MAX_RESPONSE_BODY_MB * BYTES_PER_MB))
+                        .build();
         this.model = model;
         this.generatePath = generatePath;
         this.maxIterations = maxIterations;
         this.timeoutMinutes = timeoutMinutes;
     }
 
-    public ScriptCreatorResponse generate(String idea, int depth, List<ScriptCreatorRequest.TargetRequest> targets) {
+    public ScriptCreatorResponse generate(
+            String idea, int depth, List<ScriptCreatorRequest.TargetRequest> targets) {
         var request = new ScriptCreatorRequest(idea, depth, targets, model, maxIterations, false);
 
         log.info("Calling script-creator with {} targets for idea: {}", targets.size(), idea);
-        return webClient.post()
+        return webClient
+                .post()
                 .uri(generatePath)
                 .bodyValue(request)
                 .retrieve()

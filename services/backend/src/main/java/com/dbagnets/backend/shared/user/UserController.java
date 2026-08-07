@@ -1,11 +1,11 @@
 package com.dbagnets.backend.shared.user;
 
-import com.dbagnets.backend.shared.entity.User;
-import com.dbagnets.backend.shared.user.UserInfo;
-import com.dbagnets.backend.shared.security.CurrentUser;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.dbagnets.backend.shared.entity.User;
+import com.dbagnets.backend.shared.security.CurrentUser;
 
 @RestController
 @RequestMapping("/api")

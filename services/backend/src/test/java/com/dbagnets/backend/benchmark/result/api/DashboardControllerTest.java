@@ -1,26 +1,5 @@
 package com.dbagnets.backend.benchmark.result.api;
 
-import com.dbagnets.backend.shared.config.SecurityConfig;
-import com.dbagnets.backend.shared.entity.Benchmark;
-import com.dbagnets.backend.domain.BenchmarkStatus;
-import com.dbagnets.backend.domain.DatabaseStatus;
-import com.dbagnets.backend.shared.entity.User;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
-import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
-import com.dbagnets.backend.shared.user.CurrentUserService;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.Pageable;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.Instant;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -31,24 +10,41 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.web.servlet.MockMvc;
+
+import com.dbagnets.backend.domain.BenchmarkStatus;
+import com.dbagnets.backend.domain.DatabaseStatus;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseRepository;
+import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
+import com.dbagnets.backend.shared.config.SecurityConfig;
+import com.dbagnets.backend.shared.entity.Benchmark;
+import com.dbagnets.backend.shared.entity.User;
+import com.dbagnets.backend.shared.user.CurrentUserService;
+
 @WebMvcTest(controllers = DashboardController.class)
 @Import(SecurityConfig.class)
 class DashboardControllerTest {
 
-    @Autowired
-    MockMvc mockMvc;
+    @Autowired MockMvc mockMvc;
 
-    @MockBean
-    JwtDecoder jwtDecoder;
+    @MockBean JwtDecoder jwtDecoder;
 
-    @MockBean
-    BenchmarkRepository benchmarkRepository;
+    @MockBean BenchmarkRepository benchmarkRepository;
 
-    @MockBean
-    BenchmarkDatabaseRepository databaseRepository;
+    @MockBean BenchmarkDatabaseRepository databaseRepository;
 
-    @MockBean
-    CurrentUserService currentUserService;
+    @MockBean CurrentUserService currentUserService;
 
     @Test
     void returnsDashboardForAuthenticatedUser() throws Exception {
@@ -61,13 +57,21 @@ class DashboardControllerTest {
 
         when(currentUserService.resolve(any(Jwt.class))).thenReturn(alice);
         when(benchmarkRepository.countByUser(same(alice))).thenReturn(7L);
-        when(databaseRepository.countByBenchmark_UserAndStatus(same(alice), eq(DatabaseStatus.RUNNING))).thenReturn(3L);
+        when(databaseRepository.countByBenchmark_UserAndStatus(
+                        same(alice), eq(DatabaseStatus.RUNNING)))
+                .thenReturn(3L);
         when(benchmarkRepository.findByUserOrderByCreatedAtDesc(same(alice), any(Pageable.class)))
                 .thenReturn(List.of(aliceBenchmark));
 
-        mockMvc.perform(get("/api/dashboard").with(jwt().jwt(b -> b
-                .subject("sub-alice")
-                .claim("email", "alice@example.com"))))
+        mockMvc.perform(
+                        get("/api/dashboard")
+                                .with(
+                                        jwt().jwt(
+                                                        b ->
+                                                                b.subject("sub-alice")
+                                                                        .claim(
+                                                                                "email",
+                                                                                "alice@example.com"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalBenchmarks").value(7))
                 .andExpect(jsonPath("$.activeDatabases").value(3))
@@ -87,20 +91,38 @@ class DashboardControllerTest {
         when(bobBenchmark.getStatus()).thenReturn(BenchmarkStatus.PENDING);
         when(bobBenchmark.getCreatedAt()).thenReturn(Instant.parse("2026-05-29T13:00:00Z"));
 
-        when(currentUserService.resolve(any(Jwt.class))).thenAnswer(inv -> {
-            Jwt jwt = inv.getArgument(0);
-            return "sub-alice".equals(jwt.getSubject()) ? alice : bob;
-        });
-        when(benchmarkRepository.findByUserOrderByCreatedAtDesc(same(alice), any(Pageable.class))).thenReturn(List.of());
-        when(benchmarkRepository.findByUserOrderByCreatedAtDesc(same(bob), any(Pageable.class))).thenReturn(List.of(bobBenchmark));
+        when(currentUserService.resolve(any(Jwt.class)))
+                .thenAnswer(
+                        inv -> {
+                            Jwt jwt = inv.getArgument(0);
+                            return "sub-alice".equals(jwt.getSubject()) ? alice : bob;
+                        });
+        when(benchmarkRepository.findByUserOrderByCreatedAtDesc(same(alice), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(benchmarkRepository.findByUserOrderByCreatedAtDesc(same(bob), any(Pageable.class)))
+                .thenReturn(List.of(bobBenchmark));
 
-        mockMvc.perform(get("/api/dashboard").with(jwt().jwt(b -> b
-                .subject("sub-alice").claim("email", "alice@example.com"))))
+        mockMvc.perform(
+                        get("/api/dashboard")
+                                .with(
+                                        jwt().jwt(
+                                                        b ->
+                                                                b.subject("sub-alice")
+                                                                        .claim(
+                                                                                "email",
+                                                                                "alice@example.com"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recentRuns.length()").value(0));
 
-        mockMvc.perform(get("/api/dashboard").with(jwt().jwt(b -> b
-                .subject("sub-bob").claim("email", "bob@example.com"))))
+        mockMvc.perform(
+                        get("/api/dashboard")
+                                .with(
+                                        jwt().jwt(
+                                                        b ->
+                                                                b.subject("sub-bob")
+                                                                        .claim(
+                                                                                "email",
+                                                                                "bob@example.com"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recentRuns.length()").value(1))
                 .andExpect(jsonPath("$.recentRuns[0].id").value("bench-bob-1"));
@@ -108,7 +130,6 @@ class DashboardControllerTest {
 
     @Test
     void unauthenticatedRequestReturns401() throws Exception {
-        mockMvc.perform(get("/api/dashboard"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/dashboard")).andExpect(status().isUnauthorized());
     }
 }

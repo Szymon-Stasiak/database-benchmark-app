@@ -1,8 +1,8 @@
 package com.dbagnets.backend.engine.schema;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-
 import java.util.Arrays;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
 
 public enum RelationshipCardinality {
     ONE_TO_ONE("1:1"),
@@ -30,7 +30,10 @@ public enum RelationshipCardinality {
     @JsonCreator
     public static RelationshipCardinality from(String value) {
         return Arrays.stream(values())
-                .filter(c -> c.wireFormat.equalsIgnoreCase(value) || c.name().equalsIgnoreCase(value))
+                .filter(
+                        c ->
+                                c.wireFormat.equalsIgnoreCase(value)
+                                        || c.name().equalsIgnoreCase(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown cardinality: " + value));
     }

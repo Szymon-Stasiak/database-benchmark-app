@@ -1,9 +1,9 @@
 package com.dbagnets.backend.engine.driver.api;
 
-import com.dbagnets.backend.engine.timing.RecordedId;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import com.dbagnets.backend.engine.timing.RecordedId;
 
 public final class EntityOutcome {
     public long dbTimeNs;

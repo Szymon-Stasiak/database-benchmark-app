@@ -1,8 +1,8 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
-
 import java.time.Instant;
+
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 
 public record InsertResultResponse(
         String id,
@@ -26,18 +26,19 @@ public record InsertResultResponse(
         Long memoryBytesMax,
         Long memoryBytesMean,
         Long memoryBytesP95,
-        Integer resourceSampleCount
-) {
+        Integer resourceSampleCount) {
     private static final long NS_PER_MS = 1_000_000L;
 
     public static InsertResultResponse from(BenchmarkResult r) {
         Long duration = r.durationMs();
-        Double throughput = duration != null && duration > 0 && r.getRowsAffected() != null
-                ? r.getRowsAffected() * 1000.0 / duration
-                : null;
+        Double throughput =
+                duration != null && duration > 0 && r.getRowsAffected() != null
+                        ? r.getRowsAffected() * 1000.0 / duration
+                        : null;
         Long dbMs = r.getDbTimeNs() == null ? null : r.getDbTimeNs() / NS_PER_MS;
         Long wireMs = r.getWireTimeNs() == null ? null : r.getWireTimeNs() / NS_PER_MS;
-        Long overheadMs = r.getOverheadNs() == null ? null : Math.max(0L, r.getOverheadNs()) / NS_PER_MS;
+        Long overheadMs =
+                r.getOverheadNs() == null ? null : Math.max(0L, r.getOverheadNs()) / NS_PER_MS;
         return new InsertResultResponse(
                 r.getId(),
                 r.getDatabaseId(),

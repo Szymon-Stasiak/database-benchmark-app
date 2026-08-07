@@ -1,16 +1,17 @@
 package com.dbagnets.backend.shared.entity;
 
+import java.time.Instant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.Instant;
 
 @Entity
 @Table(name = "users")
@@ -28,11 +29,9 @@ public class User {
     @Column(nullable = false)
     private String email;
 
-    @Column
-    private String name;
+    @Column private String name;
 
-    @Column
-    private String pictureUrl;
+    @Column private String pictureUrl;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -40,7 +39,8 @@ public class User {
     @Column(name = "last_login_at", nullable = false)
     private Instant lastLoginAt;
 
-    public static User createFromJwtClaims(String externalId, String email, String name, String picture) {
+    public static User createFromJwtClaims(
+            String externalId, String email, String name, String picture) {
         User user = new User();
         Instant now = Instant.now();
         user.externalId = externalId;

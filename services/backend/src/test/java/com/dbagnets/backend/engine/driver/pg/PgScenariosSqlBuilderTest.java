@@ -1,13 +1,15 @@
 package com.dbagnets.backend.engine.driver.pg;
 
-import com.dbagnets.backend.engine.schema.LogicalSchema;
-import com.dbagnets.backend.engine.schema.LogicalSchemaLoader;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.dbagnets.backend.engine.schema.LogicalSchema;
+import com.dbagnets.backend.engine.schema.LogicalSchemaLoader;
 
 class PgScenariosSqlBuilderTest {
 
@@ -38,9 +40,7 @@ class PgScenariosSqlBuilderTest {
     @Test
     void rangeBuildsBetweenClause() {
         String sql = PgScenarios.buildRangeSql(schema, "Order", "amount");
-        assertThat(sql)
-                .contains("FROM \"order\"")
-                .contains("WHERE \"amount\" BETWEEN ? AND ?");
+        assertThat(sql).contains("FROM \"order\"").contains("WHERE \"amount\" BETWEEN ? AND ?");
     }
 
     @Test

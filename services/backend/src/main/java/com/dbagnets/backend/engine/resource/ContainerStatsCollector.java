@@ -1,17 +1,5 @@
 package com.dbagnets.backend.engine.resource;
 
-import com.dbagnets.backend.infrastructure.docker.DockerService;
-import com.dbagnets.backend.infrastructure.sse.SseEmitterService;
-import com.dbagnets.backend.infrastructure.sse.SseEvents;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dockerjava.api.async.ResultCallback;
-import com.github.dockerjava.api.model.Statistics;
-import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,6 +14,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import jakarta.annotation.PreDestroy;
+
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.api.model.Statistics;
+
+import com.dbagnets.backend.infrastructure.docker.DockerService;
+import com.dbagnets.backend.infrastructure.sse.SseEmitterService;
+import com.dbagnets.backend.infrastructure.sse.SseEvents;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,17 +42,32 @@ public class ContainerStatsCollector {
     private final SseEmitterService sse;
     private final ObjectMapper objectMapper;
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4, Thread.ofVirtual().factory());
+    private final ScheduledExecutorService scheduler =
+            Executors.newScheduledThreadPool(4, Thread.ofVirtual().factory());
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
-    public Handle start(String benchmarkId, String runId, String resultId, String databaseId, String dbName, String containerId, String operation) {
+    public Handle start(
+            String benchmarkId,
+            String runId,
+            String resultId,
+            String databaseId,
+            String dbName,
+            String containerId,
+            String operation) {
         if (containerId == null || containerId.isBlank()) {
             return Handle.disabled();
         }
-        Session session = new Session(benchmarkId, runId, resultId, databaseId, dbName, containerId, operation);
+        Session session =
+                new Session(
+                        benchmarkId, runId, resultId, databaseId, dbName, containerId, operation);
         sessions.put(resultId, session);
         tickSync(session);
-        ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> tick(session), SAMPLE_INTERVAL_MS, SAMPLE_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> task =
+                scheduler.scheduleAtFixedRate(
+                        () -> tick(session),
+                        SAMPLE_INTERVAL_MS,
+                        SAMPLE_INTERVAL_MS,
+                        TimeUnit.MILLISECONDS);
         session.task.set(task);
         return new Handle(resultId);
     }
@@ -71,7 +90,10 @@ public class ContainerStatsCollector {
         try {
             tick(session);
         } catch (Exception e) {
-            log.debug("Synchronous stats sample failed for container {}: {}", session.containerId, e.getMessage());
+            log.debug(
+                    "Synchronous stats sample failed for container {}: {}",
+                    session.containerId,
+                    e.getMessage());
         }
     }
 
@@ -98,24 +120,31 @@ public class ContainerStatsCollector {
             session.samples.add(sample);
             broadcast(session, sample);
         } catch (Exception e) {
-            log.debug("Stats tick failed for container {}: {}", session.containerId, e.getMessage());
+            log.debug(
+                    "Stats tick failed for container {}: {}", session.containerId, e.getMessage());
             session.failureStreak.incrementAndGet();
         }
     }
 
     private Statistics fetchSingleStat(String containerId) throws InterruptedException {
         AtomicReference<Statistics> result = new AtomicReference<>();
-        var callback = new ResultCallback.Adapter<Statistics>() {
-            @Override
-            public void onNext(Statistics s) {
-                if (result.get() == null) result.set(s);
-                try {
-                    close();
-                } catch (Exception ignored) {
-                }
-            }
-        };
-        dockerService.getClient().statsCmd(containerId).withNoStream(true).exec(callback).awaitCompletion(2, TimeUnit.SECONDS);
+        var callback =
+                new ResultCallback.Adapter<Statistics>() {
+                    @Override
+                    public void onNext(Statistics s) {
+                        if (result.get() == null) result.set(s);
+                        try {
+                            close();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                };
+        dockerService
+                .getClient()
+                .statsCmd(containerId)
+                .withNoStream(true)
+                .exec(callback)
+                .awaitCompletion(2, TimeUnit.SECONDS);
         return result.get();
     }
 
@@ -128,14 +157,17 @@ public class ContainerStatsCollector {
     }
 
     private double computeCpuPercent(Statistics current, Statistics previous) {
-        if (current.getCpuStats() == null || current.getCpuStats().getCpuUsage() == null) return 0.0;
+        if (current.getCpuStats() == null || current.getCpuStats().getCpuUsage() == null)
+            return 0.0;
         Long totalUsage = current.getCpuStats().getCpuUsage().getTotalUsage();
         Long systemUsage = current.getCpuStats().getSystemCpuUsage();
         if (totalUsage == null || systemUsage == null) return 0.0;
 
         Long prevTotal = null;
         Long prevSystem = null;
-        if (previous != null && previous.getCpuStats() != null && previous.getCpuStats().getCpuUsage() != null) {
+        if (previous != null
+                && previous.getCpuStats() != null
+                && previous.getCpuStats().getCpuUsage() != null) {
             prevTotal = previous.getCpuStats().getCpuUsage().getTotalUsage();
             prevSystem = previous.getCpuStats().getSystemCpuUsage();
         }
@@ -154,7 +186,8 @@ public class ContainerStatsCollector {
         if (stats.getCpuStats() == null) return 1;
         Long online = stats.getCpuStats().getOnlineCpus();
         if (online != null && online > 0) return online;
-        if (stats.getCpuStats().getCpuUsage() != null && stats.getCpuStats().getCpuUsage().getPercpuUsage() != null) {
+        if (stats.getCpuStats().getCpuUsage() != null
+                && stats.getCpuStats().getCpuUsage().getPercpuUsage() != null) {
             return stats.getCpuStats().getCpuUsage().getPercpuUsage().size();
         }
         return 1;
@@ -164,7 +197,10 @@ public class ContainerStatsCollector {
         if (stats.getMemoryStats() == null || stats.getMemoryStats().getUsage() == null) return 0L;
         long usage = stats.getMemoryStats().getUsage();
         long cache = 0L;
-        Map<String, Object> raw = stats.getMemoryStats().getStats() == null ? Collections.emptyMap() : objectMapper.convertValue(stats.getMemoryStats().getStats(), Map.class);
+        Map<String, Object> raw =
+                stats.getMemoryStats().getStats() == null
+                        ? Collections.emptyMap()
+                        : objectMapper.convertValue(stats.getMemoryStats().getStats(), Map.class);
         Object cacheValue = raw.getOrDefault("cache", raw.get("inactive_file"));
         if (cacheValue instanceof Number n) cache = n.longValue();
         return Math.max(0L, usage - cache);
@@ -204,7 +240,15 @@ public class ContainerStatsCollector {
         long memMean = (long) memMeanDouble;
         long memP95 = percentileLong(mem, 95);
 
-        return new ResourceMetricsSummary(cpuMax, cpuMean, cpuP95, memMax, memMean, memP95, snapshot.size(), serializeSamples(snapshot));
+        return new ResourceMetricsSummary(
+                cpuMax,
+                cpuMean,
+                cpuP95,
+                memMax,
+                memMean,
+                memP95,
+                snapshot.size(),
+                serializeSamples(snapshot));
     }
 
     private double percentileDouble(double[] values, int p) {
@@ -257,7 +301,14 @@ public class ContainerStatsCollector {
         final AtomicReference<ScheduledFuture<?>> task = new AtomicReference<>();
         final AtomicInteger failureStreak = new AtomicInteger(0);
 
-        Session(String benchmarkId, String runId, String resultId, String databaseId, String dbName, String containerId, String operation) {
+        Session(
+                String benchmarkId,
+                String runId,
+                String resultId,
+                String databaseId,
+                String dbName,
+                String containerId,
+                String operation) {
             this.benchmarkId = benchmarkId;
             this.runId = runId;
             this.resultId = resultId;

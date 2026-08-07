@@ -1,8 +1,8 @@
 package com.dbagnets.backend.engine.driver.sql;
 
-import com.dbagnets.backend.engine.schema.LogicalAttribute;
-
 import java.util.List;
+
+import com.dbagnets.backend.engine.schema.LogicalAttribute;
 
 public interface SqlInsertStatement {
 

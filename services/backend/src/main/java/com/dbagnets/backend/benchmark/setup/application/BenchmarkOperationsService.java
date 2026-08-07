@@ -1,5 +1,10 @@
 package com.dbagnets.backend.benchmark.setup.application;
 
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.dbagnets.backend.benchmark.result.application.DataSizeProbe;
 import com.dbagnets.backend.benchmark.setup.port.ContainerManagementPort;
 import com.dbagnets.backend.domain.BenchmarkStatus;
@@ -9,12 +14,9 @@ import com.dbagnets.backend.infrastructure.persistence.BenchmarkDatabaseReposito
 import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.shared.entity.Benchmark;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -30,9 +32,10 @@ public class BenchmarkOperationsService {
 
     public void redeployBenchmark(String benchmarkId) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
-        List<BenchmarkDatabase> redeployableDbs = benchmark.getDatabases().stream()
-                .filter(db -> db.getScript() != null && db.getStatus().isRedeployable())
-                .toList();
+        List<BenchmarkDatabase> redeployableDbs =
+                benchmark.getDatabases().stream()
+                        .filter(db -> db.getScript() != null && db.getStatus().isRedeployable())
+                        .toList();
 
         if (redeployableDbs.isEmpty()) {
             throw new RuntimeException("No databases available for redeployment");
@@ -59,7 +62,11 @@ public class BenchmarkOperationsService {
             throw new RuntimeException("No script available for redeploy");
         }
 
-        log.info("Redeploying database {} ({}) in benchmark {}", db.getDbName(), databaseId, benchmarkId);
+        log.info(
+                "Redeploying database {} ({}) in benchmark {}",
+                db.getDbName(),
+                databaseId,
+                benchmarkId);
 
         deployment.cleanupContainer(db);
         entityIdRegistry.evictAllForDatabase(db.getId());
@@ -74,15 +81,18 @@ public class BenchmarkOperationsService {
     @Transactional
     public void hardResetBenchmark(String benchmarkId) {
         Benchmark benchmark = benchmarkRepository.findById(benchmarkId).orElseThrow();
-        log.info("HARD RESET requested for benchmark {} — wiping {} containers and volumes",
-                benchmarkId, benchmark.getDatabases().size());
+        log.info(
+                "HARD RESET requested for benchmark {} — wiping {} containers and volumes",
+                benchmarkId,
+                benchmark.getDatabases().size());
 
         String benchmarkPrefix = "benchmark-" + benchmarkId.substring(0, 8) + "-";
         for (BenchmarkDatabase db : benchmark.getDatabases()) {
             if (db.getContainerId() != null) {
                 try {
                     containerManager.stopContainer(db.getContainerId());
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
                 containerManager.hardRemoveContainer(db.getContainerId());
                 db.setContainerId(null);
                 db.setHostPort(null);

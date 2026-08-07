@@ -10,12 +10,12 @@ public record TimedOperation(
         int conflictsSkipped,
         List<RecordedId> recordedIds,
         long[] sampleDbTimeNs,
-        Map<String, List<String>> cascadeDeletedByEntity
-) {
+        Map<String, List<String>> cascadeDeletedByEntity) {
     public TimedOperation {
         recordedIds = recordedIds == null ? List.of() : List.copyOf(recordedIds);
         sampleDbTimeNs = sampleDbTimeNs == null ? new long[0] : sampleDbTimeNs.clone();
-        cascadeDeletedByEntity = cascadeDeletedByEntity == null ? Map.of() : Map.copyOf(cascadeDeletedByEntity);
+        cascadeDeletedByEntity =
+                cascadeDeletedByEntity == null ? Map.of() : Map.copyOf(cascadeDeletedByEntity);
     }
 
     public long overheadNs() {
@@ -35,16 +35,50 @@ public record TimedOperation(
         private long[] sampleDbTimeNs = new long[0];
         private Map<String, List<String>> cascadeDeletedByEntity = Map.of();
 
-        public Builder dbTimeNs(long v) { this.dbTimeNs = v; return this; }
-        public Builder wireTimeNs(long v) { this.wireTimeNs = v; return this; }
-        public Builder rowsAffected(long v) { this.rowsAffected = v; return this; }
-        public Builder conflictsSkipped(int v) { this.conflictsSkipped = v; return this; }
-        public Builder recordedIds(List<RecordedId> v) { this.recordedIds = v; return this; }
-        public Builder sampleDbTimeNs(long[] v) { this.sampleDbTimeNs = v; return this; }
-        public Builder cascadeDeletedByEntity(Map<String, List<String>> v) { this.cascadeDeletedByEntity = v; return this; }
+        public Builder dbTimeNs(long v) {
+            this.dbTimeNs = v;
+            return this;
+        }
+
+        public Builder wireTimeNs(long v) {
+            this.wireTimeNs = v;
+            return this;
+        }
+
+        public Builder rowsAffected(long v) {
+            this.rowsAffected = v;
+            return this;
+        }
+
+        public Builder conflictsSkipped(int v) {
+            this.conflictsSkipped = v;
+            return this;
+        }
+
+        public Builder recordedIds(List<RecordedId> v) {
+            this.recordedIds = v;
+            return this;
+        }
+
+        public Builder sampleDbTimeNs(long[] v) {
+            this.sampleDbTimeNs = v;
+            return this;
+        }
+
+        public Builder cascadeDeletedByEntity(Map<String, List<String>> v) {
+            this.cascadeDeletedByEntity = v;
+            return this;
+        }
 
         public TimedOperation build() {
-            return new TimedOperation(dbTimeNs, wireTimeNs, rowsAffected, conflictsSkipped, recordedIds, sampleDbTimeNs, cascadeDeletedByEntity);
+            return new TimedOperation(
+                    dbTimeNs,
+                    wireTimeNs,
+                    rowsAffected,
+                    conflictsSkipped,
+                    recordedIds,
+                    sampleDbTimeNs,
+                    cascadeDeletedByEntity);
         }
     }
 }

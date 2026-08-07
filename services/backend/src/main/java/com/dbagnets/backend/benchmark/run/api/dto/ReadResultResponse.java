@@ -1,8 +1,8 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
-
 import java.time.Instant;
+
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkResult;
 
 public record ReadResultResponse(
         String id,
@@ -27,8 +27,7 @@ public record ReadResultResponse(
         Long memoryBytesMax,
         Long memoryBytesMean,
         Long memoryBytesP95,
-        Integer resourceSampleCount
-) {
+        Integer resourceSampleCount) {
     private static final long NS_PER_US = 1_000L;
     private static final long NS_PER_MS = 1_000_000L;
 

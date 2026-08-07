@@ -1,11 +1,12 @@
 package com.dbagnets.backend.shared.user;
 
-import com.dbagnets.backend.shared.entity.User;
-import com.dbagnets.backend.shared.user.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.dbagnets.backend.shared.entity.User;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -24,11 +25,17 @@ public class CurrentUserService {
         String name = jwt.getClaimAsString(CLAIM_NAME);
         String picture = jwt.getClaimAsString(CLAIM_PICTURE);
 
-        return userRepository.findByExternalId(externalId)
-                .map(existing -> {
-                    existing.refreshProfile(email, name, picture);
-                    return existing;
-                })
-                .orElseGet(() -> userRepository.save(User.createFromJwtClaims(externalId, email, name, picture)));
+        return userRepository
+                .findByExternalId(externalId)
+                .map(
+                        existing -> {
+                            existing.refreshProfile(email, name, picture);
+                            return existing;
+                        })
+                .orElseGet(
+                        () ->
+                                userRepository.save(
+                                        User.createFromJwtClaims(
+                                                externalId, email, name, picture)));
     }
 }

@@ -1,20 +1,19 @@
 package com.dbagnets.backend.engine.registry;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class EntityIdRegistryRepositoryTest {
 
-    @Autowired
-    EntityIdRegistryRepository repository;
+    @Autowired EntityIdRegistryRepository repository;
 
     @Test
     void savesAndCountsByDatabaseAndEntity() {
@@ -42,8 +41,9 @@ class EntityIdRegistryRepositoryTest {
         repository.save(new EntityIdRecord("b1", "db1", "Comment", "L2", "P2"));
         repository.save(new EntityIdRecord("b1", "db1", "Comment", "L3", "P3"));
 
-        int removed = repository.deleteByDatabaseIdAndEntityNameAndLogicalIdIn(
-                "db1", "Comment", List.of("L1", "L3"));
+        int removed =
+                repository.deleteByDatabaseIdAndEntityNameAndLogicalIdIn(
+                        "db1", "Comment", List.of("L1", "L3"));
 
         assertThat(removed).isEqualTo(2);
         assertThat(repository.countByDatabaseIdAndEntityName("db1", "Comment")).isEqualTo(1);

@@ -1,15 +1,17 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.dbagnets.backend.engine.scenario.AggregateParams;
 import com.dbagnets.backend.engine.scenario.KnnParams;
 import com.dbagnets.backend.engine.scenario.RangeParams;
 import com.dbagnets.backend.engine.scenario.ScenarioParams;
 import com.dbagnets.backend.engine.scenario.ScenarioType;
 import com.dbagnets.backend.engine.scenario.TraversalParams;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class StartScenarioRunRequestJsonTest {
 
@@ -17,7 +19,8 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void deserializesAggregateRequest() throws Exception {
-        String json = """
+        String json =
+                """
             {
               "params": {
                 "type": "AGGREGATE_GROUP_COUNT",
@@ -41,7 +44,8 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void deserializesRangeRequest() throws Exception {
-        String json = """
+        String json =
+                """
             {
               "params": {
                 "type": "RANGE_FILTER",
@@ -60,7 +64,8 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void deserializesTraversalRequest() throws Exception {
-        String json = """
+        String json =
+                """
             {
               "params": {
                 "type": "GRAPH_TRAVERSAL",
@@ -78,7 +83,8 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void deserializesKnnRequest() throws Exception {
-        String json = """
+        String json =
+                """
             {
               "params": {
                 "type": "VECTOR_KNN",
@@ -97,10 +103,9 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void roundTripsSerialization() throws Exception {
-        StartScenarioRunRequest original = new StartScenarioRunRequest(
-                new AggregateParams("Order", "Customer"),
-                10,
-                java.util.List.of("db1"));
+        StartScenarioRunRequest original =
+                new StartScenarioRunRequest(
+                        new AggregateParams("Order", "Customer"), 10, java.util.List.of("db1"));
         String json = mapper.writeValueAsString(original);
         StartScenarioRunRequest parsed = mapper.readValue(json, StartScenarioRunRequest.class);
         assertThat(parsed.params()).isInstanceOf(AggregateParams.class);
@@ -108,7 +113,8 @@ class StartScenarioRunRequestJsonTest {
 
     @Test
     void canDeserializeBareScenarioParams() throws Exception {
-        String json = """
+        String json =
+                """
             {
               "type": "AGGREGATE_GROUP_COUNT",
               "childEntity": "Order",

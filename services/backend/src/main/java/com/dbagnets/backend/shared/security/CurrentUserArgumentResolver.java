@@ -1,8 +1,5 @@
 package com.dbagnets.backend.shared.security;
 
-import com.dbagnets.backend.shared.entity.User;
-import com.dbagnets.backend.shared.user.CurrentUserService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.core.MethodParameter;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
@@ -16,11 +13,17 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
+import com.dbagnets.backend.shared.entity.User;
+import com.dbagnets.backend.shared.user.CurrentUserService;
+
+import lombok.RequiredArgsConstructor;
+
 @Component
 @RequiredArgsConstructor
 public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolver {
 
-    private static final String REQUEST_ATTRIBUTE = CurrentUserArgumentResolver.class.getName() + ".user";
+    private static final String REQUEST_ATTRIBUTE =
+            CurrentUserArgumentResolver.class.getName() + ".user";
 
     private final CurrentUserService currentUserService;
 
@@ -31,8 +34,13 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
     }
 
     @Override
-    public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
-        User cached = (User) webRequest.getAttribute(REQUEST_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
+    public Object resolveArgument(
+            MethodParameter parameter,
+            ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest,
+            WebDataBinderFactory binderFactory) {
+        User cached =
+                (User) webRequest.getAttribute(REQUEST_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
         if (cached != null) {
             return cached;
         }
@@ -40,7 +48,9 @@ public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolve
         if (!(authentication instanceof JwtAuthenticationToken jwtAuth)) {
             throw new AuthenticationCredentialsNotFoundException(
                     "@CurrentUser requires a JWT-authenticated request but found: "
-                            + (authentication == null ? "null" : authentication.getClass().getName()));
+                            + (authentication == null
+                                    ? "null"
+                                    : authentication.getClass().getName()));
         }
         Jwt jwt = jwtAuth.getToken();
         User resolved = currentUserService.resolve(jwt);

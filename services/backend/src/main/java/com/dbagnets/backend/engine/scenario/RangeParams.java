@@ -1,11 +1,7 @@
 package com.dbagnets.backend.engine.scenario;
 
-public record RangeParams(
-        String entityName,
-        String attribute,
-        double min,
-        double max
-) implements ScenarioParams {
+public record RangeParams(String entityName, String attribute, double min, double max)
+        implements ScenarioParams {
 
     public RangeParams {
         if (entityName == null || entityName.isBlank()) {

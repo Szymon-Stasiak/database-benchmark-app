@@ -1,7 +1,14 @@
 package com.dbagnets.backend.shared.user;
 
-import com.dbagnets.backend.shared.entity.User;
-import com.dbagnets.backend.shared.user.UserRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.Optional;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -10,23 +17,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.jwt.Jwt;
 
-import java.time.Instant;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import com.dbagnets.backend.shared.entity.User;
 
 @ExtendWith(MockitoExtension.class)
 class CurrentUserServiceTest {
 
-    @Mock
-    UserRepository userRepository;
+    @Mock UserRepository userRepository;
 
-    @InjectMocks
-    CurrentUserService currentUserService;
+    @InjectMocks CurrentUserService currentUserService;
 
     @Test
     void createsUserOnFirstSight() {

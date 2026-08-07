@@ -1,15 +1,16 @@
 package com.dbagnets.backend.engine.datagen;
 
-import com.dbagnets.backend.engine.schema.AttributeConstraints;
-import com.dbagnets.backend.engine.schema.LogicalAttribute;
-import com.dbagnets.backend.engine.schema.LogicalDataType;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+
+import com.dbagnets.backend.engine.schema.AttributeConstraints;
+import com.dbagnets.backend.engine.schema.LogicalAttribute;
+import com.dbagnets.backend.engine.schema.LogicalDataType;
 
 class FakerCatalogTest {
 
@@ -34,10 +35,16 @@ class FakerCatalogTest {
 
     @Test
     void enumPicksFromAllowedValues() {
-        LogicalAttribute status = new LogicalAttribute(
-                "status", LogicalDataType.ENUM,
-                new AttributeConstraints(false, false, false, false, null),
-                "", null, List.of("a", "b", "c"), null, null);
+        LogicalAttribute status =
+                new LogicalAttribute(
+                        "status",
+                        LogicalDataType.ENUM,
+                        new AttributeConstraints(false, false, false, false, null),
+                        "",
+                        null,
+                        List.of("a", "b", "c"),
+                        null,
+                        null);
         for (int i = 0; i < 50; i++) {
             Object v = catalog.generate(status);
             assertThat(v).isIn("a", "b", "c");
@@ -46,10 +53,16 @@ class FakerCatalogTest {
 
     @Test
     void decimalRespectsScale() {
-        LogicalAttribute price = new LogicalAttribute(
-                "price", LogicalDataType.DECIMAL,
-                new AttributeConstraints(false, false, false, false, null),
-                "", null, List.of(), 6, 2);
+        LogicalAttribute price =
+                new LogicalAttribute(
+                        "price",
+                        LogicalDataType.DECIMAL,
+                        new AttributeConstraints(false, false, false, false, null),
+                        "",
+                        null,
+                        List.of(),
+                        6,
+                        2);
         Object v = catalog.generate(price);
         assertThat(v).isInstanceOf(BigDecimal.class);
         assertThat(((BigDecimal) v).scale()).isEqualTo(2);
@@ -57,10 +70,16 @@ class FakerCatalogTest {
 
     @Test
     void vectorMatchesRequestedDimension() {
-        LogicalAttribute embedding = new LogicalAttribute(
-                "embedding", LogicalDataType.VECTOR,
-                new AttributeConstraints(false, false, false, false, null),
-                "", 384, List.of(), null, null);
+        LogicalAttribute embedding =
+                new LogicalAttribute(
+                        "embedding",
+                        LogicalDataType.VECTOR,
+                        new AttributeConstraints(false, false, false, false, null),
+                        "",
+                        384,
+                        List.of(),
+                        null,
+                        null);
         Object v = catalog.generate(embedding);
         assertThat(v).isInstanceOf(float[].class);
         assertThat(((float[]) v).length).isEqualTo(384);
@@ -75,8 +94,14 @@ class FakerCatalogTest {
     }
 
     private LogicalAttribute attr(String name, LogicalDataType type, boolean pk, boolean nullable) {
-        return new LogicalAttribute(name, type,
+        return new LogicalAttribute(
+                name,
+                type,
                 new AttributeConstraints(pk, false, nullable, false, null),
-                "", null, List.of(), null, null);
+                "",
+                null,
+                List.of(),
+                null,
+                null);
     }
 }

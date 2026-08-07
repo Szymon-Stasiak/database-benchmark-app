@@ -8,6 +8,4 @@ public record PreparedRunResponse(
         String operationType,
         String entityName,
         String status,
-        RunPreview preview
-) {
-}
+        RunPreview preview) {}

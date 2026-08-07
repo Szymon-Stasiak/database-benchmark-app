@@ -1,11 +1,12 @@
 package com.dbagnets.backend.infrastructure.persistence;
 
-import com.dbagnets.backend.shared.entity.Benchmark;
-import com.dbagnets.backend.shared.entity.User;
+import java.util.List;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
+import com.dbagnets.backend.shared.entity.Benchmark;
+import com.dbagnets.backend.shared.entity.User;
 
 public interface BenchmarkRepository extends JpaRepository<Benchmark, String> {
     List<Benchmark> findByUserOrderByCreatedAtDesc(User user);

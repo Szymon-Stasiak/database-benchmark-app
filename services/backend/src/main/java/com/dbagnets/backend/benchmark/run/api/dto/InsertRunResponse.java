@@ -1,9 +1,9 @@
 package com.dbagnets.backend.benchmark.run.api.dto;
 
-import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
-
 import java.time.Instant;
 import java.util.List;
+
+import com.dbagnets.backend.benchmark.run.persistence.BenchmarkRun;
 
 public record InsertRunResponse(
         String id,
@@ -17,12 +17,10 @@ public record InsertRunResponse(
         String status,
         Instant createdAt,
         Instant finishedAt,
-        List<InsertResultResponse> results
-) {
+        List<InsertResultResponse> results) {
     public static InsertRunResponse from(BenchmarkRun run) {
-        List<InsertResultResponse> resultDtos = run.getResults().stream()
-                .map(InsertResultResponse::from)
-                .toList();
+        List<InsertResultResponse> resultDtos =
+                run.getResults().stream().map(InsertResultResponse::from).toList();
         return new InsertRunResponse(
                 run.getId(),
                 run.getBenchmarkId(),

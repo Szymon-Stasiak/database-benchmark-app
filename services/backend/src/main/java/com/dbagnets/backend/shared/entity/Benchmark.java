@@ -1,15 +1,17 @@
 package com.dbagnets.backend.shared.entity;
 
-import com.dbagnets.backend.domain.BenchmarkStatus;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.persistence.*;
+
+import com.dbagnets.backend.domain.BenchmarkStatus;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "benchmarks")
@@ -43,7 +45,11 @@ public class Benchmark {
     @Column(name = "logical_schema", columnDefinition = "TEXT")
     private String logicalSchema;
 
-    @OneToMany(mappedBy = "benchmark", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(
+            mappedBy = "benchmark",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.EAGER)
     private List<BenchmarkDatabase> databases = new ArrayList<>();
 
     @Version

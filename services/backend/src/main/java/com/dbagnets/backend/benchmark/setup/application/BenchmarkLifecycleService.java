@@ -1,5 +1,14 @@
 package com.dbagnets.backend.benchmark.setup.application;
 
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.dbagnets.backend.benchmark.setup.api.dto.BenchmarkResponse;
 import com.dbagnets.backend.benchmark.setup.api.dto.CreateBenchmarkRequest;
 import com.dbagnets.backend.benchmark.setup.internal.BenchmarkBundleService;
@@ -14,16 +23,9 @@ import com.dbagnets.backend.infrastructure.persistence.BenchmarkRepository;
 import com.dbagnets.backend.shared.entity.Benchmark;
 import com.dbagnets.backend.shared.entity.BenchmarkDatabase;
 import com.dbagnets.backend.shared.entity.User;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -41,20 +43,25 @@ public class BenchmarkLifecycleService {
         Benchmark benchmark = new Benchmark(request.topic(), user, request.depth());
         for (CreateBenchmarkRequest.DatabaseTarget target : request.databases()) {
             DatabaseType dbType = DatabaseType.valueOf(target.dbType().toUpperCase());
-            BenchmarkDatabase db = new BenchmarkDatabase(dbType, target.dbName(), target.dbVersion());
+            BenchmarkDatabase db =
+                    new BenchmarkDatabase(dbType, target.dbName(), target.dbVersion());
             benchmark.addDatabase(db);
         }
 
         benchmarkRepository.save(benchmark);
-        log.info("Created benchmark {} with {} databases", benchmark.getId(), request.databases().size());
+        log.info(
+                "Created benchmark {} with {} databases",
+                benchmark.getId(),
+                request.databases().size());
 
         String benchmarkId = benchmark.getId();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                deployment.deployAsync(benchmarkId);
-            }
-        });
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        deployment.deployAsync(benchmarkId);
+                    }
+                });
 
         return BenchmarkResponse.from(benchmark);
     }
@@ -86,23 +93,30 @@ public class BenchmarkLifecycleService {
         }
         benchmark.setStatus(BenchmarkStatus.STARTING_CONTAINERS);
         benchmarkRepository.save(benchmark);
-        log.info("Imported benchmark {} from bundle with {} databases", benchmark.getId(), manifest.databases().size());
+        log.info(
+                "Imported benchmark {} from bundle with {} databases",
+                benchmark.getId(),
+                manifest.databases().size());
 
         String benchmarkId = benchmark.getId();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                deployment.deployFromBundleAsync(benchmarkId);
-            }
-        });
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        deployment.deployFromBundleAsync(benchmarkId);
+                    }
+                });
 
         return BenchmarkResponse.from(benchmark);
     }
 
     @Transactional
     public void deleteBenchmark(String benchmarkId) {
-        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
-                .orElseThrow(() -> new RuntimeException("Benchmark not found: " + benchmarkId));
+        Benchmark benchmark =
+                benchmarkRepository
+                        .findById(benchmarkId)
+                        .orElseThrow(
+                                () -> new RuntimeException("Benchmark not found: " + benchmarkId));
 
         for (BenchmarkDatabase db : benchmark.getDatabases()) {
             deployment.cleanupContainer(db);
@@ -115,12 +129,17 @@ public class BenchmarkLifecycleService {
 
     @Transactional
     public void deleteDatabase(String benchmarkId, String databaseId) {
-        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
-                .orElseThrow(() -> new RuntimeException("Benchmark not found: " + benchmarkId));
-        BenchmarkDatabase db = benchmark.getDatabases().stream()
-                .filter(d -> d.getId().equals(databaseId))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Database not found: " + databaseId));
+        Benchmark benchmark =
+                benchmarkRepository
+                        .findById(benchmarkId)
+                        .orElseThrow(
+                                () -> new RuntimeException("Benchmark not found: " + benchmarkId));
+        BenchmarkDatabase db =
+                benchmark.getDatabases().stream()
+                        .filter(d -> d.getId().equals(databaseId))
+                        .findFirst()
+                        .orElseThrow(
+                                () -> new RuntimeException("Database not found: " + databaseId));
 
         deployment.cleanupContainer(db);
         entityIdRegistry.evictAllForDatabase(db.getId());
@@ -139,9 +158,9 @@ public class BenchmarkLifecycleService {
     @Transactional(readOnly = true)
     public BenchmarkResponse getBenchmark(String id) {
         return BenchmarkResponse.from(
-                benchmarkRepository.findById(id)
-                        .orElseThrow(() -> new RuntimeException("Benchmark not found: " + id))
-        );
+                benchmarkRepository
+                        .findById(id)
+                        .orElseThrow(() -> new RuntimeException("Benchmark not found: " + id)));
     }
 
     @Transactional(readOnly = true)
@@ -159,8 +178,11 @@ public class BenchmarkLifecycleService {
 
     @Transactional(readOnly = true)
     public byte[] downloadBundle(String benchmarkId) {
-        Benchmark benchmark = benchmarkRepository.findById(benchmarkId)
-                .orElseThrow(() -> new RuntimeException("Benchmark not found: " + benchmarkId));
+        Benchmark benchmark =
+                benchmarkRepository
+                        .findById(benchmarkId)
+                        .orElseThrow(
+                                () -> new RuntimeException("Benchmark not found: " + benchmarkId));
         return bundleService.pack(benchmark);
     }
 

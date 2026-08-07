@@ -1,9 +1,9 @@
 package com.dbagnets.backend.engine.driver.api;
 
+import com.dbagnets.backend.domain.DatabaseEngine;
 import com.dbagnets.backend.engine.scenario.ScenarioContext;
 import com.dbagnets.backend.engine.scenario.ScenarioResult;
 import com.dbagnets.backend.engine.timing.TimedOperation;
-import com.dbagnets.backend.domain.DatabaseEngine;
 
 public interface EngineDriver {
 
@@ -24,6 +24,5 @@ public interface EngineDriver {
                 engine() + " driver does not support scenario " + ctx.type());
     }
 
-    record ScenarioOutcome(TimedOperation timed, ScenarioResult result) {
-    }
+    record ScenarioOutcome(TimedOperation timed, ScenarioResult result) {}
 }
