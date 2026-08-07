@@ -10,6 +10,7 @@ import { benchmarkApi } from "@/lib/api"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
 import { DatabaseCard } from "@/components/benchmark/DatabaseCard"
 import { SchemaRelationships, SchemaEntities } from "@/components/benchmark/LogicalSchemaPanel"
+import { SchemaErdDiagram } from "@/components/benchmark/SchemaErdDiagram"
 import { AppLayout } from "@/components/AppLayout"
 import { getBenchmarkStatusConfig, cn } from "@/lib/utils"
 import type { BenchmarkResponse, BenchmarkStatus, BenchmarkStatusEvent, DatabaseStatusEvent, ScriptGeneratedEvent } from "@/types/benchmark"
@@ -447,6 +448,7 @@ export default function BenchmarkDetailPage() {
         <>
           <SchemaRelationships logicalSchemaJson={benchmark.logicalSchema} />
           <SchemaEntities logicalSchemaJson={benchmark.logicalSchema} />
+          <SchemaErdDiagram logicalSchemaJson={benchmark.logicalSchema} />
         </>
       )}
     </AppLayout>

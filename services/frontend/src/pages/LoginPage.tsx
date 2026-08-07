@@ -1,4 +1,5 @@
-import { Navigate, useNavigate } from "react-router-dom"
+import { Navigate, useLocation, useNavigate } from "react-router-dom"
+import type { Location } from "react-router-dom"
 import { GoogleLogin } from "@react-oauth/google"
 import { useAuth } from "@/lib/auth"
 import {
@@ -9,12 +10,18 @@ import {
   CardContent,
 } from "@/components/ui/card"
 
+interface FromState {
+  from?: Location
+}
+
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as FromState | null)?.from?.pathname ?? "/dashboard"
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={from} replace />
   }
 
   return (
@@ -31,7 +38,7 @@ export function LoginPage() {
             onSuccess={async (credentialResponse) => {
               if (credentialResponse.credential) {
                 await login(credentialResponse.credential)
-                navigate("/dashboard", { replace: true })
+                navigate(from, { replace: true })
               }
             }}
             onError={() => {
