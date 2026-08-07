@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, CheckCircle2, Clock, History, Loader2, MinusCircle, XCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { AlertTriangle, Beaker, CheckCircle2, Clock, History, Loader2, MinusCircle, XCircle } from "lucide-react"
+import { cn, relativeTime } from "@/lib/utils"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type { ScenarioRunResponse, ScenarioStatus } from "@/types/scenario"
 
 interface Props {
@@ -31,7 +32,12 @@ export function ScenarioRunHistory({ runs, selectedRunId, onSelect }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No scenario runs yet.</p>
+          <EmptyState
+            compact
+            icon={Beaker}
+            title="No scenario runs yet"
+            description="Configure a scenario above and start it to see cross-DB results."
+          />
         </CardContent>
       </Card>
     )
@@ -68,7 +74,7 @@ export function ScenarioRunHistory({ runs, selectedRunId, onSelect }: Props) {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{run.scenarioType}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {new Date(run.createdAt).toLocaleString()} ·{" "}
+                      <span title={new Date(run.createdAt).toLocaleString()}>{relativeTime(run.createdAt)}</span> ·{" "}
                       {run.iterations ?? 1} iter · {run.results.length} DB
                     </div>
                   </div>

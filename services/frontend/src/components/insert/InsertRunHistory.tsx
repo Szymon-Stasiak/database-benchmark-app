@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, CheckCircle2, XCircle, Clock, History, Loader2, MinusCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { AlertTriangle, CheckCircle2, XCircle, Clock, History, Loader2, MinusCircle, PlayCircle } from "lucide-react"
+import { cn, relativeTime } from "@/lib/utils"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type { InsertRunResponse, InsertStatus } from "@/types/insert"
 
 interface Props {
@@ -31,9 +32,16 @@ export function InsertRunHistory({ runs, selectedRunId, onSelect }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No insert runs yet. Configure one above and click <em>Run insert test</em>.
-          </p>
+          <EmptyState
+            compact
+            icon={PlayCircle}
+            title="No insert runs yet"
+            description={
+              <>
+                Configure a run above and click <em>Run insert test</em> to see results here.
+              </>
+            }
+          />
         </CardContent>
       </Card>
     )
@@ -72,7 +80,7 @@ export function InsertRunHistory({ runs, selectedRunId, onSelect }: Props) {
                   </Badge>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(run.createdAt).toLocaleString()} ·{" "}
+                  <span title={new Date(run.createdAt).toLocaleString()}>{relativeTime(run.createdAt)}</span> ·{" "}
                   <span className="text-green-600 dark:text-green-400">{succeeded} ok</span>
                   {failed > 0 ? <span className="text-destructive"> · {failed} failed</span> : null}
                 </div>

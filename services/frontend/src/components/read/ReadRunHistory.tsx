@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, XCircle, Clock, Loader2, History, SkipForward } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { CheckCircle2, XCircle, Clock, Loader2, History, SkipForward, Search } from "lucide-react"
+import { cn, relativeTime } from "@/lib/utils"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type { ReadRunResponse, ReadStatus } from "@/types/read"
 
 interface Props {
@@ -31,9 +32,16 @@ export function ReadRunHistory({ runs, selectedRunId, onSelect }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No read runs yet. Configure one above and click <em>Run read benchmark</em>.
-          </p>
+          <EmptyState
+            compact
+            icon={Search}
+            title="No read runs yet"
+            description={
+              <>
+                Configure a read run above and click <em>Run read benchmark</em>.
+              </>
+            }
+          />
         </CardContent>
       </Card>
     )
@@ -73,7 +81,7 @@ export function ReadRunHistory({ runs, selectedRunId, onSelect }: Props) {
                   </Badge>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(run.createdAt).toLocaleString()} ·{" "}
+                  <span title={new Date(run.createdAt).toLocaleString()}>{relativeTime(run.createdAt)}</span> ·{" "}
                   <span className="text-green-600 dark:text-green-400">{succeeded} ok</span>
                   {failed > 0 ? <span className="text-destructive"> · {failed} failed</span> : null}
                 </div>

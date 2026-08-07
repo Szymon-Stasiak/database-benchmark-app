@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
+import { DatabaseSelector } from "@/components/shared/DatabaseSelector"
+import { OperationModeSelector } from "@/components/shared/OperationModeSelector"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -138,71 +140,23 @@ export function InsertRunForm({ entities, databases, benchmarkId, loading, onSub
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>Insertion mode</Label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {MODE_OPTIONS.map((m) => {
-              const active = mode === m
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-left transition-all",
-                    active
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-border hover:border-foreground/30",
-                  )}
-                >
-                  <div className="text-sm font-medium">{m}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {INSERT_MODE_LABELS[m]}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <OperationModeSelector
+          label="Insertion mode"
+          value={mode}
+          onChange={setMode}
+          options={MODE_OPTIONS.map((m) => ({
+            value: m,
+            label: m,
+            description: INSERT_MODE_LABELS[m],
+          }))}
+        />
 
-        <div className="space-y-2">
-          <Label>Run against ({selectedDbIds.size} selected)</Label>
-          {runnableDatabases.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No databases are RUNNING right now. Start containers from the benchmark page first.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {runnableDatabases.map((db) => {
-                const active = selectedDbIds.has(db.id)
-                return (
-                  <button
-                    key={db.id}
-                    type="button"
-                    onClick={() => toggleDb(db.id)}
-                    className={cn(
-                      "flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-all",
-                      active
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:border-foreground/30",
-                    )}
-                  >
-                    <div>
-                      <div className="text-sm font-medium capitalize">{db.dbName}</div>
-                      <div className="text-xs text-muted-foreground">v{db.dbVersion}</div>
-                    </div>
-                    <span
-                      className={cn(
-                        "h-4 w-4 rounded-sm border",
-                        active ? "border-primary bg-primary" : "border-border",
-                      )}
-                    />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <DatabaseSelector
+          runnableDatabases={runnableDatabases}
+          selectedDbIds={selectedDbIds}
+          onToggle={toggleDb}
+          emptyText="No databases are RUNNING right now. Start containers from the benchmark page first."
+        />
 
         {submitError && (
           <p className="text-sm text-destructive">{submitError}</p>

@@ -9,6 +9,7 @@ import { Info, Loader2, Package, Upload, X } from "lucide-react"
 import { DatabaseSetupPanel } from "@/components/benchmark/DatabaseSetupPanel"
 import { DatabaseTargetList } from "@/components/benchmark/DatabaseTargetList"
 import { AppLayout } from "@/components/AppLayout"
+import { toast } from "sonner"
 import { benchmarkApi } from "@/lib/api"
 import type { DatabaseTarget, SupportedDatabases } from "@/types/benchmark"
 
@@ -84,9 +85,12 @@ export default function NewBenchmarkPage() {
         depth,
         databases: targets,
       })
+      toast.success("Benchmark created")
       navigate(`/benchmarks/${response.id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create benchmark")
+      const msg = e instanceof Error ? e.message : "Failed to create benchmark"
+      setError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -109,9 +113,12 @@ export default function NewBenchmarkPage() {
     setError(null)
     try {
       const response = await benchmarkApi.createFromBundle(bundleFile)
+      toast.success("Bundle imported")
       navigate(`/benchmarks/${response.id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to import bundle")
+      const msg = e instanceof Error ? e.message : "Failed to import bundle"
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBundleLoading(false)
     }
@@ -159,7 +166,7 @@ export default function NewBenchmarkPage() {
                 <span className="text-sm text-muted-foreground truncate">
                   {bundleFile.name} ({formatBytes(bundleFile.size)})
                 </span>
-                <Button variant="ghost" size="icon" onClick={handleClearBundle} disabled={bundleLoading} title="Remove file">
+                <Button variant="ghost" size="icon" onClick={handleClearBundle} disabled={bundleLoading} title="Remove file" aria-label="Remove selected bundle file">
                   <X className="h-4 w-4" />
                 </Button>
               </>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn, relativeTime } from "@/lib/utils"
 import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
 import { ResourceMetricsChart } from "@/components/shared/ResourceMetricsChart"
 import { ResourceSummaryTable } from "@/components/shared/ResourceSummaryTable"
@@ -59,7 +59,7 @@ export function RunDetailDialog({ run, open, onClose }: Props) {
         <DialogHeader>
           <DialogTitle>Insert run · {run.entityName}</DialogTitle>
           <DialogDescription className="text-xs">
-            {new Date(run.createdAt).toLocaleString()} · mode {run.mode}
+            <span title={new Date(run.createdAt).toLocaleString()}>{relativeTime(run.createdAt)}</span> · mode {run.mode}
             {run.batchSize ? ` (batch ${run.batchSize})` : ""}
             {run.workerCount ? ` · ${run.workerCount} workers` : ""}
             {" · "}

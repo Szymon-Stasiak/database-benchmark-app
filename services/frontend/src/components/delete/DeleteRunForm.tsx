@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DatabaseSelector } from "@/components/shared/DatabaseSelector"
+import { OperationModeSelector } from "@/components/shared/OperationModeSelector"
 import { Loader2, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DatabaseResponse } from "@/types/benchmark"
@@ -162,29 +164,15 @@ export function DeleteRunForm({ entities, databases, loading, registry, onPrevie
         </div>
 
         <div className="space-y-1.5">
-          <Label>Execution mode</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {(["SINGLE", "BATCH", "BULK"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setMode(opt)}
-                className={cn(
-                  "rounded-md border px-3 py-2 text-sm text-left transition-all",
-                  mode === opt
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-border hover:border-foreground/30",
-                )}
-              >
-                <div className="font-medium">{opt}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {opt === "SINGLE" && "1 stmt per row"}
-                  {opt === "BATCH" && "addBatch / executeBatch"}
-                  {opt === "BULK" && "1 stmt: WHERE pk IN (...)"}
-                </div>
-              </button>
-            ))}
-          </div>
+          <OperationModeSelector
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "SINGLE", label: "SINGLE", description: "1 stmt per row" },
+              { value: "BATCH", label: "BATCH", description: "addBatch / executeBatch" },
+              { value: "BULK", label: "BULK", description: "1 stmt: WHERE pk IN (...)" },
+            ]}
+          />
           {deletionMode === "WITH_CHILDREN" && mode !== "SINGLE" && (
             <p className="text-[11px] text-amber-600 dark:text-amber-400">
               Cascade is per-row by design — root delete uses {mode}, but child cleanup runs SINGLE.
@@ -192,44 +180,11 @@ export function DeleteRunForm({ entities, databases, loading, registry, onPrevie
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label>Run against ({selectedDbIds.size} selected)</Label>
-          {runnableDatabases.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No databases are RUNNING right now.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {runnableDatabases.map((db) => {
-                const active = selectedDbIds.has(db.id)
-                return (
-                  <button
-                    key={db.id}
-                    type="button"
-                    onClick={() => toggleDb(db.id)}
-                    className={cn(
-                      "flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-all",
-                      active
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:border-foreground/30",
-                    )}
-                  >
-                    <div>
-                      <div className="text-sm font-medium capitalize">{db.dbName}</div>
-                      <div className="text-xs text-muted-foreground">v{db.dbVersion}</div>
-                    </div>
-                    <span
-                      className={cn(
-                        "h-4 w-4 rounded-sm border",
-                        active ? "border-primary bg-primary" : "border-border",
-                      )}
-                    />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <DatabaseSelector
+          runnableDatabases={runnableDatabases}
+          selectedDbIds={selectedDbIds}
+          onToggle={toggleDb}
+        />
 
         {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, BarChart3, Download, FileJson, Loader2, RefreshCw } from "lucide-react"
-import { motion } from "framer-motion"
+import { BarChart3, Download, FileJson, Loader2, RefreshCw } from "lucide-react"
 import { AppLayout } from "@/components/AppLayout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { BackButton } from "@/components/shared/BackButton"
+import { PageHeader } from "@/components/shared/PageHeader"
 import { ApiError, comparisonApi } from "@/lib/api"
 import { downloadCsv, downloadJson } from "@/lib/comparisonExport"
 import { ParadigmRadarChart } from "@/components/comparison/ParadigmRadarChart"
@@ -46,42 +48,31 @@ export default function BenchmarkComparisonPage() {
   }, [fetchReport])
 
   return (
-    <AppLayout>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => navigate(id ? `/benchmarks/${id}` : "/dashboard")}
-        className="mb-4"
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to benchmark
-      </Button>
+    <AppLayout
+      breadcrumbs={[
+        { label: "Dashboard", to: "/dashboard" },
+        { label: report?.topic ?? "Benchmark", to: id ? `/benchmarks/${id}` : undefined },
+        { label: "Comparison" },
+      ]}
+    >
+      <BackButton to={id ? `/benchmarks/${id}` : "/dashboard"} label="Back to benchmark" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-6"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-primary" />
-              Comparison report
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {report ? (
-                <>
-                  Benchmark: <span className="font-medium">{report.topic}</span> ·{" "}
-                  {report.databases.length} database(s) ·{" "}
-                  Generated {new Date(report.generatedAt).toLocaleString()}
-                </>
-              ) : (
-                "Loading aggregated metrics…"
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        icon={BarChart3}
+        title="Comparison report"
+        subtitle={
+          report ? (
+            <>
+              Benchmark: <span className="font-medium text-foreground">{report.topic}</span> ·{" "}
+              {report.databases.length} database(s) · Generated{" "}
+              {new Date(report.generatedAt).toLocaleString()}
+            </>
+          ) : (
+            "Loading aggregated metrics…"
+          )
+        }
+        actions={
+          <>
             <Button
               variant="outline"
               size="sm"
@@ -90,9 +81,9 @@ export default function BenchmarkComparisonPage() {
               title="Refresh"
             >
               {loading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
+                <RefreshCw className="mr-2 h-4 w-4" />
               )}
               Refresh
             </Button>
@@ -102,7 +93,7 @@ export default function BenchmarkComparisonPage() {
               onClick={() => report && downloadCsv(report)}
               disabled={!report}
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               CSV
             </Button>
             <Button
@@ -111,12 +102,14 @@ export default function BenchmarkComparisonPage() {
               onClick={() => report && downloadJson(report)}
               disabled={!report}
             >
-              <FileJson className="h-4 w-4 mr-2" />
+              <FileJson className="mr-2 h-4 w-4" />
               JSON
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
+      <div className="space-y-6">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -135,14 +128,14 @@ export default function BenchmarkComparisonPage() {
         {!report && loading && (
           <div className="grid grid-cols-1 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-border p-6 space-y-3 animate-pulse">
-                <div className="h-5 w-48 bg-muted rounded" />
-                <div className="h-32 w-full bg-muted rounded" />
+              <div key={i} className="space-y-3 rounded-xl border border-border p-6">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-32 w-full" />
               </div>
             ))}
           </div>
         )}
-      </motion.div>
+      </div>
     </AppLayout>
   )
 }

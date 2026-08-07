@@ -1,8 +1,10 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { GoogleOAuthProvider } from "@react-oauth/google"
+import { Toaster } from "sonner"
 import { AuthProvider } from "@/lib/AuthProvider"
 import { BackendReadyGate } from "@/components/BackendReadyGate"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { ConfirmProvider } from "@/hooks/useConfirm"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import NewBenchmarkPage from "@/pages/NewBenchmarkPage"
@@ -114,7 +116,21 @@ export default function App() {
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <BackendReadyGate>
         <AuthProvider>
-          <AnimatedRoutes />
+          <ConfirmProvider>
+            <AnimatedRoutes />
+            <Toaster
+              richColors
+              closeButton
+              position="top-right"
+              theme="system"
+              expand={false}
+              toastOptions={{
+                classNames: {
+                  toast: "font-sans",
+                },
+              }}
+            />
+          </ConfirmProvider>
         </AuthProvider>
       </BackendReadyGate>
     </GoogleOAuthProvider>

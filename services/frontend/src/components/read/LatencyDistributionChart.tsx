@@ -10,8 +10,9 @@ import {
   YAxis,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart3 } from "lucide-react"
+import { BarChart3, Timer } from "lucide-react"
 import { DownloadChartButton } from "@/components/benchmark/DownloadChartButton"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type { ReadResultResponse } from "@/types/read"
 
 interface Props {
@@ -45,7 +46,12 @@ export function LatencyDistributionChart({ results }: Props) {
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No samples yet.</p>
+          <EmptyState
+            compact
+            icon={Timer}
+            title="No latency samples yet"
+            description="Read latency will appear here as the run progresses."
+          />
         ) : (
           <div ref={chartRef} className="h-72 bg-white rounded-sm">
             <ResponsiveContainer width="100%" height="100%">

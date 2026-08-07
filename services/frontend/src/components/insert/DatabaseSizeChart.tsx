@@ -13,7 +13,8 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { BarChart3, Loader2, RefreshCw } from "lucide-react"
+import { BarChart3, Database, Loader2, RefreshCw } from "lucide-react"
+import { EmptyState } from "@/components/shared/EmptyState"
 import { ApiError, insertApi } from "@/lib/api"
 import type { DatabaseSizeResponse } from "@/types/insert"
 import { useBenchmarkEvents } from "@/hooks/useBenchmarkEvents"
@@ -124,7 +125,12 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
       <CardContent>
         {error && <p className="text-sm text-destructive mb-3">{error}</p>}
         {chartData.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No databases yet.</p>
+          <EmptyState
+            compact
+            icon={Database}
+            title="No databases yet"
+            description="Once containers are running, storage usage will appear here."
+          />
         ) : (
           <div ref={chartRef} className="h-72 bg-white rounded-sm">
             <ResponsiveContainer width="100%" height="100%">

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   CartesianGrid,
   Legend,
@@ -53,10 +53,39 @@ interface ChartRow {
 export function ResourceMetricsChart({ events, windowSeconds }: Props) {
   const cpuRef = useRef<HTMLDivElement | null>(null)
   const memRef = useRef<HTMLDivElement | null>(null)
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set())
+
+  const toggleSeries = useCallback((key: string) => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   const { series, cpuData, memData, hasData } = useMemo(
     () => buildChartData(events, windowSeconds),
     [events, windowSeconds],
+  )
+
+  const legendProps = useMemo(
+    () => ({
+      wrapperStyle: { fontSize: 12, paddingBottom: 4, cursor: "pointer" },
+      onClick: (entry: { dataKey?: string | number }) => {
+        if (typeof entry.dataKey === "string") toggleSeries(entry.dataKey)
+      },
+      formatter: (value: string, entry: { dataKey?: string | number }) => {
+        const key = typeof entry.dataKey === "string" ? entry.dataKey : ""
+        const hidden = hiddenSeries.has(key)
+        return (
+          <span style={{ opacity: hidden ? 0.4 : 1, textDecoration: hidden ? "line-through" : "none" }}>
+            {value}
+          </span>
+        )
+      },
+    }),
+    [hiddenSeries, toggleSeries],
   )
 
   return (
@@ -91,7 +120,7 @@ export function ResourceMetricsChart({ events, windowSeconds }: Props) {
                     domain={[0, "auto"]}
                   />
                   <Tooltip content={<CpuTooltip series={series} />} />
-                  <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 12, paddingBottom: 4 }} />
+                  <Legend verticalAlign="top" align="right" {...legendProps} />
                   {series.map((s) => (
                     <Line
                       key={s.databaseId}
@@ -103,6 +132,7 @@ export function ResourceMetricsChart({ events, windowSeconds }: Props) {
                       dot={cpuData.length <= 12 ? { r: 3 } : false}
                       isAnimationActive={false}
                       connectNulls
+                      hide={hiddenSeries.has(s.databaseId)}
                     />
                   ))}
                 </LineChart>
@@ -142,7 +172,7 @@ export function ResourceMetricsChart({ events, windowSeconds }: Props) {
                     domain={[0, "auto"]}
                   />
                   <Tooltip content={<MemoryTooltip series={series} />} />
-                  <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 12, paddingBottom: 4 }} />
+                  <Legend verticalAlign="top" align="right" {...legendProps} />
                   {series.map((s) => (
                     <Line
                       key={s.databaseId}
@@ -154,6 +184,7 @@ export function ResourceMetricsChart({ events, windowSeconds }: Props) {
                       dot={memData.length <= 12 ? { r: 3 } : false}
                       isAnimationActive={false}
                       connectNulls
+                      hide={hiddenSeries.has(s.databaseId)}
                     />
                   ))}
                 </LineChart>

@@ -5,15 +5,37 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Plus, Database, Activity, Layers, Trash2 } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { benchmarkApi } from "@/lib/api"
 import { AppLayout } from "@/components/AppLayout"
+import { EmptyState } from "@/components/shared/EmptyState"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useConfirm } from "@/hooks/useConfirm"
 import { getBenchmarkStatusConfig, relativeTime, cn } from "@/lib/utils"
 import type { BenchmarkResponse } from "@/types/benchmark"
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const confirm = useConfirm()
   const [benchmarks, setBenchmarks] = useState<BenchmarkResponse[]>([])
   const [loading, setLoading] = useState(true)
+
+  const handleDeleteBenchmark = async (benchmark: BenchmarkResponse) => {
+    const ok = await confirm({
+      title: `Delete "${benchmark.topic}"?`,
+      description: "All containers will be stopped and removed. This action cannot be undone.",
+      confirmLabel: "Delete benchmark",
+      variant: "destructive",
+    })
+    if (!ok) return
+    try {
+      await benchmarkApi.deleteBenchmark(benchmark.id)
+      setBenchmarks((prev) => prev.filter((b) => b.id !== benchmark.id))
+      toast.success("Benchmark deleted")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete benchmark")
+    }
+  }
 
   useEffect(() => {
     benchmarkApi.list()
@@ -59,9 +81,7 @@ export function DashboardPage() {
                 <div>
                   <CardDescription>{stat.label}</CardDescription>
                   <CardTitle className="text-3xl">
-                    {loading ? (
-                      <div className="h-9 w-10 bg-muted rounded animate-pulse" />
-                    ) : stat.value}
+                    {loading ? <Skeleton className="h-9 w-10" /> : stat.value}
                   </CardTitle>
                 </div>
               </CardHeader>
@@ -75,29 +95,29 @@ export function DashboardPage() {
       {loading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="animate-pulse rounded-xl border border-border p-4">
+            <div key={i} className="rounded-xl border border-border p-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-2">
-                  <div className="h-4 w-48 bg-muted rounded" />
-                  <div className="h-3 w-32 bg-muted rounded" />
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-32" />
                 </div>
-                <div className="h-6 w-20 bg-muted rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
               </div>
             </div>
           ))}
         </div>
       ) : benchmarks.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground mb-4">
-              No benchmarks yet. Create your first one!
-            </p>
+        <EmptyState
+          icon={Database}
+          title="No benchmarks yet"
+          description="Kick off your first benchmark to compare databases side-by-side on the same schema and workload."
+          action={
             <Button onClick={() => navigate("/benchmarks/new")}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Benchmark
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {benchmarks.map((benchmark, i) => {
@@ -128,13 +148,11 @@ export function DashboardPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Delete benchmark ${benchmark.topic}`}
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (!confirm("Delete this benchmark? All containers will be stopped and removed.")) return
-                            benchmarkApi.deleteBenchmark(benchmark.id).then(() => {
-                              setBenchmarks((prev) => prev.filter((b) => b.id !== benchmark.id))
-                            })
+                            handleDeleteBenchmark(benchmark)
                           }}
                         >
                           <Trash2 className="h-4 w-4" />

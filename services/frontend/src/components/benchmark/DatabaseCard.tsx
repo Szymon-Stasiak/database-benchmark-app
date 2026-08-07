@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/dialog"
 import { Download, Square, RotateCcw, FileText, Loader2, RefreshCw, Code, Trash2 } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
+import { toast } from "sonner"
 import { benchmarkApi } from "@/lib/api"
+import { useConfirm } from "@/hooks/useConfirm"
 import { ContainerLogsDialog } from "@/components/benchmark/ContainerLogsDialog"
 import { getDatabaseStatusConfig, cn } from "@/lib/utils"
 import type { DatabaseResponse } from "@/types/benchmark"
@@ -29,6 +31,7 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
   const [fullScript, setFullScript] = useState<string | null>(null)
   const [scriptLoading, setScriptLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const confirm = useConfirm()
 
   useEffect(() => {
     if (scriptOpen) {
@@ -68,11 +71,20 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete ${database.dbName}? This will stop and remove the container.`)) return
+    const ok = await confirm({
+      title: `Delete ${database.dbName}?`,
+      description: "The container will be stopped and removed. This action cannot be undone.",
+      confirmLabel: "Delete container",
+      variant: "destructive",
+    })
+    if (!ok) return
     setActionLoading("delete")
     try {
       await benchmarkApi.deleteDatabase(benchmarkId, database.id)
       onDelete?.(database.id)
+      toast.success(`${database.dbName} container removed`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove container")
     } finally {
       setActionLoading(null)
     }
@@ -129,6 +141,7 @@ export function DatabaseCard({ database, benchmarkId, scriptPreview, onStatusCha
                 onClick={handleDelete}
                 disabled={actionLoading === "delete"}
                 title="Delete database"
+                aria-label={`Delete ${database.dbName} container`}
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
               >
                 {actionLoading === "delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}

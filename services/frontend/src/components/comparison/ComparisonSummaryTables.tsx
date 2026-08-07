@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Database, FlaskConical, Search, Trash2 } from "lucide-react"
+import { Database, FlaskConical, Inbox, Search, Trash2 } from "lucide-react"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type {
   DeleteSummary,
   InsertSummary,
@@ -161,7 +162,16 @@ export function DeleteSummaryTable({ rows }: { rows: DeleteSummary[] }) {
 }
 
 function TableShell({ children, empty }: { children: React.ReactNode; empty: boolean }) {
-  if (empty) return <p className="text-sm text-muted-foreground">No runs recorded yet.</p>
+  if (empty) {
+    return (
+      <EmptyState
+        compact
+        icon={Inbox}
+        title="No runs recorded yet"
+        description="Trigger a benchmark run to see summary numbers here."
+      />
+    )
+  }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">{children}</table>

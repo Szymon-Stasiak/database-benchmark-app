@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
+import { BackButton } from "@/components/shared/BackButton"
+import { PageHeader } from "@/components/shared/PageHeader"
 import { motion } from "framer-motion"
 import { AppLayout } from "@/components/AppLayout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -128,16 +130,28 @@ export default function BenchmarkDeletesPage() {
   const pinnedRun = pinnedRunId ? runs.find((r) => r.id === pinnedRunId) ?? null : null
 
   return (
-    <AppLayout>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => navigate(id ? `/benchmarks/${id}` : "/dashboard")}
-        className="mb-4"
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to benchmark
-      </Button>
+    <AppLayout
+      breadcrumbs={[
+        { label: "Dashboard", to: "/dashboard" },
+        { label: benchmark?.topic ?? "Benchmark", to: id ? `/benchmarks/${id}` : undefined },
+        { label: "Deletes" },
+      ]}
+    >
+      <BackButton to={id ? `/benchmarks/${id}` : "/dashboard"} label="Back to benchmark" />
+      <PageHeader
+        icon={Trash2}
+        title="Delete benchmark"
+        subtitle={
+          benchmark ? (
+            <>
+              Benchmark: <span className="font-medium text-foreground">{benchmark.topic}</span> ·{" "}
+              {benchmark.databases.length} database(s) · same IDs deleted on every DB
+            </>
+          ) : (
+            "Loading benchmark…"
+          )
+        }
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -145,25 +159,6 @@ export default function BenchmarkDeletesPage() {
         transition={{ duration: 0.3 }}
         className="space-y-6"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
-              <Trash2 className="h-6 w-6 text-destructive" />
-              Delete benchmark
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {benchmark ? (
-                <>
-                  Benchmark: <span className="font-medium">{benchmark.topic}</span> ·{" "}
-                  {benchmark.databases.length} database(s) · same IDs deleted on every DB
-                </>
-              ) : (
-                "Loading benchmark…"
-              )}
-            </p>
-          </div>
-        </div>
-
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

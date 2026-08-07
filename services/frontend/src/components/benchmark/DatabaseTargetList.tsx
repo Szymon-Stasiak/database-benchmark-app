@@ -1,7 +1,8 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { X } from "lucide-react"
+import { Database, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { EmptyState } from "@/components/shared/EmptyState"
 import type { DatabaseTarget } from "@/types/benchmark"
 import { DATABASE_TYPE_LABELS } from "@/types/benchmark"
 
@@ -13,9 +14,12 @@ interface DatabaseTargetListProps {
 export function DatabaseTargetList({ targets, onRemove }: DatabaseTargetListProps) {
   if (targets.length === 0) {
     return (
-      <p className="text-center py-8 text-muted-foreground text-sm">
-        No databases added yet. Select a database type, name, and version above.
-      </p>
+      <EmptyState
+        compact
+        icon={Database}
+        title="No databases added yet"
+        description="Select a database type, name, and version above to add a target."
+      />
     )
   }
 

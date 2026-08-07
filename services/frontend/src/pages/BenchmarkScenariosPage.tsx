@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { ArrowLeft, FlaskConical } from "lucide-react"
+import { FlaskConical } from "lucide-react"
+import { BackButton } from "@/components/shared/BackButton"
+import { PageHeader } from "@/components/shared/PageHeader"
 import { motion } from "framer-motion"
 import { AppLayout } from "@/components/AppLayout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -140,16 +142,28 @@ export default function BenchmarkScenariosPage() {
   const pinnedRun = pinnedRunId ? runs.find((r) => r.id === pinnedRunId) ?? null : null
 
   return (
-    <AppLayout>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => navigate(id ? `/benchmarks/${id}` : "/dashboard")}
-        className="mb-4"
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to benchmark
-      </Button>
+    <AppLayout
+      breadcrumbs={[
+        { label: "Dashboard", to: "/dashboard" },
+        { label: benchmark?.topic ?? "Benchmark", to: id ? `/benchmarks/${id}` : undefined },
+        { label: "Scenarios" },
+      ]}
+    >
+      <BackButton to={id ? `/benchmarks/${id}` : "/dashboard"} label="Back to benchmark" />
+      <PageHeader
+        icon={FlaskConical}
+        title="Query scenarios"
+        subtitle={
+          benchmark ? (
+            <>
+              Benchmark: <span className="font-medium text-foreground">{benchmark.topic}</span> ·{" "}
+              {benchmark.databases.length} database(s) · results cross-checked across DBs
+            </>
+          ) : (
+            "Loading benchmark…"
+          )
+        }
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -157,21 +171,6 @@ export default function BenchmarkScenariosPage() {
         transition={{ duration: 0.3 }}
         className="space-y-6"
       >
-        <div>
-          <h1 className="text-2xl font-semibold inline-flex items-center gap-2">
-            <FlaskConical className="h-6 w-6 text-primary" />
-            Query scenarios
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {benchmark ? (
-              <>
-                Benchmark: <span className="font-medium">{benchmark.topic}</span> ·{" "}
-                {benchmark.databases.length} database(s) · results cross-checked across DBs
-              </>
-            ) : "Loading benchmark…"}
-          </p>
-        </div>
-
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
