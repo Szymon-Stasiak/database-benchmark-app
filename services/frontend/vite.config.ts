@@ -23,7 +23,7 @@ export default defineConfig({
           queueMicrotask(() => {
             proxy.removeAllListeners('error')
             proxy.on('error', (err, _req, res) => {
-              if (res && !res.headersSent && 'writeHead' in res) {
+              if (res && 'writeHead' in res && 'headersSent' in res && !(res as { headersSent: boolean }).headersSent) {
                 try {
                   res.writeHead(503, { 'Content-Type': 'application/json' })
                   res.end(

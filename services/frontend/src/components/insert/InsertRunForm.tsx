@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2, Play } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { EntityCascadePicker } from "@/components/insert/EntityCascadePicker"
 import type { DatabaseResponse } from "@/types/benchmark"
 import type {

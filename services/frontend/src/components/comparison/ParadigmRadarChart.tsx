@@ -166,10 +166,10 @@ export function ParadigmRadarChart({ scores }: Props) {
                 />
                 <Legend
                   wrapperStyle={{ fontSize: 12, cursor: "pointer" }}
-                  onClick={(entry: { dataKey?: string | number }) => {
+                  onClick={(entry: { dataKey?: string | number | ((data: unknown) => unknown) }) => {
                     if (typeof entry.dataKey === "string") toggleSeries(entry.dataKey)
                   }}
-                  formatter={(value: string, entry: { dataKey?: string | number }) => {
+                  formatter={(value: string, entry: { dataKey?: string | number | ((data: unknown) => unknown) }) => {
                     const key = typeof entry.dataKey === "string" ? entry.dataKey : ""
                     const hidden = hiddenSeries.has(key)
                     return (
