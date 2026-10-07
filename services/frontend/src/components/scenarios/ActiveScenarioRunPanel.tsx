@@ -41,11 +41,16 @@ const MAX_LIVE_SAMPLES = 4000
 
 export function ActiveScenarioRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
+  const finishedDbsRef = useRef<Set<string>>(new Set())
+  finishedDbsRef.current = new Set(
+    run.results.filter((r) => r.status !== "PENDING" && r.status !== "RUNNING").map((r) => r.databaseId),
+  )
 
   useScenarioRunEvents(benchmarkId, run.id, {
     onRunStatus: (status, consistencyStatus) => onRunStatusChange(run.id, status, consistencyStatus),
     onResultUpdate: (result) => onResultUpdate(run.id, result),
     onContainerStats: (evt) => {
+      if (finishedDbsRef.current.has(evt.databaseId)) return
       setStatsEvents((prev) => {
         const next = prev.length >= MAX_LIVE_SAMPLES ? prev.slice(prev.length - MAX_LIVE_SAMPLES + 1) : prev
         return [...next, evt]

@@ -30,16 +30,15 @@ public class MysqlScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
+        String path = docker.uploadScript(containerId, script, "init.sql");
         String result =
-                docker.execWithStdin(
+                docker.execInContainer(
                         containerId,
-                        script,
-                        "mysql",
-                        "-u",
-                        "root",
-                        "--password=root",
-                        "--database=benchmark",
-                        "--abort-source-on-error");
+                        "sh",
+                        "-c",
+                        "mysql -u root --password=root --database=benchmark"
+                                + " --abort-source-on-error < "
+                                + path);
 
         if (result != null && containsError(result)) {
             String firstError = result.lines().filter(this::isErrorLine).findFirst().orElse(result);

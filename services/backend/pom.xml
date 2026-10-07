@@ -121,7 +121,6 @@
 		<dependency>
 			<groupId>org.mongodb</groupId>
 			<artifactId>mongodb-driver-sync</artifactId>
-			<version>5.10.0</version>
 		</dependency>
 
 		<!-- Neo4j + Memgraph (Bolt) -->

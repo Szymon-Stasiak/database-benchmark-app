@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, CheckCircle2, Clock, Loader2, MinusCircle, XCircle } from "lucide-react"
@@ -43,6 +43,10 @@ const FALLBACK_STATUS_CFG = STATUS_CONFIG.PENDING
 export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [progress, setProgress] = useState<Map<string, BatchProgressEvent>>(new Map())
   const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
+  const finishedDbsRef = useRef<Set<string>>(new Set())
+  finishedDbsRef.current = new Set(
+    run.results.filter((r) => r.status !== "PENDING" && r.status !== "RUNNING").map((r) => r.databaseId),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +75,7 @@ export function ActiveInsertRunPanel({ benchmarkId, run, onRunStatusChange, onRe
       })
     },
     onContainerStats: (evt) => {
+      if (finishedDbsRef.current.has(evt.databaseId)) return
       setStatsEvents((prev) => {
         const next = prev.length >= MAX_LIVE_SAMPLES ? prev.slice(prev.length - MAX_LIVE_SAMPLES + 1) : prev
         return [...next, evt]

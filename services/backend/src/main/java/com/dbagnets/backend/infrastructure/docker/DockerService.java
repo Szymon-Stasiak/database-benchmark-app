@@ -1,12 +1,16 @@
 package com.dbagnets.backend.infrastructure.docker;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -288,34 +292,32 @@ public class DockerService implements ContainerManagementPort {
         return sb.toString();
     }
 
-    public String execWithStdin(String containerId, String stdin, String... command) {
-        var execCreate =
-                dockerClient
-                        .execCreateCmd(containerId)
-                        .withCmd(command)
-                        .withAttachStdin(true)
-                        .withAttachStdout(true)
-                        .withAttachStderr(true)
-                        .exec();
+    public String uploadScript(String containerId, String content, String fileName) {
+        byte[] data = content.getBytes(StandardCharsets.UTF_8);
+        String remotePath = "/tmp";
+        String fullPath = remotePath + "/" + fileName;
 
-        var sb = new StringBuilder();
-        try {
-            var inputStream = new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8));
-            dockerClient
-                    .execStartCmd(execCreate.getId())
-                    .withStdIn(inputStream)
-                    .exec(
-                            new ResultCallback.Adapter<Frame>() {
-                                @Override
-                                public void onNext(Frame frame) {
-                                    sb.append(new String(frame.getPayload()));
-                                }
-                            })
-                    .awaitCompletion(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        try (var byteOut = new ByteArrayOutputStream();
+                var tarOut = new TarArchiveOutputStream(byteOut)) {
+            var entry = new TarArchiveEntry(fileName);
+            entry.setSize(data.length);
+            entry.setMode(0644);
+            tarOut.putArchiveEntry(entry);
+            tarOut.write(data);
+            tarOut.closeArchiveEntry();
+            tarOut.finish();
+
+            try (var tarIn = new ByteArrayInputStream(byteOut.toByteArray())) {
+                dockerClient
+                        .copyArchiveToContainerCmd(containerId)
+                        .withTarInputStream(tarIn)
+                        .withRemotePath(remotePath)
+                        .exec();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to upload script to container: " + fullPath, e);
         }
-        return sb.toString();
+        return fullPath;
     }
 
     private String shortId(String containerId) {

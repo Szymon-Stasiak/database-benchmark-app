@@ -48,14 +48,16 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
+        String path = docker.uploadScript(containerId, script, "init.cypher");
         String result;
         if ("memgraph".equals(dbName)) {
-            result = docker.execWithStdin(containerId, script, "mgconsole");
+            result =
+                    docker.execInContainer(
+                            containerId, "sh", "-c", "mgconsole < " + path);
         } else {
             result =
-                    docker.execWithStdin(
+                    docker.execInContainer(
                             containerId,
-                            script,
                             "cypher-shell",
                             "-u",
                             "neo4j",
@@ -63,7 +65,9 @@ public class CypherScriptStrategy implements ScriptExecutionStrategy {
                             "benchmark",
                             "--database",
                             "neo4j",
-                            "--fail-fast");
+                            "--fail-fast",
+                            "--file",
+                            path);
         }
 
         if (result != null && containsError(result)) {

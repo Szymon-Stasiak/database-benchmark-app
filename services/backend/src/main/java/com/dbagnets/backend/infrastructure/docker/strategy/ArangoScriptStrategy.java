@@ -29,14 +29,15 @@ public class ArangoScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
+        String path = docker.uploadScript(containerId, script, "init.js");
         String result =
-                docker.execWithStdin(
+                docker.execInContainer(
                         containerId,
-                        script,
                         "arangosh",
                         "--server.password",
                         "root",
-                        "--javascript.execute");
+                        "--javascript.execute",
+                        path);
         log.info(
                 "ArangoDB script executed: {}",
                 result.substring(0, Math.min(200, result.length())));

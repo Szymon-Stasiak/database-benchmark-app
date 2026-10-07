@@ -36,11 +36,16 @@ const STATUS_CONFIG: Record<
 
 export function ActiveDeleteRunPanel({ benchmarkId, run, onRunStatusChange, onResultUpdate }: Props) {
   const [statsEvents, setStatsEvents] = useState<ContainerStatsEvent[]>([])
+  const finishedDbsRef = useRef<Set<string>>(new Set())
+  finishedDbsRef.current = new Set(
+    run.results.filter((r) => r.status !== "PENDING" && r.status !== "RUNNING").map((r) => r.databaseId),
+  )
 
   useDeleteRunEvents(benchmarkId, run.id, {
     onRunStatus: (status) => onRunStatusChange(run.id, status),
     onResultUpdate: (result) => onResultUpdate(run.id, result),
     onContainerStats: (evt) => {
+      if (finishedDbsRef.current.has(evt.databaseId)) return
       setStatsEvents((prev) => {
         const next = prev.length >= MAX_LIVE_SAMPLES ? prev.slice(prev.length - MAX_LIVE_SAMPLES + 1) : prev
         return [...next, evt]

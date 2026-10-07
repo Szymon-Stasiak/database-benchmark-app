@@ -24,8 +24,10 @@ public class MongoScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
+        String path = docker.uploadScript(containerId, script, "init.js");
         String result =
-                docker.execWithStdin(containerId, script, "mongosh", "benchmark", "--quiet");
+                docker.execInContainer(
+                        containerId, "mongosh", "benchmark", "--quiet", "--file", path);
 
         if (result != null && containsError(result)) {
             String firstError = result.lines().filter(this::isErrorLine).findFirst().orElse(result);

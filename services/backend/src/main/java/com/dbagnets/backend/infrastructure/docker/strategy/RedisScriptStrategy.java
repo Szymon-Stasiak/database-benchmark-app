@@ -22,7 +22,9 @@ public class RedisScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
-        String result = docker.execWithStdin(containerId, script, "redis-cli");
+        String path = docker.uploadScript(containerId, script, "init.redis");
+        String result =
+                docker.execInContainer(containerId, "sh", "-c", "redis-cli < " + path);
 
         if (result != null && containsError(result)) {
             String firstError = result.lines().filter(this::isErrorLine).findFirst().orElse(result);

@@ -45,7 +45,7 @@ script-creator:
   model: vertex_ai/claude-sonnet-4-6
   generate-path: /generate
   max-iterations: 10
-  timeout-minutes: 10
+  timeout-minutes: 30
 
 app:
   container-host: 127.0.0.1

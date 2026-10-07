@@ -226,6 +226,7 @@ public class ContainerStatsCollector {
     }
 
     private void broadcast(Session session, ResourceSample sample) {
+        if (!sessions.containsKey(session.resultId)) return;
         Map<String, Object> payload = new HashMap<>();
         payload.put("runId", session.runId);
         payload.put("resultId", session.resultId);

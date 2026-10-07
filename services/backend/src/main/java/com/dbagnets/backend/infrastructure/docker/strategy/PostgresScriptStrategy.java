@@ -22,10 +22,10 @@ public class PostgresScriptStrategy implements ScriptExecutionStrategy {
 
     @Override
     public void execute(DockerService docker, String containerId, String script, int hostPort) {
+        String path = docker.uploadScript(containerId, script, "init.sql");
         String result =
-                docker.execWithStdin(
+                docker.execInContainer(
                         containerId,
-                        script,
                         "psql",
                         "-U",
                         "postgres",
@@ -33,7 +33,9 @@ public class PostgresScriptStrategy implements ScriptExecutionStrategy {
                         "benchmark",
                         "-v",
                         "ON_ERROR_STOP=1",
-                        "-q");
+                        "-q",
+                        "-f",
+                        path);
         if (result != null && result.toLowerCase().contains("error")) {
             String firstError =
                     result.lines()

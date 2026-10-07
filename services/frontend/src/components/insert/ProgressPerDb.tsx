@@ -57,7 +57,13 @@ interface DbBucket {
 }
 
 export function ProgressPerDb({ run, progress }: Props) {
-  const cascadeEntityNames = useMemo(() => parseCascadeEntityNames(run.cascadeJson), [run.cascadeJson])
+  const cascadePlan = useMemo(() => parseCascadePlan(run.cascadeJson), [run.cascadeJson])
+  const cascadeEntityNames = useMemo(() => cascadePlan.map((n) => n.entityName), [cascadePlan])
+  const expectedTotals = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const node of cascadePlan) m.set(node.entityName.toLowerCase(), node.recordCount)
+    return m
+  }, [cascadePlan])
 
   const byDb = useMemo(() => {
     const map = new Map<string, DbBucket>()
@@ -131,7 +137,8 @@ export function ProgressPerDb({ run, progress }: Props) {
               ) : (
                 bucket.entityNames.map((entityName) => {
                   const evt = progress.get(progressKey(bucket.databaseId, entityName))
-                  const row = rowForEntity(entityName, evt, dbStatus)
+                  const expectedTotal = expectedTotals.get(entityName.toLowerCase()) ?? 0
+                  const row = rowForEntity(entityName, evt, dbStatus, expectedTotal)
                   return <ProgressRow key={entityName} row={row} />
                 })
               )}
@@ -168,24 +175,27 @@ function rowForEntity(
   entityName: string,
   evt: BatchProgressEvent | undefined,
   dbStatus: InsertStatus,
+  expectedTotal: number,
 ): ProgressRowData {
   if (!evt && (dbStatus === "SUCCESS" || dbStatus === "PARTIAL")) {
-    return { key: entityName, entityName, done: 1, total: 1, status: "SUCCESS" }
+    const total = expectedTotal > 0 ? expectedTotal : 1
+    return { key: entityName, entityName, done: total, total, status: "SUCCESS" }
   }
   if (!evt && dbStatus === "FAILED") {
-    return { key: entityName, entityName, done: 0, total: 1, status: "FAILED" }
+    return { key: entityName, entityName, done: 0, total: expectedTotal > 0 ? expectedTotal : 1, status: "FAILED" }
   }
   if (!evt && dbStatus === "SKIPPED") {
-    return { key: entityName, entityName, done: 0, total: 1, status: "SKIPPED" }
+    return { key: entityName, entityName, done: 0, total: expectedTotal > 0 ? expectedTotal : 1, status: "SKIPPED" }
   }
   const done = evt?.recordsDone ?? 0
   const total = evt?.recordsTotal ?? 0
+  const effectiveTotal = total > 0 ? total : expectedTotal > 0 ? expectedTotal : Math.max(done, 1)
   return {
     key: entityName,
     entityName,
     done,
-    total: total > 0 ? total : Math.max(done, 1),
-    status: resolveEntityStatus(evt, dbStatus, done, total),
+    total: effectiveTotal,
+    status: resolveEntityStatus(evt, dbStatus, done, effectiveTotal),
   }
 }
 
@@ -234,18 +244,31 @@ export function progressKey(databaseId: string, entityName: string): string {
   return `${databaseId}::${entityName.toLowerCase()}`
 }
 
-function parseCascadeEntityNames(cascadeJson: string | null | undefined): string[] {
+interface CascadeNodeSummary {
+  entityName: string
+  recordCount: number
+}
+
+function parseCascadePlan(cascadeJson: string | null | undefined): CascadeNodeSummary[] {
   if (!cascadeJson) return []
   try {
-    const parsed = JSON.parse(cascadeJson) as { nodesInInsertOrder?: Array<{ entityName?: string }> }
+    const parsed = JSON.parse(cascadeJson) as {
+      nodesInInsertOrder?: Array<{ entityName?: string; recordCount?: number }>
+    }
     const nodes = parsed?.nodesInInsertOrder
     if (!Array.isArray(nodes)) return []
-    const names: string[] = []
+    const seen = new Set<string>()
+    const result: CascadeNodeSummary[] = []
     for (const node of nodes) {
       const name = node?.entityName
-      if (typeof name === "string" && !names.includes(name)) names.push(name)
+      if (typeof name !== "string" || seen.has(name)) continue
+      seen.add(name)
+      result.push({
+        entityName: name,
+        recordCount: typeof node?.recordCount === "number" ? node.recordCount : 0,
+      })
     }
-    return names
+    return result
   } catch {
     return []
   }
