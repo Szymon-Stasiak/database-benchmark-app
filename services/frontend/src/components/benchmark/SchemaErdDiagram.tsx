@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Download, FileImage, ChevronDown, ChevronUp, AlertCircle } from "lucide-react"
 import type { LogicalSchema, LogicalSchemaAttribute } from "@/types/benchmark"
+import { chartFilename } from "@/lib/chartDownload"
 
 mermaid.initialize({
     startOnLoad: false,
@@ -125,61 +126,87 @@ export function SchemaErdDiagram({ logicalSchemaJson }: Props) {
 
     const downloadPng = async () => {
         const container = containerRef.current
-        if (!container) return
-        const svgEl = container.querySelector("svg")
-        if (!svgEl) return
-
-        // Clone to avoid mutating the live DOM while we inline size + backgrounds.
-        const clone = svgEl.cloneNode(true) as SVGSVGElement
-        const bbox = svgEl.getBoundingClientRect()
-        const width = Math.max(bbox.width, 800)
-        const height = Math.max(bbox.height, 400)
-        clone.setAttribute("width", String(width))
-        clone.setAttribute("height", String(height))
-        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg")
-
-        // Give the exported PNG a white background — otherwise transparent
-        // SVGs look terrible when opened in image viewers.
-        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
-        rect.setAttribute("width", "100%")
-        rect.setAttribute("height", "100%")
-        rect.setAttribute("fill", "white")
-        clone.insertBefore(rect, clone.firstChild)
-
-        const serialized = new XMLSerializer().serializeToString(clone)
-        const blob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" })
-        const url = URL.createObjectURL(blob)
+        if (!container) {
+            console.warn("ERD download: no container ref")
+            return
+        }
+        const svgEl = container.querySelector("svg") as SVGSVGElement | null
+        if (!svgEl) {
+            console.warn("ERD download: no <svg> found")
+            return
+        }
 
         try {
+            // Resolve real pixel dimensions. Prefer viewBox (mermaid always sets it) over
+            // getBoundingClientRect, which gets clamped by the scrolled wrapper.
+            const vb = svgEl.viewBox.baseVal
+            const bbox = svgEl.getBoundingClientRect()
+            const width = Math.ceil(vb && vb.width ? vb.width : bbox.width || 800)
+            const height = Math.ceil(vb && vb.height ? vb.height : bbox.height || 600)
+
+            const clone = svgEl.cloneNode(true) as SVGSVGElement
+            // Mermaid injects style="max-width: ...; width: 100%; ..." which overrides
+            // our size attributes once the SVG is loaded in <img>. Strip it entirely
+            // and set explicit pixel size + xmlns so Image() can rasterize.
+            clone.removeAttribute("style")
+            clone.setAttribute("width", String(width))
+            clone.setAttribute("height", String(height))
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg")
+            clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink")
+
+            // Mermaid's injected <style> uses CSS variables (--mermaid-*) that are only
+            // defined in the live document; inside <img> they resolve to empty, giving
+            // us invisible text. Replace with a self-contained stylesheet.
+            const inlineStyle = document.createElementNS("http://www.w3.org/2000/svg", "style")
+            inlineStyle.textContent = `
+                * { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+                .er.entityLabel, .er.relationshipLabel, text { fill: #0f172a; }
+                .er.entityBox { fill: #ffffff; stroke: #475569; stroke-width: 1px; }
+                .er.attributeBoxOdd { fill: #f8fafc; stroke: #cbd5e1; }
+                .er.attributeBoxEven { fill: #ffffff; stroke: #cbd5e1; }
+                .er.relationshipLine { stroke: #475569; stroke-width: 1px; fill: none; }
+                .er.relationshipLabelBox { fill: #ffffff; opacity: 0.9; }
+            `
+            clone.insertBefore(inlineStyle, clone.firstChild)
+
+            const serialized = new XMLSerializer().serializeToString(clone)
+            // encodeURIComponent → data URL dodges the Blob-URL + <img> taint quirk
+            // some Chromium builds hit when the SVG embeds a <style> block.
+            const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`
+
             const img = new Image()
-            img.crossOrigin = "anonymous"
             await new Promise<void>((resolve, reject) => {
                 img.onload = () => resolve()
-                img.onerror = () => reject(new Error("Failed to load SVG for PNG conversion"))
-                img.src = url
+                img.onerror = () => reject(new Error("SVG failed to decode in <img>"))
+                img.src = dataUrl
             })
 
-            // Render at 2x for crisp output on hi-DPI screens.
             const scale = 2
             const canvas = document.createElement("canvas")
             canvas.width = width * scale
             canvas.height = height * scale
             const ctx = canvas.getContext("2d")
-            if (!ctx) return
+            if (!ctx) throw new Error("Could not get 2D context")
+            ctx.fillStyle = "#ffffff"
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
             ctx.scale(scale, scale)
             ctx.drawImage(img, 0, 0, width, height)
 
-            canvas.toBlob((pngBlob) => {
-                if (!pngBlob) return
-                const pngUrl = URL.createObjectURL(pngBlob)
-                const a = document.createElement("a")
-                a.href = pngUrl
-                a.download = "erd-diagram.png"
-                a.click()
-                URL.revokeObjectURL(pngUrl)
-            }, "image/png")
-        } finally {
-            URL.revokeObjectURL(url)
+            const pngBlob: Blob | null = await new Promise((resolve) =>
+                canvas.toBlob((b) => resolve(b), "image/png"),
+            )
+            if (!pngBlob) throw new Error("canvas.toBlob returned null")
+
+            const pngUrl = URL.createObjectURL(pngBlob)
+            const a = document.createElement("a")
+            a.href = pngUrl
+            a.download = chartFilename("erd-diagram", "png")
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            setTimeout(() => URL.revokeObjectURL(pngUrl), 1000)
+        } catch (e) {
+            console.error("ERD PNG download failed:", e)
         }
     }
 
