@@ -132,24 +132,48 @@ export function DatabaseSizeChart({ benchmarkId, refreshMs = 30000 }: Props) {
             description="Once containers are running, storage usage will appear here."
           />
         ) : (
-          <div ref={chartRef} className="h-72 bg-white rounded-sm">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={formatBytes} tick={{ fontSize: 11 }} />
-                <Tooltip content={<SizeTooltip />} cursor={{ fill: "var(--muted)", fillOpacity: 0.2 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="baseline" name="DB engine (baseline)" stackId="size" fill="#3b82f6" radius={[0, 0, 0, 0]}>
-                  {chartData.map((_, i) => <Cell key={i} />)}
-                </Bar>
-                <Bar dataKey="data" name="Inserted data" stackId="size" fill="#ec4899" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div ref={chartRef} className="bg-white rounded-sm">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="opacity-30" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={formatBytes} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<SizeTooltip />} cursor={{ fill: "var(--muted)", fillOpacity: 0.2 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="baseline" name="DB engine (baseline)" stackId="size" fill="#3b82f6" radius={[0, 0, 0, 0]}>
+                    {chartData.map((_, i) => <Cell key={i} />)}
+                  </Bar>
+                  <Bar dataKey="data" name="Inserted data" stackId="size" fill="#ec4899" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <ChartLegend />
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function ChartLegend() {
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-2 px-3 pb-3 pt-1 text-xs text-slate-600">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: "#3b82f6" }} />
+        <div>
+          <div className="font-medium text-slate-800">DB engine (baseline)</div>
+          <div className="text-slate-500">Rozmiar silnika bazy po deploymencie, przed wstawieniem danych.</div>
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: "#ec4899" }} />
+        <div>
+          <div className="font-medium text-slate-800">Inserted data</div>
+          <div className="text-slate-500">Przyrost rozmiaru na dysku po wstawieniu danych benchmarkowych.</div>
+        </div>
+      </div>
+    </div>
   )
 }
 
