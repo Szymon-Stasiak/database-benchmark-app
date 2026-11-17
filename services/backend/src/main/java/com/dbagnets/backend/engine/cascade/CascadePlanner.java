@@ -32,41 +32,30 @@ public class CascadePlanner {
         }
 
         Map<String, Long> derived = new HashMap<>();
-        Map<String, List<CascadeEdge>> incomingByChild = new HashMap<>();
-
-        Deque<String> queue = new ArrayDeque<>();
         for (LeafChoice leaf : leafChoices) {
             schema.requireEntity(leaf.entityName());
             derived.merge(leaf.entityName(), leaf.recordCount(), Math::max);
-            queue.add(leaf.entityName());
         }
 
-        Set<String> visited = new HashSet<>();
-        while (!queue.isEmpty()) {
-            String childName = queue.pollFirst();
-            if (!visited.add(childName)) continue;
+        Set<String> reachable = discoverReachable(schema, derived.keySet());
+        List<String> ordered = topologicalSort(reachable, schema);
 
-            List<LogicalRelationship> parents = schema.relationshipsTargeting(childName);
+        Map<String, List<CascadeEdge>> incomingByChild = new HashMap<>();
+        for (int i = ordered.size() - 1; i >= 0; i--) {
+            String childName = ordered.get(i);
             long childCount = derived.getOrDefault(childName, 0L);
 
-            for (LogicalRelationship rel : parents) {
+            for (LogicalRelationship rel : schema.relationshipsTargeting(childName)) {
                 String parentName = rel.parentEntity();
                 String fk = ForeignKeyResolver.resolve(schema, rel);
-                double ratio =
-                        ratioOverrides.getOrDefault(rel.name(), rel.cardinality().defaultRatio());
+                double ratio = ratioOverrides.getOrDefault(rel.name(), rel.cardinality().defaultRatio());
 
-                long parentCount = (long) Math.ceil(childCount / ratio);
-                derived.merge(parentName, parentCount, Math::max);
-
+                derived.merge(parentName, (long) Math.ceil(childCount / ratio), Math::max);
                 incomingByChild
                         .computeIfAbsent(childName, k -> new ArrayList<>())
                         .add(new CascadeEdge(parentName, childName, fk, ratio));
-
-                queue.add(parentName);
             }
         }
-
-        List<String> ordered = topologicalSort(derived.keySet(), schema);
         List<CascadeNode> nodes = new ArrayList<>(ordered.size());
         for (String entity : ordered) {
             nodes.add(
@@ -76,6 +65,20 @@ public class CascadePlanner {
                             incomingByChild.getOrDefault(entity, List.of())));
         }
         return new CascadePlan(nodes);
+    }
+
+    private static Set<String> discoverReachable(LogicalSchema schema, Set<String> seeds) {
+        Set<String> reachable = new HashSet<>(seeds);
+        Deque<String> queue = new ArrayDeque<>(seeds);
+        while (!queue.isEmpty()) {
+            String entity = queue.poll();
+            for (LogicalRelationship rel : schema.relationshipsTargeting(entity)) {
+                if (reachable.add(rel.parentEntity())) {
+                    queue.add(rel.parentEntity());
+                }
+            }
+        }
+        return reachable;
     }
 
     private static List<String> topologicalSort(Set<String> nodes, LogicalSchema schema) {

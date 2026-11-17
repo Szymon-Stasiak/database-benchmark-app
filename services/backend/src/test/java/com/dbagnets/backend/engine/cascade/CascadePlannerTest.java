@@ -79,6 +79,62 @@ class CascadePlannerTest {
     }
 
     @Test
+    void intermediateNodeUsedAsLeafGetsCorrectCountBeforePropagatingToAncestor() {
+        // Chain: Parent → Child → Grandchild
+        // Leaves: Child=100 and Grandchild=2000
+        // Child's final count = max(100, ceil(2000/10)) = 200
+        // Parent must be derived from Child=200, not from the initial leaf value of 100
+        LogicalSchema schema =
+                schemaOf(
+                        List.of(
+                                entity("Parent", pk("parent_id")),
+                                entity("Child", pk("child_id"), fk("parent_id")),
+                                entity("Grandchild", pk("grandchild_id"), fk("child_id"))),
+                        List.of(
+                                rel("Parent", "Child", RelationshipCardinality.ONE_TO_MANY),
+                                rel("Child", "Grandchild", RelationshipCardinality.ONE_TO_MANY)));
+
+        CascadePlan plan =
+                planner.plan(
+                        schema,
+                        List.of(new LeafChoice("Child", 100), new LeafChoice("Grandchild", 2000)),
+                        Map.of("Parent_Child", 10.0, "Child_Grandchild", 10.0));
+
+        assertThat(plan.byEntity().get("Child").recordCount()).isEqualTo(200);
+        assertThat(plan.byEntity().get("Parent").recordCount()).isEqualTo(20);
+    }
+
+    @Test
+    void longerPathDominatesAncestorCountInFanInTopology() {
+        // Z → X → L1 (short path, weak)
+        // X → Y → L2 (longer path, strong)
+        // X from L1: ceil(100/100)=1; X from Y: ceil(100/5)=20 → X=20
+        // Z must be derived from X=20, not from the stale X=1 seen via the short path
+        LogicalSchema schema =
+                schemaOf(
+                        List.of(
+                                entity("Z", pk("z_id")),
+                                entity("X", pk("x_id"), fk("z_id")),
+                                entity("Y", pk("y_id"), fk("x_id")),
+                                entity("L1", pk("l1_id"), fk("x_id")),
+                                entity("L2", pk("l2_id"), fk("y_id"))),
+                        List.of(
+                                rel("Z", "X", RelationshipCardinality.ONE_TO_MANY),
+                                rel("X", "L1", RelationshipCardinality.ONE_TO_MANY),
+                                rel("X", "Y", RelationshipCardinality.ONE_TO_MANY),
+                                rel("Y", "L2", RelationshipCardinality.ONE_TO_MANY)));
+
+        CascadePlan plan =
+                planner.plan(
+                        schema,
+                        List.of(new LeafChoice("L1", 100), new LeafChoice("L2", 1000)),
+                        Map.of("Z_X", 10.0, "X_L1", 100.0, "X_Y", 5.0, "Y_L2", 10.0));
+
+        assertThat(plan.byEntity().get("X").recordCount()).isEqualTo(20);
+        assertThat(plan.byEntity().get("Z").recordCount()).isEqualTo(2);
+    }
+
+    @Test
     void missingFkRaisesExplicitError() {
         LogicalSchema schema =
                 schemaOf(
